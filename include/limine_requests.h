@@ -28,8 +28,21 @@
 #define LIMINE_BASE_REVISION_SUPPORTED(VAR) ((VAR)[2] == 0)
 #define LIMINE_COMMON_MAGIC \
     0xc7b1dd30df4c8b88ULL, 0x0a82e883a194f07bULL
+
 #define LIMINE_FRAMEBUFFER_REQUEST_ID \
     LIMINE_COMMON_MAGIC, 0x9d5827dcd881dd75ULL, 0xa3148604f6fab11bULL
+#define LIMINE_MEMMAP_REQUEST_ID \
+    LIMINE_COMMON_MAGIC, 0x67cf3d9d378a806fULL, 0xe304acdfc50c3c62ULL
+
+#define LIMINE_MEMMAP_USABLE 0ULL
+#define LIMINE_MEMMAP_RESERVED 1ULL
+#define LIMINE_MEMMAP_ACPI_RECLAIMABLE 2ULL
+#define LIMINE_MEMMAP_ACPI_NVS 3ULL
+#define LIMINE_MEMMAP_BAD_MEMORY 4ULL
+#define LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE 5ULL
+#define LIMINE_MEMMAP_EXECUTABLE_AND_MODULES 6ULL
+#define LIMINE_MEMMAP_FRAMEBUFFER 7ULL
+#define LIMINE_MEMMAP_RESERVED_MAPPED 8ULL
 
 struct limine_framebuffer;
 
@@ -44,5 +57,30 @@ struct limine_framebuffer_request {
     uint64_t revision;
     struct limine_framebuffer_response *response;
 };
+
+struct limine_memmap_entry {
+    uint64_t base;
+    uint64_t length;
+    uint64_t type;
+};
+
+struct limine_memmap_response {
+    uint64_t revision;
+    uint64_t entry_count;
+    struct limine_memmap_entry **entries;
+};
+
+struct limine_memmap_request {
+    uint64_t id[4];
+    uint64_t revision;
+    struct limine_memmap_response *response;
+};
+
+_Static_assert(sizeof(struct limine_memmap_entry) == 24U,
+               "Limine memory map entry ABI size mismatch");
+_Static_assert(sizeof(struct limine_memmap_response) == 24U,
+               "Limine memory map response ABI size mismatch");
+_Static_assert(sizeof(struct limine_memmap_request) == 48U,
+               "Limine memory map request ABI size mismatch");
 
 #endif

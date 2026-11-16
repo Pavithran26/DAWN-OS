@@ -12,9 +12,10 @@ The repository contains the first Phase A kernel scaffold:
 - A deterministic kernel self-test mode that reports PASS/FAIL over serial and uses QEMU's `isa-debug-exit` device when available.
 - An ELF layout with separate executable, read-only, and writable load segments.
 - A GitHub Actions boot-validation workflow for ISO creation and QEMU BIOS/UEFI attempts.
+- A Limine boot-memory-map request, bounded structural validator, malformed-map self-tests, and serial summary of usable/reclaimable regions (no allocator yet).
 - An optional graphical administration shell is planned; terminal, file explorer, partition manager, task manager, and the green liquid-neomorphism interface are **not implemented yet**. See [the graphical shell plan](docs/GUI_SHELL_PLAN.md).
 
-This is **not a complete operating system**. Physical/virtual memory management, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
+This is **not a complete operating system**. A physical page-frame allocator, virtual-memory/page-table manager, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The current memory-map code only validates and reports Limine's boot-time map; it does not allocate, free, or reclaim memory. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
 
 ## Build the kernel ELF
 
@@ -66,11 +67,20 @@ The workflow `.github/workflows/phase-a-boot.yml` runs on pushes to `main` and `
 
 A green workflow is evidence only for the tests that actually ran in that environment. Review the logs; do not infer physical-hardware compatibility from QEMU success.
 
-## Phase A remaining work
+## Phase A verification
 
-- Confirm CI BIOS and UEFI QEMU runs and review retained serial output.
-- Validate on additional QEMU machine/firmware configurations.
-- Add startup and boot-request validation tests before beginning memory management.
+The latest recorded GitHub Actions run passed kernel compilation, ELF checks, hybrid BIOS/UEFI ISO creation, and QEMU boots under both SeaBIOS and OVMF UEFI. This is VM evidence only; physical BIOS/UEFI systems and Secure Boot are not yet validated.
+
+## Phase B — memory and CPU foundations
+
+The first increment requests, validates, and reports the Limine memory map. See [the memory-map implementation notes](docs/MEMORY_MAP.md). It deliberately does not enable allocation yet.
+
+Remaining Phase B work:
+- Implement a physical page-frame allocator with explicit ownership and tests.
+- Add page-table/virtual-memory management with defined permissions and mapping lifetimes.
+- Add exception handlers, interrupt-controller support, and a timer.
+- Add kernel threads, context switching, and a scheduler after the interrupt/timer foundations are tested.
+- Add SMP only after CPU startup, per-CPU state, synchronization, and locking are defined.
 
 ## Roadmap
 

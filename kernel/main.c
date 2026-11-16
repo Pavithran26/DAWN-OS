@@ -11,8 +11,33 @@
 #define QEMU_TEST_FAIL 0x11U
 #define SERIAL_POLL_LIMIT 100000U
 
-/* Keep the request block writable: Limine writes the response pointers and
- * updates the base-revision tag when it accepts the requested revision. */
+#define MEMORY_PAGE_SIZE 4096ULL
+#define MEMORY_MAP_MAX_ENTRIES 1024ULL
+#define MEMORY_MAP_TYPE_COUNT 9U
+
+struct memory_map_summary {
+    uint64_t entry_count;
+    uint64_t region_counts[MEMORY_MAP_TYPE_COUNT];
+    uint64_t bytes_by_type[MEMORY_MAP_TYPE_COUNT];
+    uint64_t unknown_type_count;
+};
+
+enum memory_map_error {
+    MEMORY_MAP_OK = 0,
+    MEMORY_MAP_INVALID_ARGUMENT,
+    MEMORY_MAP_INVALID_COUNT,
+    MEMORY_MAP_MISSING_ENTRY_ARRAY,
+    MEMORY_MAP_NULL_ENTRY,
+    MEMORY_MAP_ZERO_LENGTH,
+    MEMORY_MAP_ADDRESS_OVERFLOW,
+    MEMORY_MAP_UNSORTED,
+    MEMORY_MAP_ALLOCATABLE_UNALIGNED,
+    MEMORY_MAP_ALLOCATABLE_OVERLAP,
+    MEMORY_MAP_COUNTER_OVERFLOW
+};
+
+/* Keep the request block writable: Limine writes response pointers and the
+ * base-revision tag when it accepts the requested revision. */
 __attribute__((used, aligned(8), section(".limine_requests_start")))
 volatile uint64_t limine_requests_start[] = {
     LIMINE_REQUESTS_START_MARKER
@@ -26,6 +51,13 @@ volatile uint64_t limine_base_revision[] = {
 __attribute__((used, aligned(8), section(".limine_requests")))
 volatile struct limine_framebuffer_request limine_framebuffer_request = {
     .id = { LIMINE_FRAMEBUFFER_REQUEST_ID },
+    .revision = 0,
+    .response = NULL
+};
+
+__attribute__((used, aligned(8), section(".limine_requests")))
+volatile struct limine_memmap_request limine_memmap_request = {
+    .id = { LIMINE_MEMMAP_REQUEST_ID },
     .revision = 0,
     .response = NULL
 };
@@ -83,6 +115,33 @@ static void serial_write(const char *text) {
     }
 }
 
+static void serial_write_u64(uint64_t value) {
+    char digits[20];
+    size_t count = 0U;
+
+    do {
+        const uint64_t digit = value % 10ULL;
+        digits[count] = (char)('0' + (char)digit);
+        ++count;
+        value /= 10ULL;
+    } while (value != 0ULL && count < sizeof(digits));
+
+    while (count > 0U) {
+        --count;
+        if (!serial_write_char(digits[count])) {
+            return;
+        }
+    }
+}
+
+static bool add_u64_checked(uint64_t left, uint64_t right, uint64_t *result) {
+    if (result == NULL || right > UINT64_MAX - left) {
+        return false;
+    }
+    *result = left + right;
+    return true;
+}
+
 static bool protocol_revision_supported(void) {
     return LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision);
 }
@@ -91,9 +150,334 @@ static bool framebuffer_response_valid(void) {
     struct limine_framebuffer_response *response =
         limine_framebuffer_request.response;
 
-    return response != NULL && response->framebuffer_count > 0U &&
+    return response != NULL && response->framebuffer_count > 0ULL &&
            response->framebuffers != NULL && response->framebuffers[0] != NULL;
 }
+
+static enum memory_map_error validate_memory_map(
+    const struct limine_memmap_response *response,
+    struct memory_map_summary *summary
+) {
+    struct memory_map_summary candidate = {0};
+    uint64_t previous_base = 0ULL;
+    uint64_t highest_end = 0ULL;
+    uint64_t highest_allocatable_end = 0ULL;
+    bool have_previous = false;
+
+    if (response == NULL || summary == NULL) {
+        return MEMORY_MAP_INVALID_ARGUMENT;
+    }
+    if (response->entry_count == 0ULL ||
+        response->entry_count > MEMORY_MAP_MAX_ENTRIES) {
+        return MEMORY_MAP_INVALID_COUNT;
+    }
+    if (response->entries == NULL) {
+        return MEMORY_MAP_MISSING_ENTRY_ARRAY;
+    }
+
+    candidate.entry_count = response->entry_count;
+
+    for (uint64_t i = 0ULL; i < response->entry_count; ++i) {
+        const struct limine_memmap_entry *entry = response->entries[i];
+        uint64_t region_end = 0ULL;
+        const bool allocatable =
+            entry != NULL &&
+            (entry->type == LIMINE_MEMMAP_USABLE ||
+             entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE);
+
+        if (entry == NULL) {
+            return MEMORY_MAP_NULL_ENTRY;
+        }
+        if (entry->length == 0ULL) {
+            return MEMORY_MAP_ZERO_LENGTH;
+        }
+        if (entry->length > UINT64_MAX - entry->base) {
+            return MEMORY_MAP_ADDRESS_OVERFLOW;
+        }
+        region_end = entry->base + entry->length;
+
+        /* Limine guarantees ascending base addresses. Equal bases are allowed
+         * for non-allocatable ranges because those ranges may overlap. */
+        if (have_previous && entry->base < previous_base) {
+            return MEMORY_MAP_UNSORTED;
+        }
+
+        if (allocatable) {
+            if ((entry->base % MEMORY_PAGE_SIZE) != 0ULL ||
+                (entry->length % MEMORY_PAGE_SIZE) != 0ULL) {
+                return MEMORY_MAP_ALLOCATABLE_UNALIGNED;
+            }
+            /* Usable and bootloader-reclaimable regions must not overlap any
+             * prior region, including non-allocatable firmware reservations. */
+            if (entry->base < highest_end) {
+                return MEMORY_MAP_ALLOCATABLE_OVERLAP;
+            }
+        } else if (entry->base < highest_allocatable_end) {
+            /* Non-allocatable ranges may overlap each other, but may not
+             * overlap any usable or bootloader-reclaimable range. */
+            return MEMORY_MAP_ALLOCATABLE_OVERLAP;
+        }
+
+        if (region_end > highest_end) {
+            highest_end = region_end;
+        }
+        if (allocatable && region_end > highest_allocatable_end) {
+            highest_allocatable_end = region_end;
+        }
+        previous_base = entry->base;
+        have_previous = true;
+
+        if (entry->type < (uint64_t)MEMORY_MAP_TYPE_COUNT) {
+            const size_t type_index = (size_t)entry->type;
+            uint64_t updated_bytes = 0ULL;
+
+            if (!add_u64_checked(candidate.bytes_by_type[type_index],
+                                 entry->length, &updated_bytes)) {
+                return MEMORY_MAP_COUNTER_OVERFLOW;
+            }
+            candidate.bytes_by_type[type_index] = updated_bytes;
+            ++candidate.region_counts[type_index];
+        } else {
+            /* Unknown future types are accepted but never considered usable. */
+            ++candidate.unknown_type_count;
+        }
+    }
+
+    *summary = candidate;
+    return MEMORY_MAP_OK;
+}
+
+static const char *memory_map_error_string(enum memory_map_error error) {
+    switch (error) {
+        case MEMORY_MAP_OK:
+            return "none";
+        case MEMORY_MAP_INVALID_ARGUMENT:
+            return "null response or summary";
+        case MEMORY_MAP_INVALID_COUNT:
+            return "entry count is zero or exceeds safety limit";
+        case MEMORY_MAP_MISSING_ENTRY_ARRAY:
+            return "entry pointer array is null";
+        case MEMORY_MAP_NULL_ENTRY:
+            return "entry pointer is null";
+        case MEMORY_MAP_ZERO_LENGTH:
+            return "region length is zero";
+        case MEMORY_MAP_ADDRESS_OVERFLOW:
+            return "base plus length overflows";
+        case MEMORY_MAP_UNSORTED:
+            return "entries are not sorted by base address";
+        case MEMORY_MAP_ALLOCATABLE_UNALIGNED:
+            return "usable/reclaimable region is not page-aligned";
+        case MEMORY_MAP_ALLOCATABLE_OVERLAP:
+            return "allocatable region overlaps another region";
+        case MEMORY_MAP_COUNTER_OVERFLOW:
+            return "memory-region byte counter overflows";
+        default:
+            return "unknown validation error";
+    }
+}
+
+static void serial_write_memory_map_summary(
+    const struct memory_map_summary *summary
+) {
+    serial_write("DAWN-OS: memory map entries: ");
+    serial_write_u64(summary->entry_count);
+    serial_write("\nDAWN-OS: usable regions: ");
+    serial_write_u64(summary->region_counts[LIMINE_MEMMAP_USABLE]);
+    serial_write("\nDAWN-OS: usable RAM MiB: ");
+    serial_write_u64(summary->bytes_by_type[LIMINE_MEMMAP_USABLE] /
+                     (1024ULL * 1024ULL));
+    serial_write("\nDAWN-OS: bootloader-reclaimable regions: ");
+    serial_write_u64(
+        summary->region_counts[LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE]);
+    serial_write("\nDAWN-OS: bootloader-reclaimable MiB: ");
+    serial_write_u64(
+        summary->bytes_by_type[LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE] /
+        (1024ULL * 1024ULL));
+    serial_write("\nDAWN-OS: unknown memory-map types (not allocatable): ");
+    serial_write_u64(summary->unknown_type_count);
+    serial_write("\n");
+}
+
+#ifdef DAWN_KERNEL_TEST
+static bool memory_map_expect_error(
+    const struct limine_memmap_response *response,
+    enum memory_map_error expected
+) {
+    struct memory_map_summary summary = {0};
+    return validate_memory_map(response, &summary) == expected;
+}
+
+static bool memory_map_validator_self_test(void) {
+    struct memory_map_summary summary = {0};
+
+    struct limine_memmap_entry usable = {
+        .base = 0x1000ULL,
+        .length = 0x2000ULL,
+        .type = LIMINE_MEMMAP_USABLE
+    };
+    struct limine_memmap_entry reserved = {
+        .base = 0x4000ULL,
+        .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry reclaimable = {
+        .base = 0x5000ULL,
+        .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE
+    };
+    struct limine_memmap_entry *valid_entries[] = {
+        &usable, &reserved, &reclaimable
+    };
+    struct limine_memmap_response valid_response = {
+        .revision = 0ULL,
+        .entry_count = 3ULL,
+        .entries = valid_entries
+    };
+
+    if (validate_memory_map(&valid_response, &summary) != MEMORY_MAP_OK ||
+        summary.entry_count != 3ULL ||
+        summary.region_counts[LIMINE_MEMMAP_USABLE] != 1ULL ||
+        summary.bytes_by_type[LIMINE_MEMMAP_USABLE] != 0x2000ULL ||
+        summary.region_counts[LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE] != 1ULL) {
+        return false;
+    }
+
+    struct limine_memmap_response invalid_count = valid_response;
+    invalid_count.entry_count = MEMORY_MAP_MAX_ENTRIES + 1ULL;
+    if (!memory_map_expect_error(&invalid_count, MEMORY_MAP_INVALID_COUNT)) {
+        return false;
+    }
+
+    struct limine_memmap_response missing_array = valid_response;
+    missing_array.entries = NULL;
+    if (!memory_map_expect_error(&missing_array,
+                                 MEMORY_MAP_MISSING_ENTRY_ARRAY)) {
+        return false;
+    }
+
+    struct limine_memmap_entry *null_entry_array[] = { NULL };
+    struct limine_memmap_response null_entry = {
+        .revision = 0ULL, .entry_count = 1ULL, .entries = null_entry_array
+    };
+    if (!memory_map_expect_error(&null_entry, MEMORY_MAP_NULL_ENTRY)) {
+        return false;
+    }
+
+    struct limine_memmap_entry zero_length = {
+        .base = 0x1000ULL, .length = 0ULL, .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry *zero_length_array[] = { &zero_length };
+    struct limine_memmap_response zero_length_response = {
+        .revision = 0ULL, .entry_count = 1ULL, .entries = zero_length_array
+    };
+    if (!memory_map_expect_error(&zero_length_response,
+                                 MEMORY_MAP_ZERO_LENGTH)) {
+        return false;
+    }
+
+    struct limine_memmap_entry overflowing = {
+        .base = UINT64_MAX - 0x7ffULL,
+        .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry *overflowing_array[] = { &overflowing };
+    struct limine_memmap_response overflowing_response = {
+        .revision = 0ULL, .entry_count = 1ULL, .entries = overflowing_array
+    };
+    if (!memory_map_expect_error(&overflowing_response,
+                                 MEMORY_MAP_ADDRESS_OVERFLOW)) {
+        return false;
+    }
+
+    struct limine_memmap_entry high_reserved = {
+        .base = 0x5000ULL, .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry low_reserved = {
+        .base = 0x4000ULL, .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry *unsorted_array[] = {
+        &high_reserved, &low_reserved
+    };
+    struct limine_memmap_response unsorted_response = {
+        .revision = 0ULL, .entry_count = 2ULL, .entries = unsorted_array
+    };
+    if (!memory_map_expect_error(&unsorted_response, MEMORY_MAP_UNSORTED)) {
+        return false;
+    }
+
+    struct limine_memmap_entry unaligned_usable = {
+        .base = 0x1001ULL, .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_USABLE
+    };
+    struct limine_memmap_entry *unaligned_array[] = { &unaligned_usable };
+    struct limine_memmap_response unaligned_response = {
+        .revision = 0ULL, .entry_count = 1ULL, .entries = unaligned_array
+    };
+    if (!memory_map_expect_error(&unaligned_response,
+                                 MEMORY_MAP_ALLOCATABLE_UNALIGNED)) {
+        return false;
+    }
+
+    struct limine_memmap_entry overlap_usable = {
+        .base = 0x1000ULL, .length = 0x3000ULL,
+        .type = LIMINE_MEMMAP_USABLE
+    };
+    struct limine_memmap_entry overlap_reserved = {
+        .base = 0x2000ULL, .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry *overlap_array[] = {
+        &overlap_usable, &overlap_reserved
+    };
+    struct limine_memmap_response overlap_response = {
+        .revision = 0ULL, .entry_count = 2ULL, .entries = overlap_array
+    };
+    if (!memory_map_expect_error(&overlap_response,
+                                 MEMORY_MAP_ALLOCATABLE_OVERLAP)) {
+        return false;
+    }
+
+    /* Overlap between non-allocatable firmware reservations is permitted by
+     * the protocol and must not be rejected by our validator. */
+    struct limine_memmap_entry reserved_outer = {
+        .base = 0x1000ULL, .length = 0x4000ULL,
+        .type = LIMINE_MEMMAP_RESERVED
+    };
+    struct limine_memmap_entry reserved_inner = {
+        .base = 0x2000ULL, .length = 0x1000ULL,
+        .type = LIMINE_MEMMAP_ACPI_NVS
+    };
+    struct limine_memmap_entry *reserved_overlap_array[] = {
+        &reserved_outer, &reserved_inner
+    };
+    struct limine_memmap_response reserved_overlap_response = {
+        .revision = 0ULL, .entry_count = 2ULL,
+        .entries = reserved_overlap_array
+    };
+    if (validate_memory_map(&reserved_overlap_response, &summary) !=
+        MEMORY_MAP_OK) {
+        return false;
+    }
+
+    /* Unknown future types are visible in the summary but never usable RAM. */
+    struct limine_memmap_entry unknown_type = {
+        .base = 0x8000ULL, .length = 0x1000ULL, .type = UINT64_MAX
+    };
+    struct limine_memmap_entry *unknown_array[] = { &unknown_type };
+    struct limine_memmap_response unknown_response = {
+        .revision = 0ULL, .entry_count = 1ULL, .entries = unknown_array
+    };
+    if (validate_memory_map(&unknown_response, &summary) != MEMORY_MAP_OK ||
+        summary.unknown_type_count != 1ULL ||
+        summary.bytes_by_type[LIMINE_MEMMAP_USABLE] != 0ULL) {
+        return false;
+    }
+
+    return true;
+}
+#endif
 
 #ifdef DAWN_KERNEL_TEST
 static void qemu_debug_exit(uint8_t code) {
@@ -102,6 +486,9 @@ static void qemu_debug_exit(uint8_t code) {
 #endif
 
 void kernel_main(void) {
+    struct memory_map_summary memory_summary = {0};
+    enum memory_map_error memory_error = MEMORY_MAP_OK;
+
     serial_init();
     serial_write("DAWN-OS: kernel entry reached\n");
     serial_write("DAWN-OS: x86_64 freestanding bootstrap\n");
@@ -114,6 +501,30 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-OS: Limine base revision 6 accepted\n");
+
+#ifdef DAWN_KERNEL_TEST
+    if (!memory_map_validator_self_test()) {
+        serial_write("DAWN-TEST: FAIL: memory-map validator edge cases\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: memory-map validator edge cases\n");
+#endif
+
+    memory_error = validate_memory_map(limine_memmap_request.response,
+                                       &memory_summary);
+    if (memory_error != MEMORY_MAP_OK ||
+        memory_summary.region_counts[LIMINE_MEMMAP_USABLE] == 0ULL) {
+        serial_write("DAWN-OS: FAIL: Limine memory map rejected: ");
+        serial_write(memory_map_error_string(memory_error));
+        serial_write("\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: Limine memory map validated\n");
+    serial_write_memory_map_summary(&memory_summary);
 
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
@@ -128,11 +539,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision and framebuffer response\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, memory map and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase A bootstrap idle; interrupts remain disabled\n");
+    serial_write("DAWN-OS: Phase B memory-map inspection complete; no allocator enabled\n");
     cpu_halt_forever();
 }
