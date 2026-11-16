@@ -5,9 +5,10 @@ ENTRY(_start)
 
 PHDRS
 {
-    text PT_LOAD FLAGS(5);   /* read + execute */
-    rodata PT_LOAD FLAGS(4); /* read only */
-    data PT_LOAD FLAGS(6);   /* read + write */
+    requests PT_LOAD FLAGS(6); /* read + write: Limine updates request responses */
+    text PT_LOAD FLAGS(5);     /* read + execute */
+    rodata PT_LOAD FLAGS(4);   /* read only */
+    data PT_LOAD FLAGS(6);     /* read + write */
 }
 
 SECTIONS
@@ -15,30 +16,34 @@ SECTIONS
     . = 0xffffffff80000000;
     __kernel_start = .;
 
-    .text ALIGN(0x1000) :
+    /* Keep protocol requests in a dedicated, page-aligned load segment. */
+    .limine_requests :
+    {
+        KEEP(*(.limine_requests_start))
+        KEEP(*(.limine_requests))
+        KEEP(*(.limine_requests_end))
+    } :requests
+
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    .text :
     {
         KEEP(*(.text.boot))
         *(.text .text.*)
     } :text
 
-    .rodata ALIGN(0x1000) :
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    .rodata :
     {
         *(.rodata .rodata.*)
     } :rodata
 
-    .limine_requests ALIGN(8) :
-    {
-        KEEP(*(.limine_requests_start))
-        KEEP(*(.limine_requests))
-        KEEP(*(.limine_requests_end))
-    } :data
-
-    .data ALIGN(0x1000) :
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    .data :
     {
         *(.data .data.*)
     } :data
 
-    .bss ALIGN(0x1000) (NOLOAD) :
+    .bss (NOLOAD) :
     {
         *(COMMON)
         *(.bss .bss.*)
