@@ -37,3 +37,8 @@ BIOS and UEFI QEMU tests must retain all earlier ACPI/MADT, xAPIC/IOAPIC real PI
 ## Not implemented
 
 Timer-driven preemption, interrupt-frame context switching, scheduler quantum/accounting, sleep/block/wakeup, priorities, idle halt loop, per-CPU state, SMP, locks, user threads and process scheduling.
+
+
+## Additional lifecycle validation
+
+The scheduler self-test also rejects a null entry point, fills all eight worker slots, rejects a ninth concurrent worker, checks unique IDs, drains the pool, and verifies that completed (DEAD) slots can be reused with monotonically increasing IDs. These tests exercise the fixed-capacity and reuse rules; they do not imply preemption or concurrent/SMP safety.

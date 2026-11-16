@@ -254,11 +254,16 @@ static void scheduler_test_worker(void *argument) {
         kernel_thread_yield();
     }
 }
+static void scheduler_test_noop_worker(void *argument) {
+    (void)argument;
+}
 bool scheduler_self_test(void) {
     struct scheduler_stats stats={0};
     uint64_t first_id=0ULL,second_id=0ULL;
-    if (!initialized || current_thread!=&bootstrap_thread || scheduler_running)
-        return false;
+    uint64_t capacity_ids[KERNEL_THREAD_MAX]={0ULL};
+    uint64_t reused_id=0ULL;
+    if (!initialized || current_thread!=&bootstrap_thread || scheduler_running ||
+        kernel_thread_create(NULL,NULL,NULL)) return false;
     scheduler_test_counts[0]=0ULL;
     scheduler_test_counts[1]=0ULL;
     if (!kernel_thread_create(scheduler_test_worker,(void *)(uintptr_t)0U,&first_id) ||
@@ -274,6 +279,28 @@ bool scheduler_self_test(void) {
         if (thread_pool[i].state==THREAD_DEAD &&
             !thread_guard_valid(&thread_pool[i])) return false;
     }
+
+    /* Fill every slot, reject overflow, then verify DEAD slots can be reused. */
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        if (!kernel_thread_create(scheduler_test_noop_worker,NULL,
+                                  &capacity_ids[i]) ||
+            capacity_ids[i]==0ULL) return false;
+        for (size_t previous=0U;previous<i;previous++) {
+            if (capacity_ids[previous]==capacity_ids[i]) return false;
+        }
+    }
+    if (kernel_thread_create(scheduler_test_noop_worker,NULL,NULL) ||
+        !scheduler_run_until_idle()) return false;
+    scheduler_get_stats(&stats);
+    if (stats.threads_created!=10ULL || stats.threads_exited!=10ULL ||
+        stats.active_threads!=0ULL) return false;
+
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&reused_id) ||
+        reused_id==0ULL || reused_id<=capacity_ids[KERNEL_THREAD_MAX-1U] ||
+        !scheduler_run_until_idle()) return false;
+    scheduler_get_stats(&stats);
+    if (stats.threads_created!=11ULL || stats.threads_exited!=11ULL ||
+        stats.active_threads!=0ULL) return false;
     return true;
 }
 #endif
