@@ -35,6 +35,6 @@ Missing intermediate tables are allocated, zeroed before publication, and connec
 
 ## QEMU self-tests
 
-The self-test selects an unused lower-half PML4 slot so it does not overwrite existing Limine mappings. It allocates a physical frame, maps it writable/NX, checks translation and effective permissions, rejects duplicate and malformed mappings, unmaps it, verifies that translation is absent, and frees the data frame. It then checks a read-only executable mapping and tears it down. Intermediate tables are intentionally retained.
+The self-test searches for actually unmapped lower-half pages, accommodating differences in the BIOS and UEFI firmware page-table layouts, so it does not overwrite existing Limine mappings. It allocates a physical frame, maps it writable/NX, checks translation and effective permissions, rejects duplicate and malformed mappings, unmaps it, verifies that translation is absent, and frees the data frame. It then checks a read-only executable mapping and tears it down. Intermediate tables are intentionally retained.
 
 BIOS and UEFI logs must contain `DAWN-TEST: PASS: virtual-memory map/translate/unmap tests`. These tests do not prove user/supervisor isolation or a privilege transition.

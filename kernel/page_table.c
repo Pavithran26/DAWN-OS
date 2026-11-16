@@ -317,25 +317,47 @@ found:
     return true;
 }
 #ifdef DAWN_KERNEL_TEST
-bool vm_manager_self_test(void) {
-    uint64_t va=0ULL,data=0ULL,code=0ULL,translated=UINT64_MAX;
-    uint32_t flags=0U;
-    uint64_t free_index=TABLE_ENTRIES;
-    if (!manager.initialized) return false;
-    for (uint64_t i=1ULL;i<256ULL;i++) {
-        if ((manager.root[i]&ENTRY_PRESENT)==0ULL) { free_index=i; break; }
+static bool find_and_map_test_page(uint64_t physical_address,uint32_t flags,
+                                   uint64_t *virtual_address) {
+    uint64_t translated=0ULL;
+    if (virtual_address==NULL) return false;
+
+    /*
+     * BIOS and UEFI firmware can leave different lower-half mappings behind.
+     * Search for an actually unmapped page instead of assuming a completely
+     * empty PML4 slot. vm_map_page performs the final ancestor-permission checks.
+     */
+    for (uint64_t pml4=1ULL;pml4<256ULL;pml4++) {
+        const uint64_t root_entry=manager.root[pml4];
+        if ((root_entry & ENTRY_PRESENT)!=0ULL &&
+            (root_entry & ENTRY_WRITABLE)==0ULL) continue;
+        for (uint64_t pdpt=0ULL;pdpt<TABLE_ENTRIES;pdpt++) {
+            const uint64_t candidate=(pml4<<39)|(pdpt<<30)|0x12345000ULL;
+            if (vm_translate(candidate,&translated,NULL)) continue;
+            if (vm_map_page(candidate,physical_address,flags)) {
+                *virtual_address=candidate;
+                return true;
+            }
+        }
     }
-    if (free_index==TABLE_ENTRIES) return false;
-    va=(free_index<<39)|0x12345000ULL;
-    if (!physical_allocator_allocate(&data)) return false;
-    if (!vm_map_page(va,data,(uint32_t)VM_PAGE_WRITE) ||
+    return false;
+}
+
+bool vm_manager_self_test(void) {
+    uint64_t va=0ULL,code_va=0ULL,data=0ULL,code=0ULL,translated=UINT64_MAX;
+    uint32_t flags=0U;
+    if (!manager.initialized || !physical_allocator_allocate(&data)) {
+        return false;
+    }
+
+    if (!find_and_map_test_page(data,(uint32_t)VM_PAGE_WRITE,&va) ||
         vm_map_page(va,data,(uint32_t)VM_PAGE_WRITE) ||
         !vm_translate(va,&translated,&flags) || translated!=data ||
         (flags&(uint32_t)VM_PAGE_WRITE)==0U ||
         (flags&(uint32_t)VM_PAGE_NO_EXECUTE)==0U ||
         (flags&(uint32_t)VM_PAGE_USER)!=0U ||
         vm_map_page(va+1ULL,data,0U) ||
-        vm_map_page(va+PAGE_SIZE,0x1000ULL,0U) ||
+        vm_map_page(va,0ULL,0U) ||
         vm_map_page(CANONICAL_SIGN_BIT,data,0U) ||
         !vm_unmap_page(va) || vm_translate(va,&translated,&flags)) {
         (void)vm_unmap_page(va);
@@ -343,15 +365,16 @@ bool vm_manager_self_test(void) {
         return false;
     }
     if (!physical_allocator_free(data)) return false;
+
     if (!physical_allocator_allocate(&code)) return false;
-    if (!vm_map_page(va+PAGE_SIZE,code,(uint32_t)VM_PAGE_EXECUTE) ||
-        !vm_translate(va+PAGE_SIZE,&translated,&flags) || translated!=code ||
+    if (!find_and_map_test_page(code,(uint32_t)VM_PAGE_EXECUTE,&code_va) ||
+        !vm_translate(code_va,&translated,&flags) || translated!=code ||
         (flags&(uint32_t)VM_PAGE_EXECUTE)==0U ||
         (flags&(uint32_t)VM_PAGE_WRITE)!=0U ||
         (flags&(uint32_t)VM_PAGE_NO_EXECUTE)!=0U ||
-        !vm_unmap_page(va+PAGE_SIZE) ||
+        !vm_unmap_page(code_va) ||
         !physical_allocator_free(code)) {
-        (void)vm_unmap_page(va+PAGE_SIZE);
+        (void)vm_unmap_page(code_va);
         (void)physical_allocator_free(code);
         return false;
     }
