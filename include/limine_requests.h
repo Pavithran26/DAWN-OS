@@ -119,7 +119,7 @@ _Static_assert(sizeof(struct limine_hhdm_request) == 48U,
                "Limine HHDM request ABI size mismatch");
 _Static_assert(sizeof(struct limine_paging_mode_response) == 16U,
                "Limine paging-mode response ABI size mismatch");
-_Static_assert(sizeof(struct limine_paging_mode_request) == 64U,
+_Static_assert(sizeof(struct limine_paging_mode_request) == 72U,
                "Limine paging-mode request ABI size mismatch");
 
 #endif
