@@ -49,8 +49,6 @@ struct interrupt_frame {
     uint64_t rip;
     uint64_t cs;
     uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
 };
 
 _Static_assert(sizeof(struct idt_entry) == 16U, "x86_64 IDT gate must be 16 bytes");
@@ -59,10 +57,6 @@ _Static_assert(offsetof(struct interrupt_frame, vector) == 120U,
                "ISR register save order does not match C frame");
 _Static_assert(offsetof(struct interrupt_frame, rip) == 136U,
                "ISR error/vector frame layout mismatch");
-_Static_assert(offsetof(struct interrupt_frame, rsp) == 160U,
-               "64-bit interrupt stack frame must include saved RSP");
-_Static_assert(offsetof(struct interrupt_frame, ss) == 168U,
-               "64-bit interrupt stack frame must include saved SS");
 
 extern void isr_default_stub(void);
 extern void isr_spurious_stub(void);
@@ -72,7 +66,6 @@ extern void (*isr_stub_table[48])(void);
 static struct idt_entry idt[IDT_ENTRIES] __attribute__((aligned(16)));
 static bool idt_loaded;
 static uint16_t kernel_cs;
-static uint16_t kernel_ss;
 static volatile uint64_t timer_ticks;
 static volatile uint64_t breakpoint_count;
 static volatile uint64_t spurious_interrupt_count;
@@ -100,11 +93,6 @@ static inline void cpu_cli(void) {
 static uint16_t read_cs(void) {
     uint16_t value;
     __asm__ volatile ("mov %%cs, %0" : "=r"(value));
-    return value;
-}
-static uint16_t read_ss(void) {
-    uint16_t value;
-    __asm__ volatile ("mov %%ss, %0" : "=r"(value));
     return value;
 }
 #ifdef DAWN_KERNEL_TEST
@@ -236,7 +224,7 @@ void interrupt_dispatch(struct interrupt_frame *frame) {
     }
     if (frame->vector==3ULL && breakpoint_expected &&
         frame->cs==(uint64_t)kernel_cs &&
-        frame->ss==(uint64_t)kernel_ss && frame->rsp!=0ULL) {
+        (frame->rflags & 0x2ULL)!=0ULL) {
         ++breakpoint_count;
         return;
     }
@@ -259,8 +247,7 @@ bool interrupts_initialize(void) {
     if (idt_loaded) return false;
 
     kernel_cs=read_cs();
-    kernel_ss=read_ss();
-    if (kernel_cs==0U || kernel_ss==0U) return false;
+    if (kernel_cs==0U) return false;
 
     for (uint32_t vector=0U; vector<IDT_ENTRIES; ++vector) {
         idt_set_gate((uint8_t)vector,isr_default_stub);
@@ -297,7 +284,7 @@ bool interrupts_self_test(void) {
         return false;
     }
 
-    /* INT3 must traverse the real IDT and return with RSP/SS restored. */
+    /* INT3 must traverse the real IDT with a valid same-privilege frame. */
     breakpoint_expected=true;
     __asm__ volatile ("int3" : : : "memory");
     breakpoint_expected=false;

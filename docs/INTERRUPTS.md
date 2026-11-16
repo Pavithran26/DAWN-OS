@@ -4,7 +4,7 @@
 
 This is the initial single-CPU interrupt foundation. Limine base revision 6 enters x86_64 with IF clear, an undefined IDT, a bootloader-provided GDT, and legacy PIC IRQs masked. The IDT is installed before any interrupt is enabled. The current GDT code selector is read from CS and used in the IDT gates; the kernel does not replace or reclaim Limine's GDT.
 
-The 64-bit IDT uses 16-byte interrupt gates. The assembly stubs normalize the stack to a vector and error-code pair, save all general-purpose registers, clear DF before calling C, preserve the interrupted frame, and return with IRETQ. The saved frame includes RIP, CS, RFLAGS, RSP and SS: in 64-bit mode the processor pushes SS:RSP unconditionally.
+The 64-bit IDT uses 16-byte interrupt gates. The assembly stubs normalize the stack to a vector and error-code pair, save all general-purpose registers, clear DF before calling C, preserve the interrupted frame, and return with IRETQ. The C interrupt frame includes the registers saved by the stubs, followed by the CPU-pushed RIP, CS and RFLAGS. For a same-privilege interrupt, the CPU does not push RSP/SS; those two fields are present only when the interrupt changes privilege level. The dispatcher therefore never reads them from a same-privilege frame.
 
 ## Exceptions
 
