@@ -69,7 +69,7 @@ iso: $(KERNEL_ELF)
 	@test -f "$(LIMINE_EFI)" || { echo 'Missing $(LIMINE_EFI)' >&2; exit 1; }
 	rm -rf build/iso_root
 	mkdir -p build/iso_root/boot/limine build/iso_root/EFI/BOOT
-	cp "$(KERNEL_ELF)" build/iso_root/boot/dawn-kernel.elf
+	cp "$(KERNEL_ELF)" build/iso_root/boot/dawnos.elf
 	cp limine.conf build/iso_root/boot/limine/limine.conf
 	cp "$(LIMINE_BIOS_SYS)" "$(LIMINE_BIOS_CD)" "$(LIMINE_UEFI_CD)" build/iso_root/boot/limine/
 	cp "$(LIMINE_EFI)" build/iso_root/EFI/BOOT/BOOTX64.EFI
