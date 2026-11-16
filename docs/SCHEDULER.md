@@ -1,4 +1,4 @@
-# Single-CPU cooperative kernel-thread scheduler
+# Single-CPU preemptive kernel-thread scheduler
 
 ## Status
 
