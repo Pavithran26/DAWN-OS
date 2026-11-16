@@ -6,6 +6,7 @@
 #include "limine_requests.h"
 #include "physical_memory.h"
 #include "page_table.h"
+#include "interrupts.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -635,6 +636,24 @@ void kernel_main(void) {
     serial_write("DAWN-TEST: PASS: virtual-memory map/translate/unmap tests\n");
 #endif
 
+    if (!interrupts_initialize()) {
+        serial_write("DAWN-OS: FAIL: IDT/PIC initialization\\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: 256-entry IDT loaded; legacy PIC remapped and masked\\n");
+
+#ifdef DAWN_KERNEL_TEST
+    if (!interrupts_self_test()) {
+        serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: breakpoint exception and PIT IRQ timer tests\\n");
+#endif
+
 
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
@@ -649,11 +668,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, PIC, PIT and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B physical allocator and active page-table manager initialized; process address spaces are not implemented yet\n");
+    serial_write("DAWN-OS: Phase B memory and single-CPU exception/interrupt/timer foundations initialized; scheduler and process address spaces are not implemented yet\n");
     cpu_halt_forever();
 }
