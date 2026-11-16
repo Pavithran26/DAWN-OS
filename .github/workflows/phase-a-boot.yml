@@ -112,4 +112,6 @@ jobs:
           path: |
             build/dawn-os-test.iso
             build/qemu-bios-serial.log
+            build/qemu-bios-debug.log
             build/qemu-uefi-serial.log
+            build/qemu-uefi-debug.log

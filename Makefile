@@ -88,9 +88,10 @@ run: iso
 qemu-test: iso-test
 	@command -v $(QEMU) >/dev/null 2>&1 || { echo 'QEMU not found' >&2; exit 1; }
 	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
-	@set +e; timeout 20s $(QEMU) -M q35 -m 256M -smp 1 -cdrom build/dawn-os-test.iso \
+	@set +e; timeout 20s $(QEMU) -M q35 -m 256M -smp 1 -cdrom build/dawn-os-test.iso -boot order=d,menu=off -vga std \
 		-serial file:build/qemu-bios-serial.log -display none -no-reboot -no-shutdown \
-		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$$?; \
+		-d guest_errors,cpu_reset -D build/qemu-bios-debug.log \
+		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$?; \
 	cat build/qemu-bios-serial.log; \
 	if [ $$status -eq 33 ]; then echo 'QEMU BIOS boot test: PASS'; exit 0; \
 	elif [ $$status -eq 35 ]; then echo 'QEMU BIOS boot test: FAIL (kernel self-test failed)'; exit 1; \
@@ -101,9 +102,10 @@ qemu-uefi-test: iso-test
 	@test -f "$(OVMF_CODE)" || { echo 'OVMF UEFI firmware not found: $(OVMF_CODE)' >&2; exit 1; }
 	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
 	@set +e; timeout 25s $(QEMU) -M q35 -m 256M -smp 1 -bios "$(OVMF_CODE)" \
-		-cdrom build/dawn-os-test.iso -serial file:build/qemu-uefi-serial.log \
-		-display none -no-reboot -no-shutdown \
-		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$$?; \
+		-cdrom build/dawn-os-test.iso -boot order=d,menu=off -vga std \
+		-serial file:build/qemu-uefi-serial.log -display none -no-reboot -no-shutdown \
+		-d guest_errors,cpu_reset -D build/qemu-uefi-debug.log \
+		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$?; \
 	cat build/qemu-uefi-serial.log; \
 	if [ $$status -eq 33 ]; then echo 'QEMU UEFI boot test: PASS'; exit 0; \
 	elif [ $$status -eq 35 ]; then echo 'QEMU UEFI boot test: FAIL (kernel self-test failed)'; exit 1; \
