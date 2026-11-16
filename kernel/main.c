@@ -609,7 +609,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, memory map, HHDM and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, memory map, HHDM, allocator and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif

@@ -30,3 +30,5 @@ dawn_boot_stack:
 .type dawn_boot_stack_top, @object
 dawn_boot_stack_top:
 .size dawn_boot_stack, dawn_boot_stack_top - dawn_boot_stack
+
+.section .note.GNU-stack, "", @progbits
