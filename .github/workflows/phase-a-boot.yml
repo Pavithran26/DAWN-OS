@@ -34,35 +34,44 @@ jobs:
             build-essential gcc binutils make xorriso \
             qemu-system-x86 ovmf curl xz-utils
 
-      - name: Download pinned Limine v12.10.0 binary package
+      - name: Download and verify pinned Limine v12.10.0 binary package
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 \
             --output /tmp/limine-binary.tar.xz \
             https://github.com/Limine-Bootloader/Limine/releases/download/v12.10.0/limine-binary.tar.xz
+          echo "6329b586534697ea10b1bf65e6a1b2cf06500cc7ff8837ddb7bf277d4d4d416f  /tmp/limine-binary.tar.xz" | sha256sum --check
           mkdir -p /tmp/limine-dist limine-binary
           tar -xJf /tmp/limine-binary.tar.xz -C /tmp/limine-dist
+
+          # The binary package carries the host installer as source.
+          limine_makefile="$(find /tmp/limine-dist -type f -name Makefile -print -quit)"
+          if [[ -z "$limine_makefile" ]]; then
+            echo "Limine host-tool Makefile not found in binary package" >&2
+            find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+            exit 1
+          fi
+          make -C "$(dirname "$limine_makefile")"
+          installer="$(find /tmp/limine-dist -type f -name limine -perm /111 -print -quit)"
+          if [[ -z "$installer" ]]; then
+            echo "Could not build the Limine host installer" >&2
+            find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+            exit 1
+          fi
+          install -m 0755 "$installer" limine-binary/limine
 
           copy_limine_file() {
             local name="$1"
             local source
             source="$(find /tmp/limine-dist -type f -name "$name" -print -quit)"
             if [[ -z "$source" ]]; then
-              echo "Required Limine file not found in v12.10.0 binary package: $name" >&2
+              echo "Required Limine file not found in v12.10.0 package: $name" >&2
               find /tmp/limine-dist -maxdepth 4 -type f -print >&2
               exit 1
             fi
             install -m 0644 "$source" "limine-binary/$name"
           }
-
-          installer="$(find /tmp/limine-dist -type f -name limine -print -quit)"
-          if [[ -z "$installer" ]]; then
-            echo "Limine installer not found in v12.10.0 binary package" >&2
-            find /tmp/limine-dist -maxdepth 4 -type f -print >&2
-            exit 1
-          fi
-          install -m 0755 "$installer" limine-binary/limine
 
           copy_limine_file limine-bios.sys
           copy_limine_file limine-bios-cd.bin
