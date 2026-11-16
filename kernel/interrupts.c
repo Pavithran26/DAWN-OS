@@ -104,9 +104,11 @@ static uint16_t read_ss(void) {
     __asm__ volatile ("mov %%ss, %0" : "=r"(value));
     return value;
 }
+#ifdef DAWN_KERNEL_TEST
 static void qemu_debug_exit(uint8_t code) {
     outb((uint16_t)QEMU_DEBUG_EXIT_PORT, code);
 }
+#endif
 
 static void serial_write_char(char value) {
     for (uint32_t attempt=0U; attempt<SERIAL_POLL_LIMIT; ++attempt) {
@@ -175,10 +177,12 @@ static void pic_set_irq_mask(uint8_t irq,bool masked) {
     else mask=(uint8_t)(mask& (uint8_t)~(uint8_t)(1U<<bit));
     outb(port,mask);
 }
+#endif
 static void pic_send_eoi(uint8_t irq) {
     if (irq>=8U) outb((uint16_t)PIC_SLAVE_COMMAND,0x20U);
     outb((uint16_t)PIC_MASTER_COMMAND,0x20U);
 }
+#ifdef DAWN_KERNEL_TEST
 static void pit_program_frequency(uint32_t frequency_hz) {
     uint32_t divisor=PIT_BASE_HZ/frequency_hz;
     if (divisor==0U) divisor=1U;
