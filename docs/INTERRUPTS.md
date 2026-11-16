@@ -21,9 +21,9 @@ Vectors 0–31 have dedicated stubs. Vectors with architectural error-code pushe
 
 ## Interrupt controller and timer
 
-This increment remaps the dual 8259 PIC to vectors 32–47 and leaves all 16 IRQ lines masked. EOI is sent to the slave PIC first for slave IRQs, then to the master. The 8254 PIT channel 0 is programmed in mode 3 for the timer self-test. Only IRQ0 is unmasked during the test; it is masked again and IF is cleared before returning.
+This increment remaps the dual 8259 PIC to vectors 32–47 and leaves all 16 IRQ lines masked. EOI is sent to the slave PIC first for slave IRQs, then to the master. The 8254 PIT channel 0 is programmed in mode 3 and its latched hardware counter is polled to verify that it advances. The IRQ0 IDT path is separately exercised with a controlled software INT 0x20, which verifies the stub, dispatch and PIC EOI command path but does not emulate a physical IRQ arrival. No hardware IRQ line is unmasked and IF remains clear.
 
-This is intentionally a legacy PIC/PIT bootstrap path. Local APIC/IOAPIC routing, ACPI MADT parsing, HPET, APIC timer, interrupt affinity, SMP, and device-driver IRQ registration are later work. No external IRQ is enabled in the normal kernel path yet.
+This is intentionally a legacy PIC/PIT bootstrap foundation, not yet a validated hardware interrupt-routing implementation. Limine hands off with the Local APIC enabled and its LINT routes masked; Local APIC/IOAPIC routing, ACPI MADT parsing, HPET, APIC timer, interrupt affinity, SMP, and device-driver IRQ registration are later work. No external IRQ is enabled in either the normal or test kernel path yet.
 
 ## Tests
 

@@ -651,7 +651,7 @@ void kernel_main(void) {
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
-    serial_write("DAWN-TEST: PASS: breakpoint exception and PIT IRQ timer tests\\n");
+    serial_write("DAWN-TEST: PASS: breakpoint, PIC mask, IRQ-vector dispatch and PIT counter tests\\n");
 #endif
 
 

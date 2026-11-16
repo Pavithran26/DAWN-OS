@@ -85,14 +85,13 @@ static inline uint8_t inb(uint16_t port) {
 static inline void io_wait(void) {
     outb(0x80U, 0U);
 }
+#ifdef DAWN_KERNEL_TEST
 static inline void cpu_pause(void) {
     __asm__ volatile ("pause");
 }
+#endif
 static inline void cpu_cli(void) {
     __asm__ volatile ("cli" : : : "memory");
-}
-static inline void cpu_sti(void) {
-    __asm__ volatile ("sti" : : : "memory");
 }
 static uint16_t read_cs(void) {
     uint16_t value;
@@ -168,16 +167,6 @@ static void pic_remap_and_mask(void) {
     /* All device interrupts remain masked until an explicit driver enables one. */
     pic_write_masks(0xffU,0xffU);
 }
-#ifdef DAWN_KERNEL_TEST
-static void pic_set_irq_mask(uint8_t irq,bool masked) {
-    const uint16_t port=(irq<8U)?(uint16_t)PIC_MASTER_DATA:(uint16_t)PIC_SLAVE_DATA;
-    const uint8_t bit=(uint8_t)(irq&7U);
-    uint8_t mask=inb(port);
-    if (masked) mask=(uint8_t)(mask|(uint8_t)(1U<<bit));
-    else mask=(uint8_t)(mask& (uint8_t)~(uint8_t)(1U<<bit));
-    outb(port,mask);
-}
-#endif
 static void pic_send_eoi(uint8_t irq) {
     if (irq>=8U) outb((uint16_t)PIC_SLAVE_COMMAND,0x20U);
     outb((uint16_t)PIC_MASTER_COMMAND,0x20U);
@@ -190,6 +179,13 @@ static void pit_program_frequency(uint32_t frequency_hz) {
     outb((uint16_t)PIT_COMMAND,0x36U); /* channel 0, lobyte/hibyte, mode 3 */
     outb((uint16_t)PIT_CHANNEL0,(uint8_t)(divisor&0xffU));
     outb((uint16_t)PIT_CHANNEL0,(uint8_t)((divisor>>8)&0xffU));
+}
+static uint16_t pit_read_counter(void) {
+    uint8_t low=0U, high=0U;
+    outb((uint16_t)PIT_COMMAND,0x00U); /* latch channel 0 count */
+    low=inb((uint16_t)PIT_CHANNEL0);
+    high=inb((uint16_t)PIT_CHANNEL0);
+    return (uint16_t)((uint16_t)low | ((uint16_t)high<<8));
 }
 #endif
 
@@ -275,9 +271,14 @@ bool interrupts_initialize(void) {
 #ifdef DAWN_KERNEL_TEST
 bool interrupts_self_test(void) {
     uint64_t initial_ticks=0ULL;
-    bool timer_observed=false;
+    uint16_t initial_pit_count=0U;
+    bool pit_observed=false;
 
-    if (!idt_loaded) return false;
+    if (!idt_loaded ||
+        inb((uint16_t)PIC_MASTER_DATA)!=0xffU ||
+        inb((uint16_t)PIC_SLAVE_DATA)!=0xffU) {
+        return false;
+    }
 
     /* INT3 must traverse the real IDT and return with RSP/SS restored. */
     breakpoint_expected=true;
@@ -285,22 +286,22 @@ bool interrupts_self_test(void) {
     breakpoint_expected=false;
     if (breakpoint_count!=1ULL) return false;
 
-    initial_ticks=timer_ticks;
+    /* Verify that the PIT hardware counter advances without enabling IRQs. */
     pit_program_frequency(PIT_TEST_HZ);
-    pic_set_irq_mask(0U,false);
-    cpu_sti();
-
-    /* Bound the wait: a broken PIT/PIC must fail, never hang the boot test. */
-    for (uint64_t attempt=0ULL; attempt<50000000ULL; ++attempt) {
-        if (timer_ticks>initial_ticks) {
-            timer_observed=true;
+    initial_pit_count=pit_read_counter();
+    for (uint64_t attempt=0ULL; attempt<1000000ULL; ++attempt) {
+        if (pit_read_counter()!=initial_pit_count) {
+            pit_observed=true;
             break;
         }
         cpu_pause();
     }
+    if (!pit_observed) return false;
 
-    cpu_cli();
-    pic_set_irq_mask(0U,true);
-    return timer_observed && timer_ticks>initial_ticks;
+    /* Exercise the installed IRQ0 vector and EOI path with a controlled
+     * software interrupt. External IRQ delivery is deferred until APIC routing. */
+    initial_ticks=timer_ticks;
+    __asm__ volatile ("int $0x20" : : : "memory");
+    return timer_ticks==initial_ticks+1ULL;
 }
 #endif
