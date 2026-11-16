@@ -107,6 +107,13 @@ bool physical_allocator_initialize(const struct limine_memmap_response *map) {
 }
 bool physical_allocator_allocate(uint64_t *address) { return alloc_ctx(&live,address); }
 bool physical_allocator_free(uint64_t address) { return free_ctx(&live,address); }
+bool physical_allocator_is_allocated(uint64_t address) {
+    uint64_t frame = address / 4096ULL;
+    return address % 4096ULL == 0ULL && frame != 0ULL &&
+           frame < live.frames && live.managed != NULL &&
+           live.allocated != NULL && bit(live.managed, frame) &&
+           bit(live.allocated, frame);
+}
 void physical_allocator_get_stats(struct physical_allocator_stats *s) {
     if (!s) return;
     s->managed_frames=live.total; s->free_frames=live.free_count; s->tracked_frames=live.frames;

@@ -35,6 +35,10 @@
     LIMINE_COMMON_MAGIC, 0x67cf3d9d378a806fULL, 0xe304acdfc50c3c62ULL
 #define LIMINE_HHDM_REQUEST_ID \
     LIMINE_COMMON_MAGIC, 0x48dcf1cb8ad2b852ULL, 0x63984e959a98244bULL
+#define LIMINE_PAGING_MODE_REQUEST_ID \
+    LIMINE_COMMON_MAGIC, 0x95c1a0edab0944cbULL, 0xa4e5cb3842f7488aULL
+#define LIMINE_PAGING_MODE_X86_64_4LVL 0ULL
+#define LIMINE_PAGING_MODE_X86_64_5LVL 1ULL
 
 #define LIMINE_MEMMAP_USABLE 0ULL
 #define LIMINE_MEMMAP_RESERVED 1ULL
@@ -89,6 +93,20 @@ struct limine_hhdm_request {
     struct limine_hhdm_response *response;
 };
 
+struct limine_paging_mode_response {
+    uint64_t revision;
+    uint64_t mode;
+};
+
+struct limine_paging_mode_request {
+    uint64_t id[4];
+    uint64_t revision;
+    struct limine_paging_mode_response *response;
+    uint64_t mode;
+    uint64_t max_mode;
+    uint64_t min_mode;
+};
+
 _Static_assert(sizeof(struct limine_memmap_entry) == 24U,
                "Limine memory map entry ABI size mismatch");
 _Static_assert(sizeof(struct limine_memmap_response) == 24U,
@@ -99,5 +117,9 @@ _Static_assert(sizeof(struct limine_hhdm_response) == 16U,
                "Limine HHDM response ABI size mismatch");
 _Static_assert(sizeof(struct limine_hhdm_request) == 48U,
                "Limine HHDM request ABI size mismatch");
+_Static_assert(sizeof(struct limine_paging_mode_response) == 16U,
+               "Limine paging-mode response ABI size mismatch");
+_Static_assert(sizeof(struct limine_paging_mode_request) == 64U,
+               "Limine paging-mode request ABI size mismatch");
 
 #endif

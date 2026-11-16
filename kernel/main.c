@@ -5,6 +5,7 @@
 
 #include "limine_requests.h"
 #include "physical_memory.h"
+#include "page_table.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -68,6 +69,16 @@ volatile struct limine_hhdm_request limine_hhdm_request = {
     .id = { LIMINE_HHDM_REQUEST_ID },
     .revision = 0,
     .response = NULL
+};
+
+__attribute__((used, aligned(8), section(".limine_requests")))
+volatile struct limine_paging_mode_request limine_paging_mode_request = {
+    .id = { LIMINE_PAGING_MODE_REQUEST_ID },
+    .revision = 1,
+    .response = NULL,
+    .mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+    .max_mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+    .min_mode = LIMINE_PAGING_MODE_X86_64_4LVL
 };
 
 __attribute__((used, aligned(8), section(".limine_requests_end")))
@@ -536,6 +547,17 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: Limine base revision 6 accepted\n");
 
+    if (limine_paging_mode_request.response == NULL ||
+        limine_paging_mode_request.response->mode !=
+            LIMINE_PAGING_MODE_X86_64_4LVL) {
+        serial_write("DAWN-OS: FAIL: Limine did not provide requested 4-level paging mode\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: Limine 4-level paging mode confirmed\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!memory_map_validator_self_test()) {
         serial_write("DAWN-TEST: FAIL: memory-map validator edge cases\n");
@@ -595,6 +617,24 @@ void kernel_main(void) {
     serial_write("\nDAWN-OS: physical allocator tracking limit MiB: ");
     serial_write_u64(PHYSICAL_ALLOCATOR_MAX_ADDRESS / (1024ULL * 1024ULL));
     serial_write("\n");
+    if (!vm_manager_initialize(limine_hhdm_request.response->offset)) {
+        serial_write("DAWN-OS: FAIL: x86_64 page-table manager initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: x86_64 four-level page-table manager initialized\n");
+
+#ifdef DAWN_KERNEL_TEST
+    if (!vm_manager_self_test()) {
+        serial_write("DAWN-TEST: FAIL: virtual-memory map/translate/unmap tests\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: virtual-memory map/translate/unmap tests\n");
+#endif
+
 
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
@@ -609,11 +649,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, memory map, HHDM, allocator and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B physical page allocator initialized; virtual memory is not enabled yet\n");
+    serial_write("DAWN-OS: Phase B physical allocator and active page-table manager initialized; process address spaces are not implemented yet\n");
     cpu_halt_forever();
 }

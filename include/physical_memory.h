@@ -11,6 +11,7 @@ struct physical_allocator_stats { uint64_t managed_frames; uint64_t free_frames;
 bool physical_allocator_initialize(const struct limine_memmap_response *map);
 bool physical_allocator_allocate(uint64_t *physical_address);
 bool physical_allocator_free(uint64_t physical_address);
+bool physical_allocator_is_allocated(uint64_t physical_address);
 void physical_allocator_get_stats(struct physical_allocator_stats *stats);
 #ifdef DAWN_KERNEL_TEST
 bool physical_allocator_self_test(void);

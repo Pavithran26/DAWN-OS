@@ -77,4 +77,4 @@ This code does not:
 - establish kernel heap allocation;
 - manage memory ownership or lifetime.
 
-Virtual-memory management and memory reclamation still require additional architecture and lifetime rules and must be implemented in later Phase B increments.
+An early x86_64 page-table manager now attaches to Limine's active root; see [VIRTUAL_MEMORY.md](VIRTUAL_MEMORY.md). Process address spaces, fault recovery, and memory reclamation still require additional architecture and lifetime rules.
