@@ -4,7 +4,7 @@
 
 Planning document only. Phase C runtime code is not enabled yet.
 
-The current kernel has a Limine boot path, memory-map validation, and HHDM response validation. Phase B is still incomplete: physical page allocation, virtual-memory/page-table management, exception and interrupt handling, timer support, kernel threads, and a scheduler remain prerequisites.
+The current kernel has a Limine boot path, physical and virtual memory managers, ACPI/xAPIC/IOAPIC interrupt handling, a Local APIC timer, interrupt-frame context switching, and a single-CPU timer-preemptive kernel-thread scheduler. Phase B remains in progress until its BIOS and UEFI QEMU test matrix, timer calibration, and scheduler stress checks are verified. Phase C runtime code is not enabled.
 
 Phase C must not be represented as complete or bootable until those prerequisites and the tests below exist.
 

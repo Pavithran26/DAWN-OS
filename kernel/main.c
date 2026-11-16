@@ -720,7 +720,7 @@ void kernel_main(void) {
     }
 
     if (!scheduler_initialize()) {
-        serial_write("DAWN-OS: FAIL: cooperative scheduler initialization\n");
+        serial_write("DAWN-OS: FAIL: kernel-thread scheduler initialization\n");
 #ifdef DAWN_KERNEL_TEST
         qemu_debug_exit(QEMU_TEST_FAIL);
 #endif

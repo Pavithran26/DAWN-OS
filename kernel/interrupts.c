@@ -48,6 +48,8 @@ _Static_assert(offsetof(struct interrupt_frame, vector) == 120U,
                "ISR register save order does not match C frame");
 _Static_assert(offsetof(struct interrupt_frame, rip) == 136U,
                "ISR error/vector frame layout mismatch");
+_Static_assert(sizeof(struct interrupt_frame) == 160U,
+               "same-privilege interrupt frame layout mismatch");
 
 extern void isr_default_stub(void);
 extern void isr_spurious_stub(void);
