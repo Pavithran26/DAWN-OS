@@ -1,0 +1,6 @@
+/build/
+/limine-binary/
+/iso_root/
+*.iso
+*.elf
+*.o
