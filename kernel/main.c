@@ -637,21 +637,21 @@ void kernel_main(void) {
 #endif
 
     if (!interrupts_initialize()) {
-        serial_write("DAWN-OS: FAIL: IDT/PIC initialization\\n");
+        serial_write("DAWN-OS: FAIL: IDT/PIC initialization\n");
 #ifdef DAWN_KERNEL_TEST
         qemu_debug_exit(QEMU_TEST_FAIL);
 #endif
         cpu_halt_forever();
     }
-    serial_write("DAWN-OS: 256-entry IDT loaded; legacy PIC remapped and masked\\n");
+    serial_write("DAWN-OS: 256-entry IDT loaded; legacy PIC remapped and masked\n");
 
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
-        serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\\n");
+        serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
-    serial_write("DAWN-TEST: PASS: breakpoint, PIC mask, IRQ-vector dispatch and PIT counter tests\\n");
+    serial_write("DAWN-TEST: PASS: breakpoint, PIC mask, IRQ-vector dispatch and PIT counter tests\n");
 #endif
 
 
