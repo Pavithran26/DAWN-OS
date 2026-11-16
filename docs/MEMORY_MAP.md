@@ -2,11 +2,11 @@
 
 ## Status
 
-Implemented as the first Phase B increment on the `bootstrap/phase-b-memory-map` branch.
+Implemented as an early Phase B increment on `main`.
 
 The kernel requests Limine's memory-map feature at request revision 0. At boot, it validates the returned map and emits a small summary over COM1 serial. The QEMU self-test build also runs synthetic validator cases before validating the actual bootloader response.
 
-**No physical allocator or virtual-memory manager is implemented by this change.** No memory is allocated, freed, reclaimed, zeroed, or written based on the memory map.
+The memory-map parser itself does not allocate or reclaim memory. The separate [physical page allocator](PHYSICAL_ALLOCATOR.md) consumes the validated map and uses only `USABLE` entries. Virtual-memory management is still not implemented.
 
 ## Limine data model
 
@@ -71,11 +71,10 @@ The kernel now requests Limine's Higher Half Direct Map response. It requires a 
 ## Not yet implemented
 
 This code does not:
-- initialize a frame allocator;
 - reclaim bootloader-reclaimable memory;
 - release ACPI regions;
 - create or modify page tables;
 - establish kernel heap allocation;
 - manage memory ownership or lifetime.
 
-Those operations require additional architecture and lifetime rules and must be implemented in later Phase B increments.
+Virtual-memory management and memory reclamation still require additional architecture and lifetime rules and must be implemented in later Phase B increments.

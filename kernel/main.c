@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "limine_requests.h"
+#include "physical_memory.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -569,6 +570,32 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: HHDM response validated; dynamic offset accepted\n");
 
+#ifdef DAWN_KERNEL_TEST
+    if (!physical_allocator_self_test()) {
+        serial_write("DAWN-TEST: FAIL: physical page allocator edge cases\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: physical page allocator edge cases\n");
+#endif
+
+    if (!physical_allocator_initialize(limine_memmap_request.response)) {
+        serial_write("DAWN-OS: FAIL: physical page allocator initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    struct physical_allocator_stats allocator_stats = {0};
+    physical_allocator_get_stats(&allocator_stats);
+    serial_write("DAWN-OS: physical allocator managed frames: ");
+    serial_write_u64(allocator_stats.managed_frames);
+    serial_write("\nDAWN-OS: physical allocator free frames: ");
+    serial_write_u64(allocator_stats.free_frames);
+    serial_write("\nDAWN-OS: physical allocator tracking limit MiB: ");
+    serial_write_u64(PHYSICAL_ALLOCATOR_MAX_ADDRESS / (1024ULL * 1024ULL));
+    serial_write("\n");
+
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
     } else {
@@ -587,6 +614,6 @@ void kernel_main(void) {
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B memory-map and HHDM inspection complete; allocator not enabled yet\n");
+    serial_write("DAWN-OS: Phase B physical page allocator initialized; virtual memory is not enabled yet\n");
     cpu_halt_forever();
 }

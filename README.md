@@ -14,9 +14,10 @@ The repository contains the first Phase A kernel scaffold:
 - A GitHub Actions boot-validation workflow for ISO creation and QEMU BIOS/UEFI attempts.
 - A Limine boot-memory-map request, bounded structural validator, malformed-map self-tests, and serial summary of usable/reclaimable regions.
 - A Limine HHDM request with runtime-selected offset validation; no fixed direct-map address is assumed.
+- A bitmap physical page-frame allocator with usable-frame ownership tracking and invalid/double-free rejection; initial tracking is limited to physical addresses below 4 GiB and no bootloader/ACPI memory is reclaimed.
 - An optional graphical administration shell is planned; terminal, file explorer, partition manager, task manager, and the green liquid-neomorphism interface are **not implemented yet**. See [the graphical shell design](docs/GUI_SHELL_PLAN.md) and [Phase D milestones](docs/PHASE_D_PLAN.md).
 
-This is **not a complete operating system**. A physical page-frame allocator, virtual-memory/page-table manager, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The current memory-map code only validates and reports Limine's boot-time map; it does not allocate, free, or reclaim memory. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
+This is **not a complete operating system**. A virtual-memory/page-table manager, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The physical allocator returns physical frame addresses only; it does not map or zero frames, provide a heap, or support concurrent CPUs. Bootloader-reclaimable and ACPI memory remain reserved. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
 
 ## Build the kernel ELF
 
@@ -77,7 +78,7 @@ The latest recorded GitHub Actions run passed kernel compilation, ELF checks, hy
 The first increment requests, validates, and reports the Limine memory map. See [the memory-map implementation notes](docs/MEMORY_MAP.md). It deliberately does not enable allocation yet.
 
 Remaining Phase B work:
-- Implement a physical page-frame allocator with explicit ownership and tests.
+- Harden allocation accounting and add synchronization after interrupt/CPU foundations exist.
 - Add page-table/virtual-memory management with defined permissions and mapping lifetimes.
 - Add exception handlers, interrupt-controller support, and a timer.
 - Add kernel threads, context switching, and a scheduler after the interrupt/timer foundations are tested.
@@ -86,7 +87,7 @@ Remaining Phase B work:
 ## Roadmap
 
 1. **Boot and test:** verify Limine boot on QEMU, preserve serial diagnostics, and expand the kernel test harness.
-2. **Memory and interrupts:** validate the boot memory map, implement a physical page allocator and virtual memory, then add exceptions, interrupt controllers, and a timer.
+2. **Memory and interrupts:** validate the boot memory map, initialize the physical page allocator and implement virtual memory, then add exceptions, interrupt controllers, and a timer.
 3. **Execution and SMP:** implement kernel threads, context switching, a scheduler, CPU startup, synchronization, and per-CPU state.
 4. **Userspace and storage:** define a syscall ABI and privilege boundary, add a compact runtime and service supervisor, then add filesystem and virtio block I/O.
 5. **Networking:** add virtio networking and a documented network stack, then implement a small reproducible HTTP workload.

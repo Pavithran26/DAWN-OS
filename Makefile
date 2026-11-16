@@ -23,7 +23,7 @@ CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
 ASFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 --build-id=none
 
-KERNEL_OBJECTS = build/boot.o build/main.o
+KERNEL_OBJECTS = build/boot.o build/main.o build/physical_memory.o
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all
 
@@ -37,7 +37,10 @@ build:
 build/boot.o: arch/x86_64/boot.S | build
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-build/main.o: kernel/main.c include/limine_requests.h | build
+build/main.o: kernel/main.c include/limine_requests.h include/physical_memory.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/physical_memory.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/dawn-kernel.elf: $(KERNEL_OBJECTS) linker.ld
@@ -45,11 +48,14 @@ build/dawn-kernel.elf: $(KERNEL_OBJECTS) linker.ld
 
 kernel-test: build/dawn-kernel-test.elf
 
-build/main-test.o: kernel/main.c include/limine_requests.h | build
+build/main-test.o: kernel/main.c include/limine_requests.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/main-test.o linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/main-test.o
+build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/dawn-kernel-test.elf: build/boot.o build/main-test.o build/physical-memory-test.o linker.ld
+	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/main-test.o build/physical-memory-test.o
 
 check: kernel
 	@set -eu; \
