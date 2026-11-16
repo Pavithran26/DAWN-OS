@@ -22,12 +22,18 @@ The APIC initializer:
 
 During the bounded PIT test only, the MADT-resolved ISA IRQ0 GSI is programmed as a fixed physical-destination route to vector 0x40 and briefly unmasked. The 8259 PIC remains fully masked. The vector handler increments a monotonic count and sends EOI to the LAPIC. The route is masked and IF is cleared before the test returns.
 
+## Local APIC timer
+
+The BSP Local APIC timer has a dedicated IDT vector (0x41), separate from the IOAPIC PIT route (0x40). Initialization leaves the timer masked with an initial count of zero. The timer handler increments a monotonic tick counter and acknowledges the Local APIC with EOI. The driver exposes explicit one-shot and periodic start calls plus a stop call; each start configures divide-by-16 and accepts a raw hardware count. No timer frequency is claimed: calibration against a reference clock is a separate requirement before selecting a scheduler quantum. The QEMU self-test arms a bounded one-shot and verifies delivery before masking and stopping it again.
+
 ## Deliberate limits
 
 - Single BSP CPU only; no AP startup, x2APIC, MSI/MSI-X, interrupt remapping, SMP routing, or per-CPU EOI.
 - One IOAPIC is supported in this increment. Systems with multiple IOAPICs are rejected instead of guessed.
 - Only the ISA PIT IRQ0 route is enabled in the test path. Other IOAPIC inputs remain masked.
 - No general device-driver IRQ registration API yet.
+- Local timer counts are not calibrated to nanoseconds or hertz; no scheduler quantum is derived from them yet.
+- Local timer delivery is tested, but it does not yet trigger preemptive context switching.
 - Physical hardware validation is not claimed; current verification is QEMU BIOS and OVMF UEFI.
 
 ## QEMU verification

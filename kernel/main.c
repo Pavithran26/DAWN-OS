@@ -709,6 +709,12 @@ void kernel_main(void) {
                 cpu_halt_forever();
             }
             serial_write("DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery\n");
+            if (!apic_local_timer_self_test()) {
+                serial_write("DAWN-TEST: FAIL: Local APIC one-shot timer interrupt\n");
+                qemu_debug_exit(QEMU_TEST_FAIL);
+                cpu_halt_forever();
+            }
+            serial_write("DAWN-TEST: PASS: Local APIC one-shot timer interrupt\n");
 #endif
         }
     }
@@ -744,7 +750,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, cooperative scheduler and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, cooperative scheduler and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif

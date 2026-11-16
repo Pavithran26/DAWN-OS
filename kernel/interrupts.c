@@ -61,6 +61,7 @@ _Static_assert(offsetof(struct interrupt_frame, rip) == 136U,
 extern void isr_default_stub(void);
 extern void isr_spurious_stub(void);
 extern void isr_stub_64(void);
+extern void isr_stub_65(void);
 extern void (*isr_stub_table[48])(void);
 
 static struct idt_entry idt[IDT_ENTRIES] __attribute__((aligned(16)));
@@ -222,6 +223,10 @@ void interrupt_dispatch(struct interrupt_frame *frame) {
         apic_handle_ioapic_interrupt();
         return;
     }
+    if (frame->vector==(uint64_t)APIC_LOCAL_TIMER_VECTOR) {
+        apic_handle_local_timer_interrupt();
+        return;
+    }
     if (frame->vector==3ULL && breakpoint_expected &&
         frame->cs==(uint64_t)kernel_cs &&
         (frame->rflags & 0x2ULL)!=0ULL) {
@@ -258,6 +263,7 @@ bool interrupts_initialize(void) {
     /* Limine leaves the local APIC spurious vector at 0xFF. */
     idt_set_gate(255U,isr_spurious_stub);
     idt_set_gate((uint8_t)APIC_IO_IRQ_VECTOR,isr_stub_64);
+    idt_set_gate((uint8_t)APIC_LOCAL_TIMER_VECTOR,isr_stub_65);
 
     descriptor.limit=(uint16_t)(sizeof(idt)-1U);
     descriptor.base=(uint64_t)(uintptr_t)&idt[0];

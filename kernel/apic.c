@@ -17,9 +17,15 @@
 #define LAPIC_TPR 0x080U
 #define LAPIC_EOI 0x0b0U
 #define LAPIC_SVR 0x0f0U
+#define LAPIC_LVT_TIMER 0x320U
+#define LAPIC_TIMER_INITIAL_COUNT 0x380U
+#define LAPIC_TIMER_DIVIDE_CONFIG 0x3e0U
 
 #define LAPIC_SVR_VECTOR_MASK 0xffU
 #define LAPIC_SVR_SOFTWARE_ENABLE (1U << 8)
+#define LAPIC_LVT_MASK (1U << 16)
+#define LAPIC_LVT_PERIODIC (1U << 17)
+#define LAPIC_TIMER_DIVIDE_BY_16 0x3U
 
 #define IOAPIC_REG_ID 0x00U
 #define IOAPIC_REG_VERSION 0x01U
@@ -40,6 +46,7 @@ static uint32_t io_apic_redirection_count;
 static uint32_t bsp_apic_id;
 static bool initialized;
 static volatile uint64_t delivered_irq_count;
+static volatile uint64_t local_timer_tick_count;
 
 static void cpu_cpuid(uint32_t leaf, uint32_t subleaf,
                       uint32_t *eax, uint32_t *ebx,
@@ -218,6 +225,11 @@ bool apic_initialize(const struct acpi_platform_info *platform) {
 
     /* Keep the BSP's priority open and enable the configured spurious vector. */
     local_apic_write(LAPIC_TPR,0U);
+    /* Keep the local timer inert until a caller explicitly arms it. */
+    local_apic_write(LAPIC_LVT_TIMER,
+                     APIC_LOCAL_TIMER_VECTOR|LAPIC_LVT_MASK);
+    local_apic_write(LAPIC_TIMER_INITIAL_COUNT,0U);
+    local_apic_write(LAPIC_TIMER_DIVIDE_CONFIG,LAPIC_TIMER_DIVIDE_BY_16);
     local_apic_write(LAPIC_SVR,
         (local_apic_read(LAPIC_SVR)&~LAPIC_SVR_VECTOR_MASK) |
         LAPIC_SVR_SOFTWARE_ENABLE | 0xffU);
@@ -225,6 +237,7 @@ bool apic_initialize(const struct acpi_platform_info *platform) {
     io_apic_mask_all();
     initialized=true;
     delivered_irq_count=0ULL;
+    local_timer_tick_count=0ULL;
     return true;
 }
 
@@ -234,9 +247,67 @@ void apic_handle_ioapic_interrupt(void) {
     local_apic_write(LAPIC_EOI,0U);
 }
 
+void apic_handle_local_timer_interrupt(void) {
+    if (!initialized) return;
+    ++local_timer_tick_count;
+    local_apic_write(LAPIC_EOI,0U);
+}
+
 uint64_t apic_delivered_irq_count(void) {
     return delivered_irq_count;
 }
+
+uint64_t apic_local_timer_tick_count(void) {
+    return local_timer_tick_count;
+}
+
+static bool apic_local_timer_start(uint32_t initial_count,bool periodic) {
+    uint32_t lvt=APIC_LOCAL_TIMER_VECTOR;
+    if (!initialized || local_apic==NULL || initial_count==0U) return false;
+    local_apic_write(LAPIC_LVT_TIMER,lvt|LAPIC_LVT_MASK);
+    local_apic_write(LAPIC_TIMER_INITIAL_COUNT,0U);
+    local_apic_write(LAPIC_TIMER_DIVIDE_CONFIG,LAPIC_TIMER_DIVIDE_BY_16);
+    if (periodic) lvt|=LAPIC_LVT_PERIODIC;
+    local_apic_write(LAPIC_LVT_TIMER,lvt);
+    local_apic_write(LAPIC_TIMER_INITIAL_COUNT,initial_count);
+    return true;
+}
+
+bool apic_local_timer_start_oneshot(uint32_t initial_count) {
+    return apic_local_timer_start(initial_count,false);
+}
+
+bool apic_local_timer_start_periodic(uint32_t initial_count) {
+    return apic_local_timer_start(initial_count,true);
+}
+
+void apic_local_timer_stop(void) {
+    if (!initialized || local_apic==NULL) return;
+    local_apic_write(LAPIC_LVT_TIMER,
+                     APIC_LOCAL_TIMER_VECTOR|LAPIC_LVT_MASK);
+    local_apic_write(LAPIC_TIMER_INITIAL_COUNT,0U);
+}
+
+#ifdef DAWN_KERNEL_TEST
+bool apic_local_timer_self_test(void) {
+    uint64_t initial_ticks=0ULL;
+    bool delivered=false;
+    if (!initialized || local_apic==NULL) return false;
+    initial_ticks=apic_local_timer_tick_count();
+    if (!apic_local_timer_start_oneshot(1000000U)) return false;
+    cpu_sti();
+    for (uint64_t attempt=0ULL;attempt<100000000ULL;attempt++) {
+        if (apic_local_timer_tick_count()>initial_ticks) {
+            delivered=true;
+            break;
+        }
+        cpu_pause();
+    }
+    cpu_cli();
+    apic_local_timer_stop();
+    return delivered;
+}
+#endif
 
 bool apic_is_initialized(void) {
     return initialized;

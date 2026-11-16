@@ -15,7 +15,8 @@ Vectors 0–31 have dedicated stubs. Vectors with architectural error-code pushe
 - 256 16-byte IDT gate entries, aligned to 16 bytes.
 - Vectors 0–31 map to CPU exception stubs.
 - Vectors 32–47 map to legacy PIC IRQ stubs; vector 0x40 is reserved for the tested IOAPIC-routed PIT interrupt.
-- Vectors 48–63 and 65–254 route to a fatal default stub; vector 0x40 handles the IOAPIC PIT source, and vector 255 uses the Local APIC spurious handler.
+- Vector 0x41 maps to the Local APIC timer stub; vector 0xFF maps to the APIC spurious stub.
+- Vectors 48–63 and 66–254 route to a fatal default stub; vector 0x40 handles the IOAPIC PIT source, vector 0x41 handles the Local APIC timer, and vector 255 uses the Local APIC spurious handler.
 - Gate selector is the active kernel CS, DPL 0, interrupt-gate type, IST 0.
 - Interrupts remain disabled during initialization.
 
@@ -27,4 +28,4 @@ Limine base revision 5+ provides a well-defined enabled xAPIC and masks fixed/lo
 
 ## Tests
 
-The QEMU self-test executes INT3 through the real IDT, checks the APIC spurious vector, and validates the MADT parser using synthetic well-formed and checksum-corrupted tables. After discovering the real MADT, it programs PIT channel 0, unmasks only the IOAPIC GSI corresponding to ISA IRQ0, briefly enables interrupts with a bounded wait, verifies an actual vector-0x40 interrupt arrived, clears IF, and masks the route again. The legacy PIC stays masked throughout. BIOS and UEFI runs must pass this test.
+The QEMU self-test executes INT3 through the real IDT, checks the APIC spurious vector, and validates the MADT parser using synthetic well-formed and checksum-corrupted tables. After discovering the real MADT, it programs PIT channel 0, unmasks only the IOAPIC GSI corresponding to ISA IRQ0, briefly enables interrupts with a bounded wait, verifies an actual vector-0x40 interrupt arrived, clears IF, and masks the route again. The legacy PIC stays masked throughout. The self-test also arms a one-shot Local APIC timer on vector 0x41 and checks that its handler increments the timer tick count and sends EOI. The periodic timer API currently accepts raw APIC counts; calibration and timer-driven scheduling remain future Phase B work. BIOS and UEFI runs must pass these tests.

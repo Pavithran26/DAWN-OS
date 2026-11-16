@@ -2,7 +2,7 @@
 
 ## Status
 
-The first scheduler increment is cooperative. It does not preempt running code from the timer interrupt. The PIT/IOAPIC hardware IRQ path is independently validated; switching an arbitrary interrupt frame is a later, separately tested change.
+The first scheduler increment is cooperative. It does not preempt running code from the timer interrupt. The PIT/IOAPIC hardware IRQ path and the Local APIC one-shot timer vector have dedicated delivery tests. The Local APIC timer exposes one-shot and periodic controls, but its frequency is not calibrated yet. Switching an arbitrary interrupt frame is a later, separately tested change.
 
 ## Thread model
 
@@ -36,7 +36,7 @@ BIOS and UEFI QEMU tests must retain all earlier ACPI/MADT, xAPIC/IOAPIC real PI
 
 ## Not implemented
 
-Timer-driven preemption, interrupt-frame context switching, scheduler quantum/accounting, sleep/block/wakeup, priorities, idle halt loop, per-CPU state, SMP, locks, user threads and process scheduling.
+Timer-frequency calibration, timer-driven preemption, interrupt-frame context switching, scheduler quantum/accounting, sleep/block/wakeup, priorities, idle halt loop, per-CPU state, SMP, locks, user threads and process scheduling.
 
 
 ## Additional lifecycle validation
