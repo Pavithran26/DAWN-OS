@@ -6,56 +6,64 @@
 .global isr_stub_0
 .type isr_stub_0, @function
 isr_stub_0:
-    pushq $0\n    pushq $0
+    pushq $0
+    pushq $0
     jmp isr_common
 .size isr_stub_0, . - isr_stub_0
 
 .global isr_stub_1
 .type isr_stub_1, @function
 isr_stub_1:
-    pushq $0\n    pushq $1
+    pushq $0
+    pushq $1
     jmp isr_common
 .size isr_stub_1, . - isr_stub_1
 
 .global isr_stub_2
 .type isr_stub_2, @function
 isr_stub_2:
-    pushq $0\n    pushq $2
+    pushq $0
+    pushq $2
     jmp isr_common
 .size isr_stub_2, . - isr_stub_2
 
 .global isr_stub_3
 .type isr_stub_3, @function
 isr_stub_3:
-    pushq $0\n    pushq $3
+    pushq $0
+    pushq $3
     jmp isr_common
 .size isr_stub_3, . - isr_stub_3
 
 .global isr_stub_4
 .type isr_stub_4, @function
 isr_stub_4:
-    pushq $0\n    pushq $4
+    pushq $0
+    pushq $4
     jmp isr_common
 .size isr_stub_4, . - isr_stub_4
 
 .global isr_stub_5
 .type isr_stub_5, @function
 isr_stub_5:
-    pushq $0\n    pushq $5
+    pushq $0
+    pushq $5
     jmp isr_common
 .size isr_stub_5, . - isr_stub_5
 
 .global isr_stub_6
 .type isr_stub_6, @function
 isr_stub_6:
-    pushq $0\n    pushq $6
+    pushq $0
+    pushq $6
     jmp isr_common
 .size isr_stub_6, . - isr_stub_6
 
 .global isr_stub_7
 .type isr_stub_7, @function
 isr_stub_7:
-    pushq $0\n    pushq $7
+    pushq $0
+    pushq $7
     jmp isr_common
 .size isr_stub_7, . - isr_stub_7
 
@@ -69,7 +77,8 @@ isr_stub_8:
 .global isr_stub_9
 .type isr_stub_9, @function
 isr_stub_9:
-    pushq $0\n    pushq $9
+    pushq $0
+    pushq $9
     jmp isr_common
 .size isr_stub_9, . - isr_stub_9
 
@@ -111,14 +120,16 @@ isr_stub_14:
 .global isr_stub_15
 .type isr_stub_15, @function
 isr_stub_15:
-    pushq $0\n    pushq $15
+    pushq $0
+    pushq $15
     jmp isr_common
 .size isr_stub_15, . - isr_stub_15
 
 .global isr_stub_16
 .type isr_stub_16, @function
 isr_stub_16:
-    pushq $0\n    pushq $16
+    pushq $0
+    pushq $16
     jmp isr_common
 .size isr_stub_16, . - isr_stub_16
 
@@ -132,21 +143,24 @@ isr_stub_17:
 .global isr_stub_18
 .type isr_stub_18, @function
 isr_stub_18:
-    pushq $0\n    pushq $18
+    pushq $0
+    pushq $18
     jmp isr_common
 .size isr_stub_18, . - isr_stub_18
 
 .global isr_stub_19
 .type isr_stub_19, @function
 isr_stub_19:
-    pushq $0\n    pushq $19
+    pushq $0
+    pushq $19
     jmp isr_common
 .size isr_stub_19, . - isr_stub_19
 
 .global isr_stub_20
 .type isr_stub_20, @function
 isr_stub_20:
-    pushq $0\n    pushq $20
+    pushq $0
+    pushq $20
     jmp isr_common
 .size isr_stub_20, . - isr_stub_20
 
@@ -160,49 +174,56 @@ isr_stub_21:
 .global isr_stub_22
 .type isr_stub_22, @function
 isr_stub_22:
-    pushq $0\n    pushq $22
+    pushq $0
+    pushq $22
     jmp isr_common
 .size isr_stub_22, . - isr_stub_22
 
 .global isr_stub_23
 .type isr_stub_23, @function
 isr_stub_23:
-    pushq $0\n    pushq $23
+    pushq $0
+    pushq $23
     jmp isr_common
 .size isr_stub_23, . - isr_stub_23
 
 .global isr_stub_24
 .type isr_stub_24, @function
 isr_stub_24:
-    pushq $0\n    pushq $24
+    pushq $0
+    pushq $24
     jmp isr_common
 .size isr_stub_24, . - isr_stub_24
 
 .global isr_stub_25
 .type isr_stub_25, @function
 isr_stub_25:
-    pushq $0\n    pushq $25
+    pushq $0
+    pushq $25
     jmp isr_common
 .size isr_stub_25, . - isr_stub_25
 
 .global isr_stub_26
 .type isr_stub_26, @function
 isr_stub_26:
-    pushq $0\n    pushq $26
+    pushq $0
+    pushq $26
     jmp isr_common
 .size isr_stub_26, . - isr_stub_26
 
 .global isr_stub_27
 .type isr_stub_27, @function
 isr_stub_27:
-    pushq $0\n    pushq $27
+    pushq $0
+    pushq $27
     jmp isr_common
 .size isr_stub_27, . - isr_stub_27
 
 .global isr_stub_28
 .type isr_stub_28, @function
 isr_stub_28:
-    pushq $0\n    pushq $28
+    pushq $0
+    pushq $28
     jmp isr_common
 .size isr_stub_28, . - isr_stub_28
 
@@ -223,119 +244,136 @@ isr_stub_30:
 .global isr_stub_31
 .type isr_stub_31, @function
 isr_stub_31:
-    pushq $0\n    pushq $31
+    pushq $0
+    pushq $31
     jmp isr_common
 .size isr_stub_31, . - isr_stub_31
 
 .global isr_stub_32
 .type isr_stub_32, @function
 isr_stub_32:
-    pushq $0\n    pushq $32
+    pushq $0
+    pushq $32
     jmp isr_common
 .size isr_stub_32, . - isr_stub_32
 
 .global isr_stub_33
 .type isr_stub_33, @function
 isr_stub_33:
-    pushq $0\n    pushq $33
+    pushq $0
+    pushq $33
     jmp isr_common
 .size isr_stub_33, . - isr_stub_33
 
 .global isr_stub_34
 .type isr_stub_34, @function
 isr_stub_34:
-    pushq $0\n    pushq $34
+    pushq $0
+    pushq $34
     jmp isr_common
 .size isr_stub_34, . - isr_stub_34
 
 .global isr_stub_35
 .type isr_stub_35, @function
 isr_stub_35:
-    pushq $0\n    pushq $35
+    pushq $0
+    pushq $35
     jmp isr_common
 .size isr_stub_35, . - isr_stub_35
 
 .global isr_stub_36
 .type isr_stub_36, @function
 isr_stub_36:
-    pushq $0\n    pushq $36
+    pushq $0
+    pushq $36
     jmp isr_common
 .size isr_stub_36, . - isr_stub_36
 
 .global isr_stub_37
 .type isr_stub_37, @function
 isr_stub_37:
-    pushq $0\n    pushq $37
+    pushq $0
+    pushq $37
     jmp isr_common
 .size isr_stub_37, . - isr_stub_37
 
 .global isr_stub_38
 .type isr_stub_38, @function
 isr_stub_38:
-    pushq $0\n    pushq $38
+    pushq $0
+    pushq $38
     jmp isr_common
 .size isr_stub_38, . - isr_stub_38
 
 .global isr_stub_39
 .type isr_stub_39, @function
 isr_stub_39:
-    pushq $0\n    pushq $39
+    pushq $0
+    pushq $39
     jmp isr_common
 .size isr_stub_39, . - isr_stub_39
 
 .global isr_stub_40
 .type isr_stub_40, @function
 isr_stub_40:
-    pushq $0\n    pushq $40
+    pushq $0
+    pushq $40
     jmp isr_common
 .size isr_stub_40, . - isr_stub_40
 
 .global isr_stub_41
 .type isr_stub_41, @function
 isr_stub_41:
-    pushq $0\n    pushq $41
+    pushq $0
+    pushq $41
     jmp isr_common
 .size isr_stub_41, . - isr_stub_41
 
 .global isr_stub_42
 .type isr_stub_42, @function
 isr_stub_42:
-    pushq $0\n    pushq $42
+    pushq $0
+    pushq $42
     jmp isr_common
 .size isr_stub_42, . - isr_stub_42
 
 .global isr_stub_43
 .type isr_stub_43, @function
 isr_stub_43:
-    pushq $0\n    pushq $43
+    pushq $0
+    pushq $43
     jmp isr_common
 .size isr_stub_43, . - isr_stub_43
 
 .global isr_stub_44
 .type isr_stub_44, @function
 isr_stub_44:
-    pushq $0\n    pushq $44
+    pushq $0
+    pushq $44
     jmp isr_common
 .size isr_stub_44, . - isr_stub_44
 
 .global isr_stub_45
 .type isr_stub_45, @function
 isr_stub_45:
-    pushq $0\n    pushq $45
+    pushq $0
+    pushq $45
     jmp isr_common
 .size isr_stub_45, . - isr_stub_45
 
 .global isr_stub_46
 .type isr_stub_46, @function
 isr_stub_46:
-    pushq $0\n    pushq $46
+    pushq $0
+    pushq $46
     jmp isr_common
 .size isr_stub_46, . - isr_stub_46
 
 .global isr_stub_47
 .type isr_stub_47, @function
 isr_stub_47:
-    pushq $0\n    pushq $47
+    pushq $0
+    pushq $47
     jmp isr_common
 .size isr_stub_47, . - isr_stub_47
 
@@ -365,8 +403,7 @@ isr_common:
     pushq %r14
     pushq %r15
 
-    /* R12 is callee-saved by the SysV ABI; its interrupted value is already
-     * present in the saved frame. Keep the frame pointer across the C call. */
+    /* Preserve the frame pointer across the SysV C call. */
     movq %rsp, %r12
     movq %rsp, %rdi
     andq $-16, %rsp
@@ -388,7 +425,7 @@ isr_common:
     popq %rcx
     popq %rbx
     popq %rax
-    addq $16, %rsp              /* vector + normalized error-code slot */
+    addq $16, %rsp
     iretq
 
 .section .rodata
