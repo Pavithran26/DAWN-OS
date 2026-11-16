@@ -11,6 +11,7 @@ LIMINE_BIOS_CD ?= $(LIMINE_DIR)/limine-bios-cd.bin
 LIMINE_UEFI_CD ?= $(LIMINE_DIR)/limine-uefi-cd.bin
 LIMINE_EFI ?= $(LIMINE_DIR)/BOOTX64.EFI
 OVMF_CODE ?= /usr/share/OVMF/OVMF_CODE.fd
+OVMF_VARS ?= /usr/share/OVMF/OVMF_VARS.fd
 ISO ?= build/dawn-os.iso
 KERNEL_ELF ?= build/dawn-kernel.elf
 
@@ -99,17 +100,21 @@ qemu-test: iso-test
 
 qemu-uefi-test: iso-test
 	@command -v $(QEMU) >/dev/null 2>&1 || { echo 'QEMU not found' >&2; exit 1; }
-	@test -f "$(OVMF_CODE)" || { echo 'OVMF UEFI firmware not found: $(OVMF_CODE)' >&2; exit 1; }
+	@test -f "$(OVMF_CODE)" || { echo 'OVMF UEFI code image not found: $(OVMF_CODE)' >&2; exit 1; }
+	@test -f "$(OVMF_VARS)" || { echo 'OVMF UEFI variables image not found: $(OVMF_VARS)' >&2; exit 1; }
 	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
-	@set +e; timeout 25s $(QEMU) -M q35 -m 256M -smp 1 -bios "$(OVMF_CODE)" \
+	cp "$(OVMF_VARS)" build/OVMF_VARS.fd
+	@set +e; timeout 25s $(QEMU) -M q35 -m 256M -smp 1 \
+		-drive if=pflash,format=raw,unit=0,file="$(OVMF_CODE)",readonly=on \
+		-drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \
 		-cdrom build/dawn-os-test.iso -boot order=d,menu=off -vga std \
 		-serial file:build/qemu-uefi-serial.log -display none -no-reboot -no-shutdown \
 		-d guest_errors,cpu_reset -D build/qemu-uefi-debug.log \
-		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$$?; \
+		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$?; \
 	cat build/qemu-uefi-serial.log; \
-	if [ $$status -eq 33 ]; then echo 'QEMU UEFI boot test: PASS'; exit 0; \
-	elif [ $$status -eq 35 ]; then echo 'QEMU UEFI boot test: FAIL (kernel self-test failed)'; exit 1; \
-	else echo "QEMU UEFI boot test: FAIL (exit status $$status)"; exit 1; fi
+	if [ $status -eq 33 ]; then echo 'QEMU UEFI boot test: PASS'; exit 0; \
+	elif [ $status -eq 35 ]; then echo 'QEMU UEFI boot test: FAIL (kernel self-test failed)'; exit 1; \
+	else echo "QEMU UEFI boot test: FAIL (exit status $status)"; exit 1; fi
 
 qemu-test-all: qemu-test qemu-uefi-test
 
