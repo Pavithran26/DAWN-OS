@@ -33,6 +33,8 @@
     LIMINE_COMMON_MAGIC, 0x9d5827dcd881dd75ULL, 0xa3148604f6fab11bULL
 #define LIMINE_MEMMAP_REQUEST_ID \
     LIMINE_COMMON_MAGIC, 0x67cf3d9d378a806fULL, 0xe304acdfc50c3c62ULL
+#define LIMINE_HHDM_REQUEST_ID \
+    LIMINE_COMMON_MAGIC, 0x48dcf1cb8ad2b852ULL, 0x63984e959a98244bULL
 
 #define LIMINE_MEMMAP_USABLE 0ULL
 #define LIMINE_MEMMAP_RESERVED 1ULL
@@ -76,11 +78,26 @@ struct limine_memmap_request {
     struct limine_memmap_response *response;
 };
 
+struct limine_hhdm_response {
+    uint64_t revision;
+    uint64_t offset;
+};
+
+struct limine_hhdm_request {
+    uint64_t id[4];
+    uint64_t revision;
+    struct limine_hhdm_response *response;
+};
+
 _Static_assert(sizeof(struct limine_memmap_entry) == 24U,
                "Limine memory map entry ABI size mismatch");
 _Static_assert(sizeof(struct limine_memmap_response) == 24U,
                "Limine memory map response ABI size mismatch");
 _Static_assert(sizeof(struct limine_memmap_request) == 48U,
                "Limine memory map request ABI size mismatch");
+_Static_assert(sizeof(struct limine_hhdm_response) == 16U,
+               "Limine HHDM response ABI size mismatch");
+_Static_assert(sizeof(struct limine_hhdm_request) == 48U,
+               "Limine HHDM request ABI size mismatch");
 
 #endif

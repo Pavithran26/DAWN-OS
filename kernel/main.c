@@ -62,6 +62,13 @@ volatile struct limine_memmap_request limine_memmap_request = {
     .response = NULL
 };
 
+__attribute__((used, aligned(8), section(".limine_requests")))
+volatile struct limine_hhdm_request limine_hhdm_request = {
+    .id = { LIMINE_HHDM_REQUEST_ID },
+    .revision = 0,
+    .response = NULL
+};
+
 __attribute__((used, aligned(8), section(".limine_requests_end")))
 volatile uint64_t limine_requests_end[] = {
     LIMINE_REQUESTS_END_MARKER
@@ -144,6 +151,32 @@ static bool add_u64_checked(uint64_t left, uint64_t right, uint64_t *result) {
 
 static bool protocol_revision_supported(void) {
     return LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision);
+}
+
+static bool hhdm_response_valid(const struct limine_hhdm_response *response,
+                                uint64_t highest_usable_end) {
+    uint64_t last_virtual = 0ULL;
+    if (response == NULL || (response->offset % MEMORY_PAGE_SIZE) != 0ULL) {
+        return false;
+    }
+    /* Never assume a fixed HHDM offset; Limine selects it at boot. */
+    return add_u64_checked(response->offset, highest_usable_end, &last_virtual);
+}
+
+static uint64_t memory_map_highest_usable_end(
+    const struct limine_memmap_response *response) {
+    uint64_t highest = 0ULL;
+    if (response == NULL || response->entries == NULL ||
+        response->entry_count > MEMORY_MAP_MAX_ENTRIES) return 0ULL;
+    for (uint64_t i = 0ULL; i < response->entry_count; ++i) {
+        const struct limine_memmap_entry *entry = response->entries[i];
+        if (entry != NULL && entry->type == LIMINE_MEMMAP_USABLE &&
+            entry->length <= UINT64_MAX - entry->base &&
+            entry->base + entry->length > highest) {
+            highest = entry->base + entry->length;
+        }
+    }
+    return highest;
 }
 
 static bool framebuffer_response_valid(void) {
@@ -526,6 +559,16 @@ void kernel_main(void) {
     serial_write("DAWN-OS: Limine memory map validated\n");
     serial_write_memory_map_summary(&memory_summary);
 
+    if (!hhdm_response_valid(limine_hhdm_request.response,
+                             memory_map_highest_usable_end(limine_memmap_request.response))) {
+        serial_write("DAWN-OS: FAIL: Limine HHDM response missing or invalid\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: HHDM response validated; dynamic offset accepted\n");
+
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
     } else {
@@ -539,11 +582,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, memory map and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, memory map, HHDM and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B memory-map inspection complete; no allocator enabled\n");
+    serial_write("DAWN-OS: Phase B memory-map and HHDM inspection complete; allocator not enabled yet\n");
     cpu_halt_forever();
 }

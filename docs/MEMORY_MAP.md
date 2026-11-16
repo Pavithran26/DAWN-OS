@@ -64,6 +64,10 @@ The `DAWN_KERNEL_TEST` build exercises:
 
 After these synthetic cases pass, the kernel validates the actual Limine map, requires at least one usable region, and reports the summary. The existing GitHub Actions job then boots the ISO under QEMU BIOS and UEFI.
 
+## HHDM validation
+
+The kernel now requests Limine's Higher Half Direct Map response. It requires a response, checks page alignment of the returned offset, and checks that adding the highest usable physical end does not overflow a 64-bit address. The offset is discovered at runtime and is never hard-coded. This is validation only: no arbitrary physical address is dereferenced through the HHDM yet.
+
 ## Not yet implemented
 
 This code does not:
