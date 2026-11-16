@@ -12,6 +12,7 @@ The repository contains the first Phase A kernel scaffold:
 - A deterministic kernel self-test mode that reports PASS/FAIL over serial and uses QEMU's `isa-debug-exit` device when available.
 - An ELF layout with separate executable, read-only, and writable load segments.
 - A GitHub Actions boot-validation workflow for ISO creation and QEMU BIOS/UEFI attempts.
+- An optional graphical administration shell is planned; terminal, file explorer, partition manager, task manager, and the green liquid-neomorphism interface are **not implemented yet**. See [the graphical shell plan](docs/GUI_SHELL_PLAN.md).
 
 This is **not a complete operating system**. Physical/virtual memory management, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
 
