@@ -7,6 +7,8 @@
 #include "physical_memory.h"
 #include "page_table.h"
 #include "interrupts.h"
+#include "acpi.h"
+#include "apic.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -68,6 +70,13 @@ volatile struct limine_memmap_request limine_memmap_request = {
 __attribute__((used, aligned(8), section(".limine_requests")))
 volatile struct limine_hhdm_request limine_hhdm_request = {
     .id = { LIMINE_HHDM_REQUEST_ID },
+    .revision = 0,
+    .response = NULL
+};
+
+__attribute__((used, aligned(8), section(".limine_requests")))
+volatile struct limine_rsdp_request limine_rsdp_request = {
+    .id = { LIMINE_RSDP_REQUEST_ID },
     .revision = 0,
     .response = NULL
 };
@@ -654,6 +663,55 @@ void kernel_main(void) {
     serial_write("DAWN-TEST: PASS: breakpoint, PIC mask, IRQ-vector dispatch and PIT counter tests\n");
 #endif
 
+#ifdef DAWN_KERNEL_TEST
+    if (!acpi_parser_self_test()) {
+        serial_write("DAWN-TEST: FAIL: ACPI MADT parser edge cases\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: ACPI MADT parser edge cases\n");
+#endif
+
+    struct acpi_platform_info acpi_platform = {0};
+    if (!acpi_discover_platform(limine_hhdm_request.response->offset,
+                                limine_rsdp_request.response,
+                                &acpi_platform)) {
+        serial_write("DAWN-OS: ACPI MADT unavailable or invalid; external IRQs remain disabled\n");
+#ifdef DAWN_KERNEL_TEST
+        serial_write("DAWN-TEST: FAIL: ACPI MADT discovery\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+#endif
+    } else {
+        serial_write("DAWN-OS: ACPI MADT: BSP APIC ID ");
+        serial_write_u64(acpi_platform.bsp_apic_id);
+        serial_write("\nDAWN-OS: ACPI MADT: IOAPIC GSI base ");
+        serial_write_u64(acpi_platform.io_apic_gsi_base);
+        serial_write("\nDAWN-OS: ACPI MADT: PIT IRQ0 override GSI ");
+        serial_write_u64(acpi_platform.pit_irq_gsi);
+        serial_write("\n");
+
+        if (!apic_initialize(&acpi_platform)) {
+            serial_write("DAWN-OS: APIC/IOAPIC initialization rejected; external IRQs remain disabled\n");
+#ifdef DAWN_KERNEL_TEST
+            serial_write("DAWN-TEST: FAIL: APIC/IOAPIC initialization\n");
+            qemu_debug_exit(QEMU_TEST_FAIL);
+            cpu_halt_forever();
+#endif
+        } else {
+            serial_write("DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked\n");
+#ifdef DAWN_KERNEL_TEST
+            if (!apic_route_pit_irq_test(acpi_platform.pit_irq_gsi,
+                                         acpi_platform.pit_irq_flags)) {
+                serial_write("DAWN-TEST: FAIL: real IOAPIC PIT IRQ delivery\n");
+                qemu_debug_exit(QEMU_TEST_FAIL);
+                cpu_halt_forever();
+            }
+            serial_write("DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery\n");
+#endif
+        }
+    }
+
 
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
@@ -668,11 +726,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, PIC, PIT and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B memory and single-CPU exception/interrupt/timer foundations initialized; scheduler and process address spaces are not implemented yet\n");
+    serial_write("DAWN-OS: Phase B memory, ACPI, xAPIC/IOAPIC and single-CPU interrupt foundations initialized; scheduler and process address spaces are not implemented yet\n");
     cpu_halt_forever();
 }

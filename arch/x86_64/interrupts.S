@@ -377,6 +377,14 @@ isr_stub_47:
     jmp isr_common
 .size isr_stub_47, . - isr_stub_47
 
+.global isr_stub_64
+.type isr_stub_64, @function
+isr_stub_64:
+    pushq $0
+    pushq $64
+    jmp isr_common
+.size isr_stub_64, . - isr_stub_64
+
 .global isr_default_stub
 .type isr_default_stub, @function
 isr_default_stub:

@@ -27,7 +27,7 @@ Missing intermediate tables are allocated, zeroed before publication, and connec
 
 - Four-level paging only; five-level paging is not supported by this increment.
 - Physical allocator tracking is currently limited to frames below 4 GiB.
-- Only allocator-owned RAM frames may be passed to `vm_map_page`. Device/MMIO mappings require a separate cache-aware API.
+- `vm_map_page` accepts only allocator-owned RAM frames. `vm_map_mmio_page` is a separate API for one-page device mappings; it chooses an unused high-half VA and sets PWT+PCD, which selects Limine's specified PAT[3]=UC mapping.
 - Large-page splitting/promotion are not implemented. Mapping through an existing large-page entry is rejected.
 - Empty intermediate tables are retained after unmap. No ownership-aware table reclamation is attempted yet.
 - No process address spaces, user-mode transition, copy-on-write, fault recovery, per-CPU TLB shootdowns, or SMP support.
@@ -35,6 +35,6 @@ Missing intermediate tables are allocated, zeroed before publication, and connec
 
 ## QEMU self-tests
 
-The self-test searches for actually unmapped lower-half pages, accommodating differences in the BIOS and UEFI firmware page-table layouts, so it does not overwrite existing Limine mappings. It allocates a physical frame, maps it writable/NX, checks translation and effective permissions, rejects duplicate and malformed mappings, unmaps it, verifies that translation is absent, and frees the data frame. It then checks a read-only executable mapping and tears it down. Intermediate tables are intentionally retained.
+The self-test searches for actually unmapped lower-half pages, accommodating differences in the BIOS and UEFI firmware page-table layouts, so it does not overwrite existing Limine mappings. It allocates a physical frame, maps it writable/NX, checks translation and effective permissions, rejects duplicate and malformed mappings, unmaps it, verifies that translation is absent, and frees the data frame. It then checks a read-only executable mapping and tears it down. The self-test also verifies that an uncached MMIO page can be mapped, translated and unmapped without entering the RAM allocator. Intermediate tables are intentionally retained.
 
 BIOS and UEFI logs must contain `DAWN-TEST: PASS: virtual-memory map/translate/unmap tests`. These tests do not prove user/supervisor isolation or a privilege transition.

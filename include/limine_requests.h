@@ -39,6 +39,8 @@
     LIMINE_COMMON_MAGIC, 0x95c1a0edab0944cbULL, 0xa4e5cb3842f7488aULL
 #define LIMINE_PAGING_MODE_X86_64_4LVL 0ULL
 #define LIMINE_PAGING_MODE_X86_64_5LVL 1ULL
+#define LIMINE_RSDP_REQUEST_ID \
+    LIMINE_COMMON_MAGIC, 0xc5e77b6b397e7b43ULL, 0x27637845accdcf3cULL
 
 #define LIMINE_MEMMAP_USABLE 0ULL
 #define LIMINE_MEMMAP_RESERVED 1ULL
@@ -107,6 +109,17 @@ struct limine_paging_mode_request {
     uint64_t min_mode;
 };
 
+struct limine_rsdp_response {
+    uint64_t revision;
+    void *address;
+};
+
+struct limine_rsdp_request {
+    uint64_t id[4];
+    uint64_t revision;
+    struct limine_rsdp_response *response;
+};
+
 _Static_assert(sizeof(struct limine_memmap_entry) == 24U,
                "Limine memory map entry ABI size mismatch");
 _Static_assert(sizeof(struct limine_memmap_response) == 24U,
@@ -121,5 +134,9 @@ _Static_assert(sizeof(struct limine_paging_mode_response) == 16U,
                "Limine paging-mode response ABI size mismatch");
 _Static_assert(sizeof(struct limine_paging_mode_request) == 72U,
                "Limine paging-mode request ABI size mismatch");
+_Static_assert(sizeof(struct limine_rsdp_response) == 16U,
+               "Limine RSDP response ABI size mismatch");
+_Static_assert(sizeof(struct limine_rsdp_request) == 48U,
+               "Limine RSDP request ABI size mismatch");
 
 #endif

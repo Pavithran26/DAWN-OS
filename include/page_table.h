@@ -16,6 +16,7 @@ enum vm_page_flags {
 bool vm_manager_initialize(uint64_t hhdm_offset);
 bool vm_map_page(uint64_t virtual_address, uint64_t physical_address,
                  uint32_t flags);
+bool vm_map_mmio_page(uint64_t physical_address, uint64_t *virtual_address);
 bool vm_unmap_page(uint64_t virtual_address);
 bool vm_translate(uint64_t virtual_address, uint64_t *physical_address,
                   uint32_t *flags);

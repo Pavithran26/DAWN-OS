@@ -14,6 +14,8 @@
 #define ENTRY_PRESENT (1ULL << 0)
 #define ENTRY_WRITABLE (1ULL << 1)
 #define ENTRY_USER (1ULL << 2)
+#define ENTRY_WRITE_THROUGH (1ULL << 3)
+#define ENTRY_CACHE_DISABLE (1ULL << 4)
 #define ENTRY_LARGE (1ULL << 7)
 #define ENTRY_NO_EXECUTE (1ULL << 63)
 #define CR0_WRITE_PROTECT (1ULL << 16)
@@ -190,8 +192,9 @@ static bool get_child_table(volatile uint64_t *parent,uint64_t index,
     return true;
 }
 
-bool vm_map_page(uint64_t virtual_address,uint64_t physical_address,
-                 uint32_t flags) {
+static bool vm_map_page_internal(uint64_t virtual_address,
+                                   uint64_t physical_address,
+                                   uint32_t flags, bool mmio) {
     const uint32_t allowed=(uint32_t)VM_PAGE_WRITE|
                            (uint32_t)VM_PAGE_USER|
                            (uint32_t)VM_PAGE_EXECUTE;
@@ -205,11 +208,11 @@ bool vm_map_page(uint64_t virtual_address,uint64_t physical_address,
 
     if (!manager.initialized || !address_is_canonical(virtual_address) ||
         (virtual_address & PAGE_MASK)!=0ULL ||
-        (physical_address & PAGE_MASK)!=0ULL ||
+        (physical_address & PAGE_MASK)!=0ULL || physical_address==0ULL ||
         (physical_address & ~manager.physical_address_mask)!=0ULL ||
         (flags & ~allowed)!=0U ||
         (user && (virtual_address & CANONICAL_SIGN_BIT)!=0ULL) ||
-        !physical_allocator_is_allocated(physical_address)) return false;
+        (!mmio && !physical_allocator_is_allocated(physical_address))) return false;
 
     ix[0]=(virtual_address>>39)&0x1ffULL;
     ix[1]=(virtual_address>>30)&0x1ffULL;
@@ -233,11 +236,75 @@ bool vm_map_page(uint64_t virtual_address,uint64_t physical_address,
     if (writable) leaf|=ENTRY_WRITABLE;
     if (user) leaf|=ENTRY_USER;
     if (!executable) leaf|=ENTRY_NO_EXECUTE;
+    if (mmio) {
+        /* PAT index 3 is UC under the Limine x86-64 handoff PAT layout. */
+        leaf|=ENTRY_WRITE_THROUGH|ENTRY_CACHE_DISABLE;
+    }
     table[ix[3]]=leaf;
     __asm__ volatile ("mfence" : : : "memory");
     invalidate_page(virtual_address);
     return true;
 }
+
+bool vm_map_page(uint64_t virtual_address,uint64_t physical_address,
+                 uint32_t flags) {
+    return vm_map_page_internal(virtual_address,physical_address,flags,false);
+}
+
+bool vm_map_mmio_page(uint64_t physical_address,uint64_t *virtual_address) {
+    static uint64_t candidate_cursor=(1ULL<<17);
+    const uint64_t pages_per_gib=1ULL<<18;
+    const uint64_t search_limit=pages_per_gib*255ULL;
+    uint64_t translated=0ULL;
+    uint64_t hhdm_alias=0ULL;
+
+    if (!manager.initialized || virtual_address==NULL ||
+        (physical_address & PAGE_MASK)!=0ULL || physical_address==0ULL ||
+        (physical_address & ~manager.physical_address_mask)!=0ULL ||
+        physical_address>UINT64_MAX-manager.hhdm_offset) {
+        return false;
+    }
+
+    /*
+     * Limine's HHDM is WB. Refuse a second UC alias if this physical page is
+     * already mapped there; x86 memory types must not conflict across aliases.
+     */
+    hhdm_alias=manager.hhdm_offset+physical_address;
+    if (address_is_canonical(hhdm_alias) &&
+        vm_translate(hhdm_alias,&translated,NULL) &&
+        translated==physical_address) {
+        return false;
+    }
+
+    /*
+     * Search a high-half region without assuming a fixed HHDM base or
+     * replacing any existing Limine mapping. Successful MMIO maps consume
+     * monotonically increasing virtual pages from this search window.
+     */
+    for (uint64_t attempt=0ULL;attempt<search_limit;attempt++) {
+        const uint64_t slot=(candidate_cursor+attempt)%search_limit;
+        const uint64_t pml4=256ULL+(slot/pages_per_gib);
+        const uint64_t within_gib=slot%pages_per_gib;
+        const uint64_t pdpt=within_gib/512ULL;
+        const uint64_t page=within_gib%512ULL;
+        const uint64_t candidate=0xffff000000000000ULL|(pml4<<39)|
+                                 (pdpt<<30)|(page<<12);
+
+        if (pml4>=511ULL || !address_is_canonical(candidate) ||
+            vm_translate(candidate,&translated,NULL)) {
+            continue;
+        }
+        if (!vm_map_page_internal(candidate,physical_address,
+                                  (uint32_t)VM_PAGE_WRITE,true)) {
+            continue;
+        }
+        candidate_cursor=(slot+1ULL)%search_limit;
+        *virtual_address=candidate;
+        return true;
+    }
+    return false;
+}
+
 bool vm_unmap_page(uint64_t virtual_address) {
     uint64_t ix[4]={0ULL,0ULL,0ULL,0ULL}, entry=0ULL;
     volatile uint64_t *table=NULL;
@@ -345,6 +412,7 @@ static bool find_and_map_test_page(uint64_t physical_address,uint32_t flags,
 
 bool vm_manager_self_test(void) {
     uint64_t va=0ULL,code_va=0ULL,data=0ULL,code=0ULL,translated=UINT64_MAX;
+    uint64_t mmio_va=0ULL;
     uint32_t flags=0U;
     if (!manager.initialized || !physical_allocator_allocate(&data)) {
         return false;
@@ -376,6 +444,14 @@ bool vm_manager_self_test(void) {
         !physical_allocator_free(code)) {
         (void)vm_unmap_page(code_va);
         (void)physical_allocator_free(code);
+        return false;
+    }
+    if (!vm_map_mmio_page(0xfee00000ULL,&mmio_va) ||
+        !vm_translate(mmio_va,&translated,&flags) ||
+        translated!=0xfee00000ULL ||
+        (flags&(uint32_t)VM_PAGE_NO_EXECUTE)==0U ||
+        !vm_unmap_page(mmio_va)) {
+        (void)vm_unmap_page(mmio_va);
         return false;
     }
     return true;

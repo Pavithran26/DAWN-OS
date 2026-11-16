@@ -14,17 +14,17 @@ Vectors 0–31 have dedicated stubs. Vectors with architectural error-code pushe
 
 - 256 16-byte IDT gate entries, aligned to 16 bytes.
 - Vectors 0–31 map to CPU exception stubs.
-- Vectors 32–47 map to legacy PIC IRQ stubs.
-- Vectors 48–254 route to a fatal default stub; vector 255 uses the Local APIC spurious handler.
+- Vectors 32–47 map to legacy PIC IRQ stubs; vector 0x40 is reserved for the tested IOAPIC-routed PIT interrupt.
+- Vectors 48–63 and 65–254 route to a fatal default stub; vector 0x40 handles the IOAPIC PIT source, and vector 255 uses the Local APIC spurious handler.
 - Gate selector is the active kernel CS, DPL 0, interrupt-gate type, IST 0.
 - Interrupts remain disabled during initialization.
 
 ## Interrupt controller and timer
 
-This increment remaps the dual 8259 PIC to vectors 32–47 and leaves all 16 IRQ lines masked. EOI is sent to the slave PIC first for slave IRQs, then to the master. The 8254 PIT channel 0 is programmed in mode 3 and its latched hardware counter is polled to verify that it advances. The IRQ0 IDT path is separately exercised with a controlled software INT 0x20, which verifies the stub, dispatch and PIC EOI command path but does not emulate a physical IRQ arrival. No hardware IRQ line is unmasked and IF remains clear.
+This increment remaps the dual 8259 PIC to vectors 32–47 and leaves all 16 IRQ lines masked. EOI is sent to the slave PIC first for slave IRQs, then to the master. The 8254 PIT channel 0 is programmed in mode 3 and its latched hardware counter is polled to verify that it advances. The IRQ0 legacy IDT path is separately exercised with a controlled software INT 0x20. This validates the stub and PIC EOI dispatch but does not emulate a physical IRQ arrival; all legacy PIC lines remain masked.
 
-This is intentionally a legacy PIC/PIT bootstrap foundation, not yet a validated hardware interrupt-routing implementation. Limine hands off with the Local APIC enabled and its LINT routes masked; Local APIC/IOAPIC routing, ACPI MADT parsing, HPET, APIC timer, interrupt affinity, SMP, and device-driver IRQ registration are later work. No external IRQ is enabled in either the normal or test kernel path yet.
+Limine base revision 5+ provides a well-defined enabled xAPIC and masks fixed/lowest-priority I/O APIC redirection entries. The kernel now discovers RSDP/XSDT or RSDT and parses the MADT, maps the LAPIC/IOAPIC pages uncached, verifies the BSP APIC ID against MADT and IA32_APIC_BASE, masks fixed/lowest-priority IOAPIC entries (Limine already masks NMI/ExtINT entries), and routes only the MADT-resolved ISA PIT IRQ0 GSI to vector 0x40 during the bounded test. The legacy PIC remains fully masked. The test verifies a real PIT-triggered IOAPIC interrupt under QEMU BIOS and UEFI.
 
 ## Tests
 
-The QEMU self-test executes INT3 through the real IDT and verifies the saved CS/SS/RSP frame. It also injects vector 0xFF and checks the dedicated spurious handler path, which deliberately does not send an EOI. It then programs the PIT, unmasks only IRQ0, briefly enables interrupts with a bounded wait, verifies the timer tick counter advanced, disables interrupts, and masks IRQ0 again. BIOS and UEFI runs must pass this test.
+The QEMU self-test executes INT3 through the real IDT, checks the APIC spurious vector, and validates the MADT parser using synthetic well-formed and checksum-corrupted tables. After discovering the real MADT, it programs PIT channel 0, unmasks only the IOAPIC GSI corresponding to ISA IRQ0, briefly enables interrupts with a bounded wait, verifies an actual vector-0x40 interrupt arrived, clears IF, and masks the route again. The legacy PIC stays masked throughout. BIOS and UEFI runs must pass this test.
