@@ -1,0 +1,123 @@
+name: Phase A boot validation
+
+on:
+  push:
+    branches:
+      - main
+      - "bootstrap/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-a-boot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qemu-boot:
+    name: Build ISO and boot with QEMU (BIOS + UEFI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build, ISO, and VM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc binutils make xorriso \
+            qemu-system-x86 ovmf curl xz-utils
+
+      - name: Download and verify pinned Limine v12.10.0 binary package
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            --output /tmp/limine-binary.tar.xz \
+            https://github.com/Limine-Bootloader/Limine/releases/download/v12.10.0/limine-binary.tar.xz
+          echo "6329b586534697ea10b1bf65e6a1b2cf06500cc7ff8837ddb7bf277d4d4d416f  /tmp/limine-binary.tar.xz" | sha256sum --check
+          mkdir -p /tmp/limine-dist limine-binary
+          tar -xJf /tmp/limine-binary.tar.xz -C /tmp/limine-dist
+
+          # The binary package carries the host installer as source.
+          limine_makefile="$(find /tmp/limine-dist -type f -name Makefile -print -quit)"
+          if [[ -z "$limine_makefile" ]]; then
+            echo "Limine host-tool Makefile not found in binary package" >&2
+            find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+            exit 1
+          fi
+          make -C "$(dirname "$limine_makefile")"
+          installer="$(find /tmp/limine-dist -type f -name limine -perm /111 -print -quit)"
+          if [[ -z "$installer" ]]; then
+            echo "Could not build the Limine host installer" >&2
+            find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+            exit 1
+          fi
+          install -m 0755 "$installer" limine-binary/limine
+
+          copy_limine_file() {
+            local name="$1"
+            local source
+            source="$(find /tmp/limine-dist -type f -name "$name" -print -quit)"
+            if [[ -z "$source" ]]; then
+              echo "Required Limine file not found in v12.10.0 package: $name" >&2
+              find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+              exit 1
+            fi
+            install -m 0644 "$source" "limine-binary/$name"
+          }
+
+          copy_limine_file limine-bios.sys
+          copy_limine_file limine-bios-cd.bin
+          copy_limine_file limine-uefi-cd.bin
+          copy_limine_file BOOTX64.EFI
+
+      - name: Build normal and self-test kernels
+        run: |
+          make clean kernel check
+          make kernel-test
+
+      - name: Create hybrid BIOS/UEFI self-test ISO
+        run: make iso-test LIMINE_DIR=limine-binary
+
+      - name: Boot test under legacy BIOS
+        run: make qemu-test LIMINE_DIR=limine-binary
+
+      - name: Boot test under UEFI firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          ovmf_code=""
+          ovmf_vars=""
+          if [[ -f /usr/share/OVMF/OVMF_CODE_4M.fd && -f /usr/share/OVMF/OVMF_VARS_4M.fd ]]; then
+            ovmf_code=/usr/share/OVMF/OVMF_CODE_4M.fd
+            ovmf_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
+          elif [[ -f /usr/share/OVMF/OVMF_CODE.fd && -f /usr/share/OVMF/OVMF_VARS.fd ]]; then
+            ovmf_code=/usr/share/OVMF/OVMF_CODE.fd
+            ovmf_vars=/usr/share/OVMF/OVMF_VARS.fd
+          else
+            echo "A matching OVMF_CODE and OVMF_VARS firmware pair was not installed" >&2
+            find /usr/share/OVMF -maxdepth 1 -type f -print >&2 || true
+            exit 1
+          fi
+          make qemu-uefi-test LIMINE_DIR=limine-binary OVMF_CODE="$ovmf_code" OVMF_VARS="$ovmf_vars"
+
+      - name: Upload ISO and serial logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dawn-os-phase-a-boot-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build/dawn-os-test.iso
+            build/qemu-bios-serial.log
+            build/qemu-bios-debug.log
+            build/qemu-uefi-serial.log
+            build/qemu-uefi-debug.log
