@@ -4,7 +4,7 @@
 
 This is the initial single-CPU interrupt foundation. Limine base revision 6 enters x86_64 with IF clear, an undefined IDT, a bootloader-provided GDT, and legacy PIC IRQs masked. The IDT is installed before any interrupt is enabled. The current GDT code selector is read from CS and used in the IDT gates; the kernel does not replace or reclaim Limine's GDT.
 
-The 64-bit IDT uses 16-byte interrupt gates. The assembly stubs normalize the stack to a vector and error-code pair, save all general-purpose registers, clear DF before calling C, preserve the interrupted frame, and return with IRETQ. The C interrupt frame includes the registers saved by the stubs, followed by the CPU-pushed RIP, CS and RFLAGS. For a same-privilege interrupt, the CPU does not push RSP/SS; those two fields are present only when the interrupt changes privilege level. The dispatcher therefore never reads them from a same-privilege frame.
+The 64-bit IDT uses 16-byte interrupt gates. The assembly stubs normalize the stack to a vector and error-code pair, save all general-purpose registers, clear DF before calling C, and return with IRETQ. The dispatcher returns the frame to restore; this may be the same frame or a different thread's saved frame. The C interrupt frame includes the registers saved by the stubs, followed by the CPU-pushed RIP, CS and RFLAGS. For a same-privilege interrupt, the CPU does not push RSP/SS; those two fields are present only when the interrupt changes privilege level. The dispatcher therefore never reads them from a same-privilege frame.
 
 ## Exceptions
 
@@ -15,8 +15,8 @@ Vectors 0–31 have dedicated stubs. Vectors with architectural error-code pushe
 - 256 16-byte IDT gate entries, aligned to 16 bytes.
 - Vectors 0–31 map to CPU exception stubs.
 - Vectors 32–47 map to legacy PIC IRQ stubs; vector 0x40 is reserved for the tested IOAPIC-routed PIT interrupt.
-- Vector 0x41 maps to the Local APIC timer stub; vector 0xFF maps to the APIC spurious stub.
-- Vectors 48–63 and 66–254 route to a fatal default stub; vector 0x40 handles the IOAPIC PIT source, vector 0x41 handles the Local APIC timer, and vector 255 uses the Local APIC spurious handler.
+- Vector 0x41 maps to the Local APIC timer stub; vector 0x42 is a kernel-only software reschedule vector; vector 0xFF maps to the APIC spurious stub.
+- Vectors 48–63 and 67–254 route to a fatal default stub; vector 0x40 handles the IOAPIC PIT source, vector 0x41 handles the Local APIC timer, vector 0x42 performs a software reschedule without APIC EOI, and vector 255 uses the Local APIC spurious handler.
 - Gate selector is the active kernel CS, DPL 0, interrupt-gate type, IST 0.
 - Interrupts remain disabled during initialization.
 

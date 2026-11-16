@@ -393,6 +393,14 @@ isr_stub_65:
     jmp isr_common
 .size isr_stub_65, . - isr_stub_65
 
+.global isr_stub_66
+.type isr_stub_66, @function
+isr_stub_66:
+    pushq $0
+    pushq $66
+    jmp isr_common
+.size isr_stub_66, . - isr_stub_66
+
 .global isr_default_stub
 .type isr_default_stub, @function
 isr_default_stub:
@@ -432,7 +440,9 @@ isr_common:
     movq %rsp, %rdi
     andq $-16, %rsp
     call interrupt_dispatch
-    movq %r12, %rsp
+    testq %rax, %rax
+    cmovzq %r12, %rax
+    movq %rax, %rsp
 
     popq %r15
     popq %r14

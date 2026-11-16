@@ -23,7 +23,7 @@ CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
 ASFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 --build-id=none
 
-KERNEL_OBJECTS = build/boot.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/context-switch.o
+KERNEL_OBJECTS = build/boot.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all
 
@@ -49,7 +49,7 @@ build/acpi.o: kernel/acpi.c include/acpi.h include/limine_requests.h | build
 build/apic.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/scheduler.o: kernel/scheduler.c include/scheduler.h | build
+build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/context-switch.o: arch/x86_64/context_switch.S | build
@@ -58,7 +58,7 @@ build/context-switch.o: arch/x86_64/context_switch.S | build
 build/page_table.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/interrupts.o: kernel/interrupts.c include/interrupts.h include/apic.h | build
+build/interrupts.o: kernel/interrupts.c include/interrupts.h include/apic.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/interrupt-stubs.o: arch/x86_64/interrupts.S | build
@@ -78,7 +78,7 @@ build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h
 build/page-table-test.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/interrupts-test.o: kernel/interrupts.c include/interrupts.h include/apic.h | build
+build/interrupts-test.o: kernel/interrupts.c include/interrupts.h include/apic.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/acpi-test.o: kernel/acpi.c include/acpi.h include/limine_requests.h | build
@@ -87,10 +87,10 @@ build/acpi-test.o: kernel/acpi.c include/acpi.h include/limine_requests.h | buil
 build/apic-test.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/scheduler-test.o: kernel/scheduler.c include/scheduler.h | build
+build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/context-switch.o linker.ld
+build/dawn-kernel-test.elf: build/boot.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o linker.ld
 	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/context-switch.o
 
 check: kernel

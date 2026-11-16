@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "interrupts.h"
 #include "apic.h"
+#include "scheduler.h"
 
 #define IDT_ENTRIES 256U
 #define IDT_EXCEPTION_COUNT 32U
@@ -41,16 +42,6 @@ struct idtr {
     uint64_t base;
 } __attribute__((packed));
 
-struct interrupt_frame {
-    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-    uint64_t rsi, rdi, rbp, rdx, rcx, rbx, rax;
-    uint64_t vector;
-    uint64_t error_code;
-    uint64_t rip;
-    uint64_t cs;
-    uint64_t rflags;
-};
-
 _Static_assert(sizeof(struct idt_entry) == 16U, "x86_64 IDT gate must be 16 bytes");
 _Static_assert(sizeof(struct idtr) == 10U, "x86_64 IDTR must be 10 bytes");
 _Static_assert(offsetof(struct interrupt_frame, vector) == 120U,
@@ -62,6 +53,7 @@ extern void isr_default_stub(void);
 extern void isr_spurious_stub(void);
 extern void isr_stub_64(void);
 extern void isr_stub_65(void);
+extern void isr_stub_66(void);
 extern void (*isr_stub_table[48])(void);
 
 static struct idt_entry idt[IDT_ENTRIES] __attribute__((aligned(16)));
@@ -182,7 +174,7 @@ static uint16_t pit_read_counter(void) {
 }
 #endif
 
-static void interrupt_fatal(const struct interrupt_frame *frame) {
+static _Noreturn void interrupt_fatal(const struct interrupt_frame *frame) {
     cpu_cli();
     serial_write("\nDAWN-OS: FATAL: unhandled exception/interrupt vector=");
     serial_write_hex(frame->vector);
@@ -205,7 +197,7 @@ static void interrupt_fatal(const struct interrupt_frame *frame) {
     }
 }
 
-void interrupt_dispatch(struct interrupt_frame *frame) {
+struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame) {
     if (frame==NULL) {
         cpu_cli();
 #ifdef DAWN_KERNEL_TEST
@@ -217,21 +209,24 @@ void interrupt_dispatch(struct interrupt_frame *frame) {
     if (frame->vector==255ULL) {
         /* APIC spurious interrupts are not in the in-service register: no EOI. */
         ++spurious_interrupt_count;
-        return;
+        return frame;
     }
     if (frame->vector==(uint64_t)APIC_IO_IRQ_VECTOR) {
         apic_handle_ioapic_interrupt();
-        return;
+        return frame;
     }
     if (frame->vector==(uint64_t)APIC_LOCAL_TIMER_VECTOR) {
         apic_handle_local_timer_interrupt();
-        return;
+        return scheduler_handle_interrupt(frame,true);
+    }
+    if (frame->vector==(uint64_t)SCHEDULER_RESCHEDULE_VECTOR) {
+        return scheduler_handle_interrupt(frame,false);
     }
     if (frame->vector==3ULL && breakpoint_expected &&
         frame->cs==(uint64_t)kernel_cs &&
         (frame->rflags & 0x2ULL)!=0ULL) {
         ++breakpoint_count;
-        return;
+        return frame;
     }
 
     if (frame->vector<IDT_EXCEPTION_COUNT) {
@@ -242,7 +237,7 @@ void interrupt_dispatch(struct interrupt_frame *frame) {
         const uint8_t irq=(uint8_t)(frame->vector-INTERRUPT_VECTOR_TIMER);
         if (irq==0U) ++timer_ticks;
         pic_send_eoi(irq);
-        return;
+        return frame;
     }
     interrupt_fatal(frame);
 }
@@ -264,6 +259,7 @@ bool interrupts_initialize(void) {
     idt_set_gate(255U,isr_spurious_stub);
     idt_set_gate((uint8_t)APIC_IO_IRQ_VECTOR,isr_stub_64);
     idt_set_gate((uint8_t)APIC_LOCAL_TIMER_VECTOR,isr_stub_65);
+    idt_set_gate((uint8_t)SCHEDULER_RESCHEDULE_VECTOR,isr_stub_66);
 
     descriptor.limit=(uint16_t)(sizeof(idt)-1U);
     descriptor.base=(uint64_t)(uintptr_t)&idt[0];

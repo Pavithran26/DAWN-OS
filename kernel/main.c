@@ -726,7 +726,7 @@ void kernel_main(void) {
 #endif
         cpu_halt_forever();
     }
-    serial_write("DAWN-OS: cooperative kernel-thread scheduler initialized\n");
+    serial_write("DAWN-OS: single-CPU kernel-thread scheduler initialized\n");
 
 #ifdef DAWN_KERNEL_TEST
     if (!scheduler_self_test()) {
@@ -734,7 +734,16 @@ void kernel_main(void) {
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
-    serial_write("DAWN-TEST: PASS: kernel thread creation, context switching, round-robin yield, exit and stack guards\n");
+    serial_write("DAWN-TEST: PASS: kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards\n");
+    if (!apic_local_timer_start_periodic(10000U) ||
+        !scheduler_preemption_self_test()) {
+        apic_local_timer_stop();
+        serial_write("DAWN-TEST: FAIL: timer-driven kernel-thread preemption\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    apic_local_timer_stop();
+    serial_write("DAWN-TEST: PASS: timer-driven kernel-thread preemption\n");
 #endif
 
     if (framebuffer_response_valid()) {
@@ -750,11 +759,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, cooperative scheduler and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B memory, ACPI, xAPIC/IOAPIC, cooperative kernel threads and single-CPU scheduler initialized; preemptive scheduling and process address spaces are not implemented yet\n");
+    serial_write("DAWN-OS: Phase B memory, ACPI, xAPIC/IOAPIC, local timer and single-CPU preemptive kernel scheduler initialized; process address spaces belong to Phase C\n");
     cpu_halt_forever();
 }

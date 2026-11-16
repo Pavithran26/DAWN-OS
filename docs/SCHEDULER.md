@@ -2,7 +2,7 @@
 
 ## Status
 
-The first scheduler increment is cooperative. It does not preempt running code from the timer interrupt. The PIT/IOAPIC hardware IRQ path and the Local APIC one-shot timer vector have dedicated delivery tests. The Local APIC timer exposes one-shot and periodic controls, but its frequency is not calibrated yet. Switching an arbitrary interrupt frame is a later, separately tested change.
+The scheduler uses saved x86-64 interrupt frames for context switches. Voluntary yields use software vector 0x42; Local APIC timer vector 0x41 can preempt a running worker when the periodic timer is armed. The timer count is a raw hardware count with divide-by-16; no calibrated wall-clock frequency is claimed.
 
 ## Thread model
 
@@ -16,13 +16,13 @@ The first scheduler increment is cooperative. It does not preempt running code f
 
 ## Context switching
 
-The x86_64 assembly routine saves/restores the SysV callee-saved registers (RBX, RBP, R12–R15) and RSP. New stacks are built so the first return enters an assembly trampoline with a 16-byte aligned stack; the trampoline calls the C bootstrap using the SysV ABI. When a thread entry returns, it is marked DEAD and never scheduled again.
+Every worker is initialized with a synthetic same-privilege interrupt frame at the top of its guarded 16 KiB stack. The common ISR epilogue restores general-purpose registers and uses IRETQ to enter the C bootstrap with SysV function-entry alignment. A real interrupt saves the current worker's frame; the dispatcher may return a different worker's saved frame, and the assembly epilogue restores that frame before IRETQ. When a thread entry returns, it is marked DEAD and never scheduled again.
 
-The scheduler disables interrupts while changing thread state and selecting the next context. Cooperative yields restore the caller's original IF state when that context resumes. A newly created worker starts with interrupts disabled. Kernel thread entries must call yield; a thread that never yields monopolizes the CPU.
+The scheduler disables interrupts while changing thread state. Voluntary yields restore the caller's original IF state when that context resumes. New worker frames start with IF set so the periodic Local APIC timer can preempt them. When the timer is not armed, a worker that never yields can still monopolize the CPU.
 
 ## Scheduling
 
-- Round-robin among READY worker threads.
+- Round-robin among READY worker threads on voluntary reschedule or Local APIC timer interrupts.
 - scheduler_run_until_idle() runs READY workers from the bootstrap context and returns to bootstrap after all workers exit.
 - kernel_thread_yield() makes the current worker READY and switches to another READY worker when one exists.
 - kernel_thread_exit() marks the current worker DEAD and switches to another READY worker or the waiting bootstrap context.
@@ -30,13 +30,13 @@ The scheduler disables interrupts while changing thread state and selecting the 
 
 ## Validation
 
-The QEMU self-test creates two worker threads. Each increments an independent counter four times while voluntarily yielding. It checks both counters, unique thread IDs, exactly two thread exits, zero active workers, the yield/switch counters, and intact stack guards.
+The QEMU self-test creates two worker threads. Each increments an independent counter four times while voluntarily yielding. It checks both counters, unique thread IDs, exactly two thread exits, zero active workers, the yield/switch counters, and intact stack guards. A second test arms the periodic Local APIC timer and makes the first worker busy-wait without yielding; the second worker must run and release it before its bounded wait expires, proving timer-driven preemption.
 
 BIOS and UEFI QEMU tests must retain all earlier ACPI/MADT, xAPIC/IOAPIC real PIT IRQ, page-table and physical allocator tests.
 
 ## Not implemented
 
-Timer-frequency calibration, timer-driven preemption, interrupt-frame context switching, scheduler quantum/accounting, sleep/block/wakeup, priorities, idle halt loop, per-CPU state, SMP, locks, user threads and process scheduling.
+Timer-frequency calibration and wall-clock accounting, scheduler quantum policy, sleep/block/wakeup, priorities, a dedicated idle thread, per-CPU state, SMP, locks, user threads and process scheduling.
 
 
 ## Additional lifecycle validation

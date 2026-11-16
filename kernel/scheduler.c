@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "interrupts.h"
 #include "scheduler.h"
 
 #define KERNEL_THREAD_MAX 8U
@@ -9,11 +10,12 @@
 #define KERNEL_THREAD_GUARD_SIZE 64U
 #define KERNEL_THREAD_GUARD_BYTE 0xa5U
 #define CPU_RFLAGS_INTERRUPT_ENABLE (1ULL << 9)
+#define INITIAL_THREAD_RFLAGS 0x202ULL
 
 enum thread_state { THREAD_FREE=0, THREAD_READY, THREAD_RUNNING, THREAD_DEAD };
-struct thread_context { uint64_t rsp; };
+
 struct kernel_thread {
-    struct thread_context context;
+    struct interrupt_frame *saved_frame;
     kernel_thread_entry entry;
     void *argument;
     uint64_t id;
@@ -26,12 +28,10 @@ static struct kernel_thread bootstrap_thread;
 static struct kernel_thread *current_thread;
 static uint64_t ready_cursor;
 static uint64_t next_thread_id;
+static uint16_t kernel_code_selector;
 static bool initialized;
 static bool scheduler_running;
 static struct scheduler_stats counters;
-
-extern void arch_context_switch(uint64_t *old_rsp,const uint64_t *new_rsp);
-extern void kernel_thread_bootstrap_trampoline(void);
 
 static inline uint64_t read_rflags(void) {
     uint64_t flags=0ULL;
@@ -45,7 +45,12 @@ static inline void restore_interrupt_flag(uint64_t saved_flags) {
     if ((saved_flags & CPU_RFLAGS_INTERRUPT_ENABLE)!=0ULL)
         __asm__ volatile ("sti" : : : "memory");
 }
-static void cpu_halt_forever(void) {
+static uint16_t read_cs(void) {
+    uint16_t value=0U;
+    __asm__ volatile ("mov %%cs, %0" : "=r"(value));
+    return value;
+}
+static _Noreturn void cpu_halt_forever(void) {
     disable_interrupts();
     for (;;) __asm__ volatile ("hlt");
 }
@@ -62,20 +67,26 @@ static bool thread_guard_valid(const struct kernel_thread *thread) {
         if (thread->stack[i]!=KERNEL_THREAD_GUARD_BYTE) return false;
     return true;
 }
-static void thread_context_initialize(struct kernel_thread *thread) {
-    uintptr_t *stack_top=NULL;
+static _Noreturn void kernel_thread_bootstrap(void);
+static void thread_frame_initialize(struct kernel_thread *thread) {
+    uintptr_t stack_end=0U;
+    uintptr_t initial_rsp=0U;
+    struct interrupt_frame *frame=NULL;
     if (thread==NULL) return;
-    stack_top=(uintptr_t *)(void *)(thread->stack+KERNEL_THREAD_STACK_SIZE);
-    stack_top=(uintptr_t *)((uintptr_t)stack_top & ~(uintptr_t)0xfU);
-    /* Restore order: r15,r14,r13,r12,rbp,rbx, then RET to trampoline. */
-    *--stack_top=(uintptr_t)kernel_thread_bootstrap_trampoline;
-    *--stack_top=0ULL;
-    *--stack_top=0ULL;
-    *--stack_top=0ULL;
-    *--stack_top=0ULL;
-    *--stack_top=0ULL;
-    *--stack_top=0ULL;
-    thread->context.rsp=(uint64_t)(uintptr_t)stack_top;
+
+    stack_end=(uintptr_t)(thread->stack+KERNEL_THREAD_STACK_SIZE);
+    /* IRETQ consumes RIP/CS/RFLAGS only for same-CPL returns. Leave the
+     * post-IRET stack at SysV function-entry alignment (RSP % 16 == 8). */
+    initial_rsp=(stack_end&~(uintptr_t)0xfU)-8U;
+    frame=(struct interrupt_frame *)(uintptr_t)(initial_rsp-sizeof(*frame));
+    if ((uintptr_t)frame<(uintptr_t)thread->stack+KERNEL_THREAD_GUARD_SIZE)
+        cpu_halt_forever();
+
+    *frame=(struct interrupt_frame){0};
+    frame->rip=(uint64_t)(uintptr_t)kernel_thread_bootstrap;
+    frame->cs=(uint64_t)kernel_code_selector;
+    frame->rflags=INITIAL_THREAD_RFLAGS;
+    thread->saved_frame=frame;
 }
 static struct kernel_thread *find_ready_thread(
     const struct kernel_thread *exclude
@@ -90,17 +101,8 @@ static struct kernel_thread *find_ready_thread(
     }
     return NULL;
 }
-static void switch_to_thread(struct kernel_thread *next) {
-    struct kernel_thread *previous=current_thread;
-    if (previous==NULL || next==NULL || previous==next ||
-        (previous!=&bootstrap_thread && !thread_guard_valid(previous)) ||
-        (next!=&bootstrap_thread && !thread_guard_valid(next)))
-        cpu_halt_forever();
-    current_thread=next;
-    increment_saturated(&counters.context_switches);
-    arch_context_switch(&previous->context.rsp,&next->context.rsp);
-}
-void kernel_thread_bootstrap(void) {
+
+static _Noreturn void kernel_thread_bootstrap(void) {
     struct kernel_thread *thread=current_thread;
     if (thread==NULL || thread==&bootstrap_thread ||
         thread->entry==NULL || thread->state!=THREAD_RUNNING)
@@ -108,18 +110,24 @@ void kernel_thread_bootstrap(void) {
     thread->entry(thread->argument);
     kernel_thread_exit();
 }
+
 bool scheduler_initialize(void) {
     const uint64_t saved_flags=read_rflags();
     if (initialized) return false;
     disable_interrupts();
+    kernel_code_selector=read_cs();
+    if (kernel_code_selector==0U) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
     for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
-        thread_pool[i].context.rsp=0ULL;
+        thread_pool[i].saved_frame=NULL;
         thread_pool[i].entry=NULL;
         thread_pool[i].argument=NULL;
         thread_pool[i].id=0ULL;
         thread_pool[i].state=THREAD_FREE;
     }
-    bootstrap_thread.context.rsp=0ULL;
+    bootstrap_thread.saved_frame=NULL;
     bootstrap_thread.entry=NULL;
     bootstrap_thread.argument=NULL;
     bootstrap_thread.id=0ULL;
@@ -133,6 +141,7 @@ bool scheduler_initialize(void) {
     restore_interrupt_flag(saved_flags);
     return true;
 }
+
 bool kernel_thread_create(kernel_thread_entry entry,void *argument,
                           uint64_t *thread_id) {
     uint64_t saved_flags=0ULL;
@@ -162,61 +171,89 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
     thread->argument=argument;
     thread->id=next_thread_id++;
     thread->state=THREAD_READY;
-    thread_context_initialize(thread);
+    thread_frame_initialize(thread);
     increment_saturated(&counters.threads_created);
     increment_saturated(&counters.active_threads);
     if (thread_id!=NULL) *thread_id=thread->id;
     restore_interrupt_flag(saved_flags);
     return true;
 }
+
+struct interrupt_frame *scheduler_handle_interrupt(
+    struct interrupt_frame *frame,bool timer_interrupt
+) {
+    struct kernel_thread *self=current_thread;
+    struct kernel_thread *next=NULL;
+    if (frame==NULL || !initialized || !scheduler_running) return frame;
+    if (self==NULL || self->state==THREAD_FREE ||
+        (self!=&bootstrap_thread && !thread_guard_valid(self)))
+        cpu_halt_forever();
+
+    self->saved_frame=frame;
+    if (timer_interrupt && self->state==THREAD_RUNNING)
+        self->state=THREAD_READY;
+
+    next=find_ready_thread(self);
+    if (next==NULL) {
+        if (self->state==THREAD_DEAD) {
+            /* The bootstrap frame is the completion return path after the
+             * final worker exits. It is intentionally not in the worker pool. */
+            if (self==&bootstrap_thread ||
+                bootstrap_thread.state!=THREAD_READY ||
+                bootstrap_thread.saved_frame==NULL)
+                cpu_halt_forever();
+            bootstrap_thread.state=THREAD_RUNNING;
+            current_thread=&bootstrap_thread;
+            increment_saturated(&counters.context_switches);
+            return bootstrap_thread.saved_frame;
+        }
+        if (self->state==THREAD_READY)
+            self->state=THREAD_RUNNING;
+        return frame;
+    }
+
+    if (next->saved_frame==NULL || !thread_guard_valid(next))
+        cpu_halt_forever();
+    if (self->state==THREAD_RUNNING)
+        self->state=THREAD_READY;
+    next->state=THREAD_RUNNING;
+    current_thread=next;
+    increment_saturated(&counters.context_switches);
+    return next->saved_frame;
+}
+
 bool scheduler_run_until_idle(void) {
     const uint64_t saved_flags=read_rflags();
-    struct kernel_thread *next=NULL;
     if (!initialized || scheduler_running ||
         current_thread!=&bootstrap_thread ||
         bootstrap_thread.state!=THREAD_RUNNING) return false;
     disable_interrupts();
     scheduler_running=true;
     bootstrap_thread.state=THREAD_READY;
-    next=find_ready_thread(NULL);
-    if (next==NULL) {
-        bootstrap_thread.state=THREAD_RUNNING;
-        scheduler_running=false;
-        restore_interrupt_flag(saved_flags);
-        return true;
-    }
-    next->state=THREAD_RUNNING;
-    switch_to_thread(next);
-    /* Bootstrap resumes here after all worker threads exit. */
+    /* Vector 0x42 is a software reschedule request; it does not send APIC EOI. */
+    __asm__ volatile ("int $0x42" : : : "memory");
     if (current_thread!=&bootstrap_thread ||
         bootstrap_thread.state!=THREAD_RUNNING) cpu_halt_forever();
     scheduler_running=false;
     restore_interrupt_flag(saved_flags);
     return true;
 }
+
 void kernel_thread_yield(void) {
     const uint64_t saved_flags=read_rflags();
     struct kernel_thread *self=current_thread;
-    struct kernel_thread *next=NULL;
     if (!initialized || !scheduler_running || self==NULL ||
         self==&bootstrap_thread || self->state!=THREAD_RUNNING) return;
     disable_interrupts();
     if (!thread_guard_valid(self)) cpu_halt_forever();
     self->state=THREAD_READY;
     increment_saturated(&counters.voluntary_yields);
-    next=find_ready_thread(self);
-    if (next==NULL) {
-        self->state=THREAD_RUNNING;
-        restore_interrupt_flag(saved_flags);
-        return;
-    }
-    next->state=THREAD_RUNNING;
-    switch_to_thread(next);
+    __asm__ volatile ("int $0x42" : : : "memory");
     restore_interrupt_flag(saved_flags);
 }
+
 _Noreturn void kernel_thread_exit(void) {
     struct kernel_thread *self=current_thread;
-    struct kernel_thread *next=NULL;
     disable_interrupts();
     if (!initialized || !scheduler_running || self==NULL ||
         self==&bootstrap_thread || self->state!=THREAD_RUNNING ||
@@ -224,18 +261,10 @@ _Noreturn void kernel_thread_exit(void) {
     self->state=THREAD_DEAD;
     increment_saturated(&counters.threads_exited);
     if (counters.active_threads>0ULL) --counters.active_threads;
-    next=find_ready_thread(self);
-    if (next!=NULL) {
-        next->state=THREAD_RUNNING;
-    } else if (bootstrap_thread.state==THREAD_READY) {
-        bootstrap_thread.state=THREAD_RUNNING;
-        next=&bootstrap_thread;
-    } else {
-        cpu_halt_forever();
-    }
-    switch_to_thread(next);
+    __asm__ volatile ("int $0x42" : : : "memory");
     cpu_halt_forever();
 }
+
 void scheduler_get_stats(struct scheduler_stats *stats) {
     uint64_t saved_flags=0ULL;
     if (stats==NULL || !initialized) return;
@@ -244,8 +273,13 @@ void scheduler_get_stats(struct scheduler_stats *stats) {
     *stats=counters;
     restore_interrupt_flag(saved_flags);
 }
+
 #ifdef DAWN_KERNEL_TEST
 static volatile uint64_t scheduler_test_counts[2];
+static volatile uint64_t preemption_peer_progress;
+static volatile uint64_t preemption_peer_observed;
+static volatile uint64_t preemption_wait_expired;
+
 static void scheduler_test_worker(void *argument) {
     const uintptr_t worker_index=(uintptr_t)argument;
     if (worker_index>=2U) cpu_halt_forever();
@@ -257,6 +291,21 @@ static void scheduler_test_worker(void *argument) {
 static void scheduler_test_noop_worker(void *argument) {
     (void)argument;
 }
+static void scheduler_preemption_waiter(void *argument) {
+    (void)argument;
+    for (uint64_t attempt=0ULL;attempt<50000000ULL;attempt++) {
+        if (preemption_peer_progress!=0ULL) {
+            preemption_peer_observed=1ULL;
+            return;
+        }
+    }
+    preemption_wait_expired=1ULL;
+}
+static void scheduler_preemption_peer(void *argument) {
+    (void)argument;
+    preemption_peer_progress=1ULL;
+}
+
 bool scheduler_self_test(void) {
     struct scheduler_stats stats={0};
     uint64_t first_id=0ULL,second_id=0ULL;
@@ -302,5 +351,26 @@ bool scheduler_self_test(void) {
     if (stats.threads_created!=11ULL || stats.threads_exited!=11ULL ||
         stats.active_threads!=0ULL) return false;
     return true;
+}
+
+bool scheduler_preemption_self_test(void) {
+    const uint64_t saved_flags=read_rflags();
+    if (!initialized || current_thread!=&bootstrap_thread || scheduler_running)
+        return false;
+    disable_interrupts();
+    ready_cursor=0ULL;
+    preemption_peer_progress=0ULL;
+    preemption_peer_observed=0ULL;
+    preemption_wait_expired=0ULL;
+    restore_interrupt_flag(saved_flags);
+
+    /* The waiter is deliberately first and does not yield. Only a timer
+     * interrupt can run the second worker before its bounded wait expires. */
+    if (!kernel_thread_create(scheduler_preemption_waiter,NULL,NULL) ||
+        !kernel_thread_create(scheduler_preemption_peer,NULL,NULL) ||
+        !scheduler_run_until_idle()) return false;
+    return preemption_peer_observed==1ULL &&
+           preemption_wait_expired==0ULL &&
+           preemption_peer_progress==1ULL;
 }
 #endif
