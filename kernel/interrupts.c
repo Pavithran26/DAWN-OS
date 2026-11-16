@@ -166,6 +166,7 @@ static void pic_remap_and_mask(void) {
     /* All device interrupts remain masked until an explicit driver enables one. */
     pic_write_masks(0xffU,0xffU);
 }
+#ifdef DAWN_KERNEL_TEST
 static void pic_set_irq_mask(uint8_t irq,bool masked) {
     const uint16_t port=(irq<8U)?(uint16_t)PIC_MASTER_DATA:(uint16_t)PIC_SLAVE_DATA;
     const uint8_t bit=(uint8_t)(irq&7U);
@@ -186,6 +187,7 @@ static void pit_program_frequency(uint32_t frequency_hz) {
     outb((uint16_t)PIT_CHANNEL0,(uint8_t)(divisor&0xffU));
     outb((uint16_t)PIT_CHANNEL0,(uint8_t)((divisor>>8)&0xffU));
 }
+#endif
 
 static void interrupt_fatal(const struct interrupt_frame *frame) {
     cpu_cli();
