@@ -17,9 +17,10 @@ The repository contains the first Phase A kernel scaffold:
 - A bitmap physical page-frame allocator with usable-frame ownership tracking and invalid/double-free rejection; initial tracking is limited to physical addresses below 4 GiB and no bootloader/ACPI memory is reclaimed.
 - An x86_64 four-level page-table manager attached to Limine's active CR3, with checked 4 KiB mappings, software translation, unmapping, NX/write/user permission checks, and QEMU self-tests.
 - A 256-entry x86_64 IDT with CPU exception stubs, fatal exception diagnostics, ACPI RSDP/XSDT/RSDT/MADT discovery, a four-level-page-table uncached MMIO mapping for APIC registers, xAPIC + IOAPIC setup, and an IOAPIC-routed PIT IRQ0 test. The legacy PIC remains masked. See [ACPI/APIC implementation notes](docs/ACPI_APIC.md).
+- A single-CPU cooperative kernel-thread scheduler with guarded static stacks, x86_64 callee-saved context switching, round-robin voluntary yield, thread exit/reuse, and QEMU self-tests. Timer-driven preemption remains disabled.
 - An optional graphical administration shell is planned; terminal, file explorer, partition manager, task manager, and the green liquid-neomorphism interface are **not implemented yet**. See [the graphical shell design](docs/GUI_SHELL_PLAN.md) and [Phase D milestones](docs/PHASE_D_PLAN.md).
 
-This is **not a complete operating system**. The current interrupt path is single-CPU xAPIC/IOAPIC with one ACPI-routed PIT source tested in QEMU; SMP interrupt routing, scheduler, separate process address spaces, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The physical allocator returns physical frame addresses only and does not zero frames or provide a heap. The early page-table manager can map allocator-owned frames in the active root, but it does not create isolated process address spaces or support concurrent CPUs. Bootloader-reclaimable and ACPI memory remain reserved. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
+This is **not a complete operating system**. The current interrupt path is single-CPU xAPIC/IOAPIC with one ACPI-routed PIT source tested in QEMU. The kernel scheduler is cooperative; timer-driven preemption, SMP interrupt routing, separate process address spaces, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The physical allocator returns physical frame addresses only and does not zero frames or provide a heap. The early page-table manager can map allocator-owned frames in the active root, but it does not create isolated process address spaces or support concurrent CPUs. Bootloader-reclaimable and ACPI memory remain reserved. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
 
 ## Build the kernel ELF
 
@@ -83,14 +84,14 @@ Remaining Phase B work:
 - Harden allocation accounting and add synchronization after interrupt/CPU foundations exist.
 - Extend page-table permission/lifetime tests; add address-space ownership and mapping teardown after process and fault-handling foundations.
 - Expand APIC/IOAPIC routing and ACPI coverage; the first MADT-discovered ISA PIT IRQ route is implemented and QEMU-tested.
-- Add kernel threads, context switching, and a scheduler after the interrupt/timer foundations are tested.
+- Extend the cooperative scheduler with timer-driven preemption only after interrupt-frame switching and per-thread interrupt-state tests.
 - Add SMP only after CPU startup, per-CPU state, synchronization, and locking are defined.
 
 ## Roadmap
 
 1. **Boot and test:** verify Limine boot on QEMU, preserve serial diagnostics, and expand the kernel test harness.
 2. **Memory and interrupts:** validate the boot memory map, initialize the physical page allocator and extend virtual-memory support, then extend APIC/IOAPIC routing coverage and add fault recovery.
-3. **Execution and SMP:** implement kernel threads, context switching, a scheduler, CPU startup, synchronization, and per-CPU state.
+3. **Execution and SMP:** extend cooperative kernel threads with preemption, then add CPU startup, synchronization, and per-CPU state.
 4. **Userspace and storage:** define a syscall ABI and privilege boundary, add a compact runtime and service supervisor, then add filesystem and virtio block I/O.
 5. **Networking:** add virtio networking and a documented network stack, then implement a small reproducible HTTP workload.
 6. **Measurement and optimization:** establish correctness baselines and measure throughput, p50/p95/p99 latency, CPU time per request, RAM, service-ready time, and failure recovery. Compare with Linux only under equivalent hardware/VM, resource limits, devices, service semantics, workload, configuration, and duration.

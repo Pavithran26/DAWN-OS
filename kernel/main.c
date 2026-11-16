@@ -9,6 +9,7 @@
 #include "interrupts.h"
 #include "acpi.h"
 #include "apic.h"
+#include "scheduler.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -712,6 +713,23 @@ void kernel_main(void) {
         }
     }
 
+    if (!scheduler_initialize()) {
+        serial_write("DAWN-OS: FAIL: cooperative scheduler initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: cooperative kernel-thread scheduler initialized\n");
+
+#ifdef DAWN_KERNEL_TEST
+    if (!scheduler_self_test()) {
+        serial_write("DAWN-TEST: FAIL: cooperative kernel-thread scheduler tests\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: kernel thread creation, context switching, round-robin yield, exit and stack guards\n");
+#endif
 
     if (framebuffer_response_valid()) {
         serial_write("DAWN-OS: framebuffer request fulfilled\n");
@@ -726,11 +744,11 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
-    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ and framebuffer\n");
+    serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, cooperative scheduler and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B memory, ACPI, xAPIC/IOAPIC and single-CPU interrupt foundations initialized; scheduler and process address spaces are not implemented yet\n");
+    serial_write("DAWN-OS: Phase B memory, ACPI, xAPIC/IOAPIC, cooperative kernel threads and single-CPU scheduler initialized; preemptive scheduling and process address spaces are not implemented yet\n");
     cpu_halt_forever();
 }
