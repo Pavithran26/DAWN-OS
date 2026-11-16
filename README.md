@@ -4,62 +4,72 @@ DAWN-OS is an experimental, freestanding x86_64 operating-system project with a 
 
 ## Current status
 
-The repository now contains the first Phase A kernel scaffold:
+The repository contains the first Phase A kernel scaffold:
 
 - A 64-bit Limine entry path with a dedicated bootstrap stack.
 - Limine request delimiters, a base-revision 6 tag, and a framebuffer request.
 - Bounded COM1 serial diagnostics; serial output failure cannot trap the kernel in an infinite polling loop.
-- A deterministic kernel self-test mode that reports PASS/FAIL over serial and uses QEMU's \`isa-debug-exit\` device when available.
+- A deterministic kernel self-test mode that reports PASS/FAIL over serial and uses QEMU's `isa-debug-exit` device when available.
 - An ELF layout with separate executable, read-only, and writable load segments.
+- A GitHub Actions boot-validation workflow for ISO creation and QEMU BIOS/UEFI attempts.
 
-This is **not a complete operating system**. Physical/virtual memory management, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The kernel ELF build is not proof of a successful boot. ISO creation and BIOS/UEFI boot still require validation with the matching Limine binaries, xorriso, and QEMU.
+This is **not a complete operating system**. Physical/virtual memory management, exceptions, interrupt controllers, timer, scheduler, SMP, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
 
 ## Build the kernel ELF
 
-Requirements: GNU Make, GCC with x86_64 code-generation support, and GNU binutils (\`ld\` and \`readelf\`). From the repository root:
+Requirements: GNU Make, GCC with x86_64 code-generation support, and GNU binutils (`ld` and `readelf`). From the repository root:
 
-\`\`\`sh
+```sh
 make clean kernel
 make check
 file build/dawn-kernel.elf
-\`\`\`
-
-The build is freestanding: it disables hosted runtime assumptions, PIE/PIC, stack protector, the x86_64 red zone, and SIMD code generation. The default build uses GCC and GNU binutils from the host toolchain; a Linux-hosted compiler is only a build tool, not a DAWN-OS runtime.
-
-A separate self-test kernel can be compiled with:
-
-\`\`\`sh
 make kernel-test
-\`\`\`
+```
+
+The build is freestanding: it disables hosted runtime assumptions, PIE/PIC, stack protector, the x86_64 red zone, and SIMD code generation. A Linux-hosted compiler is only a build tool, not a DAWN-OS runtime.
 
 ## Build a BIOS/UEFI hybrid ISO
 
-Obtain a matching Limine v12 binary package and place its \`limine\` installer, \`limine-bios.sys\`, \`limine-bios-cd.bin\`, \`limine-uefi-cd.bin\`, and \`BOOTX64.EFI\` under \`limine-binary/\` (or set \`LIMINE_DIR\` to that directory). Install \`xorriso\`, then run:
+Obtain the Limine v12.10.0 binary package and place its `limine` installer, `limine-bios.sys`, `limine-bios-cd.bin`, `limine-uefi-cd.bin`, and `BOOTX64.EFI` under `limine-binary/` (or set `LIMINE_DIR` to that directory). Install `xorriso`, then run:
 
-\`\`\`sh
+```sh
 make iso LIMINE_DIR=limine-binary
-\`\`\`
+```
 
-The ISO target stages the kernel and Limine files, creates a hybrid BIOS/UEFI image, and runs \`limine bios-install\` on it. The build does not download or silently replace third-party bootloader binaries.
+The ISO target creates a hybrid BIOS/UEFI image and installs Limine's BIOS stage. The build does not download or silently replace third-party bootloader binaries.
 
-To create and run the self-test image:
+## Run DAWN-OS in a virtual machine
 
-\`\`\`sh
-make qemu-test LIMINE_DIR=limine-binary
-\`\`\`
+QEMU is the primary development VM. Install `qemu-system-x86`, `ovmf` (UEFI firmware), and `timeout` in addition to the ISO build requirements.
 
-This requires \`qemu-system-x86_64\` and \`timeout\`. QEMU must be able to use the \`isa-debug-exit\` device; exit status 33 means the kernel test reported success, 35 means it reported failure. For an interactive serial boot instead:
+Run the interactive BIOS VM:
 
-\`\`\`sh
+```sh
 make run LIMINE_DIR=limine-binary
-\`\`\`
+```
+
+Run automated self-tests under BIOS and UEFI:
+
+```sh
+make qemu-test LIMINE_DIR=limine-binary
+make qemu-uefi-test LIMINE_DIR=limine-binary OVMF_CODE=/usr/share/OVMF/OVMF_CODE.fd
+```
+
+Or run both with `make qemu-test-all`. The QEMU test uses the `isa-debug-exit` device: exit status 33 means the kernel self-test reported success, 35 means it reported failure. Serial logs are saved under `build/`. UEFI firmware paths vary by distribution; set `OVMF_CODE` to the installed OVMF code image.
+
+The resulting ISO can also be attached to VirtualBox or VMware as a virtual optical disk after QEMU validation. Those hypervisors are not yet covered by automated CI.
+
+## Continuous integration
+
+The workflow `.github/workflows/phase-a-boot.yml` runs on pushes to `main` and `bootstrap/**`, pull requests targeting `main`, and manual dispatch. It installs the build/VM tools, downloads the pinned Limine v12.10.0 binary package, builds and checks both kernels, creates a test ISO, and attempts BIOS and UEFI boots in QEMU. It uploads the ISO and serial logs as workflow artifacts.
+
+A green workflow is evidence only for the tests that actually ran in that environment. Review the logs; do not infer physical-hardware compatibility from QEMU success.
 
 ## Phase A remaining work
 
-- Run the ISO build with the selected Limine v12 binaries and confirm its BIOS/UEFI layout.
-- Boot under QEMU and retain serial output as test evidence.
-- Validate both firmware paths where OVMF/UEFI firmware is available.
-- Add further startup and request-validation tests before beginning memory management.
+- Confirm CI BIOS and UEFI QEMU runs and review retained serial output.
+- Validate on additional QEMU machine/firmware configurations.
+- Add startup and boot-request validation tests before beginning memory management.
 
 ## Roadmap
 
@@ -74,4 +84,4 @@ No performance or security superiority over Linux is claimed. A small kernel ELF
 
 ## Licensing
 
-The project retains the repository's Unlicense dedication. The minimal Limine protocol declarations in \`include/limine_requests.h\` are derived from the official Limine protocol header and carry its 0BSD license notice.
+The project retains the repository's Unlicense dedication. The minimal Limine protocol declarations in `include/limine_requests.h` are derived from the official Limine protocol header and carry its 0BSD license notice.

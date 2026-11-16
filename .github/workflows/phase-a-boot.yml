@@ -1,0 +1,106 @@
+name: Phase A boot validation
+
+on:
+  push:
+    branches:
+      - main
+      - "bootstrap/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-a-boot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qemu-boot:
+    name: Build ISO and boot with QEMU (BIOS + UEFI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build, ISO, and VM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc binutils make xorriso \
+            qemu-system-x86 ovmf curl xz-utils
+
+      - name: Download pinned Limine v12.10.0 binary package
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            --output /tmp/limine-binary.tar.xz \
+            https://github.com/Limine-Bootloader/Limine/releases/download/v12.10.0/limine-binary.tar.xz
+          mkdir -p /tmp/limine-dist limine-binary
+          tar -xJf /tmp/limine-binary.tar.xz -C /tmp/limine-dist
+
+          copy_limine_file() {
+            local name="$1"
+            local source
+            source="$(find /tmp/limine-dist -type f -name "$name" -print -quit)"
+            if [[ -z "$source" ]]; then
+              echo "Required Limine file not found in v12.10.0 binary package: $name" >&2
+              find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+              exit 1
+            fi
+            install -m 0644 "$source" "limine-binary/$name"
+          }
+
+          installer="$(find /tmp/limine-dist -type f -name limine -print -quit)"
+          if [[ -z "$installer" ]]; then
+            echo "Limine installer not found in v12.10.0 binary package" >&2
+            find /tmp/limine-dist -maxdepth 4 -type f -print >&2
+            exit 1
+          fi
+          install -m 0755 "$installer" limine-binary/limine
+
+          copy_limine_file limine-bios.sys
+          copy_limine_file limine-bios-cd.bin
+          copy_limine_file limine-uefi-cd.bin
+          copy_limine_file BOOTX64.EFI
+
+      - name: Build normal and self-test kernels
+        run: |
+          make clean kernel check
+          make kernel-test
+
+      - name: Create hybrid BIOS/UEFI self-test ISO
+        run: make iso-test LIMINE_DIR=limine-binary
+
+      - name: Boot test under legacy BIOS
+        run: make qemu-test LIMINE_DIR=limine-binary
+
+      - name: Boot test under UEFI firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          ovmf_code="$(find /usr/share/OVMF -maxdepth 1 -type f \
+            \( -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \) -print -quit)"
+          if [[ -z "$ovmf_code" ]]; then
+            echo "OVMF_CODE firmware image was not installed" >&2
+            find /usr/share/OVMF -maxdepth 1 -type f -print >&2 || true
+            exit 1
+          fi
+          make qemu-uefi-test LIMINE_DIR=limine-binary OVMF_CODE="$ovmf_code"
+
+      - name: Upload ISO and serial logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dawn-os-phase-a-boot-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            build/dawn-os-test.iso
+            build/qemu-bios-serial.log
+            build/qemu-uefi-serial.log
