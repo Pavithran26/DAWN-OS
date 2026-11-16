@@ -15,7 +15,7 @@ Vectors 0–31 have dedicated stubs. Vectors with architectural error-code pushe
 - 256 16-byte IDT gate entries, aligned to 16 bytes.
 - Vectors 0–31 map to CPU exception stubs.
 - Vectors 32–47 map to legacy PIC IRQ stubs.
-- Remaining vectors route to a fatal default stub.
+- Vectors 48–254 route to a fatal default stub; vector 255 uses the Local APIC spurious handler.
 - Gate selector is the active kernel CS, DPL 0, interrupt-gate type, IST 0.
 - Interrupts remain disabled during initialization.
 
@@ -27,4 +27,4 @@ This is intentionally a legacy PIC/PIT bootstrap foundation, not yet a validated
 
 ## Tests
 
-The QEMU self-test executes INT3 through the real IDT and verifies the saved CS/SS/RSP frame. It then programs the PIT, unmasks only IRQ0, briefly enables interrupts with a bounded wait, verifies the timer tick counter advanced, disables interrupts, and masks IRQ0 again. BIOS and UEFI runs must pass this test.
+The QEMU self-test executes INT3 through the real IDT and verifies the saved CS/SS/RSP frame. It also injects vector 0xFF and checks the dedicated spurious handler path, which deliberately does not send an EOI. It then programs the PIT, unmasks only IRQ0, briefly enables interrupts with a bounded wait, verifies the timer tick counter advanced, disables interrupts, and masks IRQ0 again. BIOS and UEFI runs must pass this test.

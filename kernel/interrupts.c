@@ -64,6 +64,7 @@ _Static_assert(offsetof(struct interrupt_frame, ss) == 168U,
                "64-bit interrupt stack frame must include saved SS");
 
 extern void isr_default_stub(void);
+extern void isr_spurious_stub(void);
 extern void (*isr_stub_table[48])(void);
 
 static struct idt_entry idt[IDT_ENTRIES] __attribute__((aligned(16)));
@@ -72,6 +73,7 @@ static uint16_t kernel_cs;
 static uint16_t kernel_ss;
 static volatile uint64_t timer_ticks;
 static volatile uint64_t breakpoint_count;
+static volatile uint64_t spurious_interrupt_count;
 static volatile bool breakpoint_expected;
 
 static inline void outb(uint16_t port, uint8_t value) {
@@ -221,6 +223,11 @@ void interrupt_dispatch(struct interrupt_frame *frame) {
         for (;;) __asm__ volatile ("cli; hlt" : : : "memory");
     }
 
+    if (frame->vector==255ULL) {
+        /* APIC spurious interrupts are not in the in-service register: no EOI. */
+        ++spurious_interrupt_count;
+        return;
+    }
     if (frame->vector==3ULL && breakpoint_expected &&
         frame->cs==(uint64_t)kernel_cs &&
         frame->ss==(uint64_t)kernel_ss && frame->rsp!=0ULL) {
@@ -255,6 +262,8 @@ bool interrupts_initialize(void) {
     for (uint32_t vector=0U; vector<48U; ++vector) {
         idt_set_gate((uint8_t)vector,isr_stub_table[vector]);
     }
+    /* Limine leaves the local APIC spurious vector at 0xFF. */
+    idt_set_gate(255U,isr_spurious_stub);
 
     descriptor.limit=(uint16_t)(sizeof(idt)-1U);
     descriptor.base=(uint64_t)(uintptr_t)&idt[0];
@@ -264,6 +273,7 @@ bool interrupts_initialize(void) {
     pic_remap_and_mask();
     timer_ticks=0ULL;
     breakpoint_count=0ULL;
+    spurious_interrupt_count=0ULL;
     breakpoint_expected=false;
     return true;
 }
@@ -285,6 +295,10 @@ bool interrupts_self_test(void) {
     __asm__ volatile ("int3" : : : "memory");
     breakpoint_expected=false;
     if (breakpoint_count!=1ULL) return false;
+
+    /* APIC vector 0xFF is spurious and must return without sending an EOI. */
+    __asm__ volatile ("int $0xff" : : : "memory");
+    if (spurious_interrupt_count!=1ULL) return false;
 
     /* Verify that the PIT hardware counter advances without enabling IRQs. */
     pit_program_frequency(PIT_TEST_HZ);

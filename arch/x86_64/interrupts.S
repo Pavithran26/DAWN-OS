@@ -381,9 +381,17 @@ isr_stub_47:
 .type isr_default_stub, @function
 isr_default_stub:
     pushq $0
-    pushq $255
+    pushq $254
     jmp isr_common
 .size isr_default_stub, . - isr_default_stub
+
+.global isr_spurious_stub
+.type isr_spurious_stub, @function
+isr_spurious_stub:
+    pushq $0
+    pushq $255
+    jmp isr_common
+.size isr_spurious_stub, . - isr_spurious_stub
 
 isr_common:
     cld
