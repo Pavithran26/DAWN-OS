@@ -647,6 +647,12 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: virtual-memory map/translate/unmap tests\n");
+    if (!vm_address_space_self_test()) {
+        serial_write("DAWN-TEST: FAIL: isolated process address-space tests\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: separate user roots, private user mappings and address-space teardown\n");
 
     if (!syscall_self_test()) {
         serial_write("DAWN-TEST: FAIL: Phase C syscall ABI validation\n");

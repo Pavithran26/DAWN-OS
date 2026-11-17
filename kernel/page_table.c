@@ -577,3 +577,190 @@ bool vm_manager_self_test(void) {
     return true;
 }
 #endif
+
+
+/*
+ * Process address-space roots share only the supervisor half of the kernel
+ * PML4. The lower half starts empty and is owned by the address-space object.
+ * User data frames remain caller-owned; destroy releases page-table frames only.
+ * Activation is intentionally deferred until interrupt/syscall stack switching
+ * and process lifetime management are ready.
+ */
+struct vm_address_space {
+    uint64_t root_physical;
+};
+
+static volatile uint64_t *address_space_root(const struct vm_address_space *space) {
+    if (space==NULL || space->root_physical==0ULL) return NULL;
+    return physical_to_hhdm_pointer(space->root_physical);
+}
+
+bool vm_address_space_create(struct vm_address_space *space) {
+    uint64_t root_physical=0ULL;
+    volatile uint64_t *root=NULL;
+    if (!manager.initialized || space==NULL || space->root_physical!=0ULL ||
+        !physical_allocator_allocate(&root_physical)) return false;
+    root=physical_to_hhdm_pointer(root_physical);
+    if (root==NULL) {
+        (void)physical_allocator_free(root_physical);
+        return false;
+    }
+    for (uint64_t i=0ULL;i<TABLE_ENTRIES;i++) {
+        root[i]=(i>=256ULL) ? manager.root[i] : 0ULL;
+    }
+    __asm__ volatile ("mfence" : : : "memory");
+    space->root_physical=root_physical;
+    return true;
+}
+
+bool vm_address_space_map_user(struct vm_address_space *space,
+                               uint64_t virtual_address,
+                               uint64_t physical_address,uint32_t flags) {
+    const uint32_t allowed=(uint32_t)VM_PAGE_WRITE|
+                           (uint32_t)VM_PAGE_USER|
+                           (uint32_t)VM_PAGE_EXECUTE;
+    uint64_t ix[4]={0ULL,0ULL,0ULL,0ULL};
+    volatile uint64_t *table=address_space_root(space),*next=NULL;
+    struct created_table created[3]={{0}};
+    size_t created_count=0U;
+    if (table==NULL || virtual_address==0ULL ||
+        !address_is_canonical(virtual_address) ||
+        (virtual_address&CANONICAL_SIGN_BIT)!=0ULL ||
+        (virtual_address&PAGE_MASK)!=0ULL ||
+        (physical_address&PAGE_MASK)!=0ULL || physical_address==0ULL ||
+        (physical_address&~manager.physical_address_mask)!=0ULL ||
+        (flags&~allowed)!=0U || (flags&(uint32_t)VM_PAGE_USER)==0U ||
+        !physical_allocator_is_allocated(physical_address)) return false;
+    ix[0]=(virtual_address>>39)&0x1ffULL;
+    ix[1]=(virtual_address>>30)&0x1ffULL;
+    ix[2]=(virtual_address>>21)&0x1ffULL;
+    ix[3]=(virtual_address>>12)&0x1ffULL;
+    for (size_t level=0U;level<3U;level++) {
+        if (!get_child_table(table,ix[level],
+                (flags&(uint32_t)VM_PAGE_WRITE)!=0U,true,
+                (flags&(uint32_t)VM_PAGE_EXECUTE)!=0U,
+                created,&created_count,&next)) {
+            rollback_created_tables(created,created_count);
+            return false;
+        }
+        table=next;
+    }
+    if ((table[ix[3]]&ENTRY_PRESENT)!=0ULL) {
+        rollback_created_tables(created,created_count);
+        return false;
+    }
+    table[ix[3]]=physical_address|ENTRY_PRESENT|ENTRY_USER|
+        ((flags&(uint32_t)VM_PAGE_WRITE)!=0U ? ENTRY_WRITABLE : 0ULL)|
+        ((flags&(uint32_t)VM_PAGE_EXECUTE)==0U ? ENTRY_NO_EXECUTE : 0ULL);
+    __asm__ volatile ("mfence" : : : "memory");
+    return true;
+}
+
+bool vm_address_space_translate(const struct vm_address_space *space,
+                                uint64_t virtual_address,
+                                uint64_t *physical_address,uint32_t *flags) {
+    uint64_t ix[4]={0ULL,0ULL,0ULL,0ULL},entry=0ULL;
+    bool writable=true,user=true,nx=false;
+    volatile uint64_t *table=address_space_root(space);
+    if (table==NULL || physical_address==NULL ||
+        !address_is_canonical(virtual_address)) return false;
+    ix[0]=(virtual_address>>39)&0x1ffULL;
+    ix[1]=(virtual_address>>30)&0x1ffULL;
+    ix[2]=(virtual_address>>21)&0x1ffULL;
+    ix[3]=(virtual_address>>12)&0x1ffULL;
+    for (size_t level=0U;level<3U;level++) {
+        entry=table[ix[level]];
+        if ((entry&ENTRY_PRESENT)==0ULL || (entry&ENTRY_LARGE)!=0ULL)
+            return false;
+        writable=writable&&((entry&ENTRY_WRITABLE)!=0ULL);
+        user=user&&((entry&ENTRY_USER)!=0ULL);
+        nx=nx||((entry&ENTRY_NO_EXECUTE)!=0ULL);
+        table=physical_to_hhdm_pointer(entry&manager.physical_address_mask);
+        if (table==NULL) return false;
+    }
+    entry=table[ix[3]];
+    if ((entry&ENTRY_PRESENT)==0ULL) return false;
+    writable=writable&&((entry&ENTRY_WRITABLE)!=0ULL);
+    user=user&&((entry&ENTRY_USER)!=0ULL);
+    nx=nx||((entry&ENTRY_NO_EXECUTE)!=0ULL);
+    *physical_address=(entry&manager.physical_address_mask)|
+                      (virtual_address&PAGE_MASK);
+    if (flags!=NULL) {
+        *flags=(writable?(uint32_t)VM_PAGE_WRITE:0U)|
+               (user?(uint32_t)VM_PAGE_USER:0U)|
+               (nx?(uint32_t)VM_PAGE_NO_EXECUTE:(uint32_t)VM_PAGE_EXECUTE);
+    }
+    return true;
+}
+
+static bool address_space_free_lower_tables(volatile uint64_t *table,
+                                            unsigned int level) {
+    for (uint64_t i=0ULL;i<TABLE_ENTRIES;i++) {
+        const uint64_t entry=table[i];
+        uint64_t child_physical=0ULL;
+        volatile uint64_t *child=NULL;
+        if ((entry&ENTRY_PRESENT)==0ULL) continue;
+        if (level==3U || (entry&ENTRY_LARGE)!=0ULL) return false;
+        child_physical=entry&manager.physical_address_mask;
+        child=physical_to_hhdm_pointer(child_physical);
+        if (child==NULL) return false;
+        if (!address_space_free_lower_tables(child,level+1U)) return false;
+        table[i]=0ULL;
+        if (!physical_allocator_free(child_physical)) return false;
+    }
+    return true;
+}
+
+bool vm_address_space_destroy(struct vm_address_space *space) {
+    volatile uint64_t *root=address_space_root(space);
+    const uint64_t active=cpu_read_cr3()&manager.physical_address_mask;
+    if (root==NULL || active==space->root_physical) return false;
+    /* Only lower-half tables are private. Upper-half kernel tables are shared. */
+    for (uint64_t i=0ULL;i<256ULL;i++) {
+        const uint64_t entry=root[i];
+        uint64_t child_physical=0ULL;
+        volatile uint64_t *child=NULL;
+        if ((entry&ENTRY_PRESENT)==0ULL) continue;
+        if ((entry&ENTRY_LARGE)!=0ULL) return false;
+        child_physical=entry&manager.physical_address_mask;
+        child=physical_to_hhdm_pointer(child_physical);
+        if (child==NULL || !address_space_free_lower_tables(child,1U))
+            return false;
+        root[i]=0ULL;
+        if (!physical_allocator_free(child_physical)) return false;
+    }
+    if (!physical_allocator_free(space->root_physical)) return false;
+    space->root_physical=0ULL;
+    return true;
+}
+
+#ifdef DAWN_KERNEL_TEST
+bool vm_address_space_self_test(void) {
+    struct vm_address_space first={0},second={0};
+    uint64_t page=0ULL,translated=0ULL;
+    uint32_t flags=0U;
+    const uint64_t user_va=0x0000004000000000ULL;
+    if (!physical_allocator_allocate(&page) ||
+        !vm_address_space_create(&first) ||
+        !vm_address_space_create(&second)) goto fail;
+    if (first.root_physical==second.root_physical ||
+        !vm_address_space_map_user(&first,user_va,page,
+            (uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE) ||
+        !vm_address_space_translate(&first,user_va,&translated,&flags) ||
+        translated!=page ||
+        (flags&((uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE))!=
+            ((uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE) ||
+        vm_address_space_translate(&second,user_va,&translated,NULL) ||
+        vm_translate(user_va,&translated,NULL)) goto fail;
+    if (!vm_address_space_destroy(&first) ||
+        !vm_address_space_destroy(&second) ||
+        !physical_allocator_free(page)) return false;
+    return true;
+fail:
+    if (first.root_physical!=0ULL) (void)vm_address_space_destroy(&first);
+    if (second.root_physical!=0ULL) (void)vm_address_space_destroy(&second);
+    if (page!=0ULL && physical_allocator_is_allocated(page))
+        (void)physical_allocator_free(page);
+    return false;
+}
+#endif
