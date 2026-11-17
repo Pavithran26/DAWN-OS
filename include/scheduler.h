@@ -17,6 +17,8 @@ struct scheduler_stats {
 bool scheduler_initialize(void);
 bool kernel_thread_create(kernel_thread_entry entry, void *argument,
                           uint64_t *thread_id);
+/* Bind one READY process to a not-yet-running kernel thread. */
+bool kernel_thread_bind_process(uint64_t thread_id, uint64_t process_id);
 bool scheduler_run_until_idle(void);
 void kernel_thread_yield(void);
 _Noreturn void kernel_thread_exit(void);
@@ -26,5 +28,6 @@ struct interrupt_frame *scheduler_handle_interrupt(
 #ifdef DAWN_KERNEL_TEST
 bool scheduler_self_test(void);
 bool scheduler_preemption_self_test(void);
+bool scheduler_process_context_self_test(void);
 #endif
 #endif

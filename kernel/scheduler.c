@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "interrupts.h"
+#include "process.h"
 #include "scheduler.h"
 
 #define KERNEL_THREAD_MAX 8U
@@ -19,6 +20,7 @@ struct kernel_thread {
     kernel_thread_entry entry;
     void *argument;
     uint64_t id;
+    uint64_t process_id;
     enum thread_state state;
     uint8_t stack[KERNEL_THREAD_STACK_SIZE] __attribute__((aligned(16)));
 };
@@ -155,6 +157,7 @@ bool scheduler_initialize(void) {
         thread_pool[i].entry=NULL;
         thread_pool[i].argument=NULL;
         thread_pool[i].id=0ULL;
+        thread_pool[i].process_id=0ULL;
         thread_pool[i].state=THREAD_FREE;
     }
     bootstrap_thread.saved_frame=NULL;
@@ -200,6 +203,7 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
     thread->entry=entry;
     thread->argument=argument;
     thread->id=next_thread_id++;
+    thread->process_id=0ULL;
     thread->state=THREAD_READY;
     thread_frame_initialize(thread);
     increment_saturated(&counters.threads_created);
@@ -207,6 +211,52 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
     if (thread_id!=NULL) *thread_id=thread->id;
     restore_interrupt_flag(saved_flags);
     return true;
+}
+
+bool kernel_thread_bind_process(uint64_t thread_id,uint64_t process_id) {
+    const uint64_t saved_flags=read_rflags();
+    struct process_info info={0};
+    struct kernel_thread *target=NULL;
+    if (!initialized || scheduler_running || current_thread!=&bootstrap_thread ||
+        thread_id==0ULL || process_id==0ULL || (read_cs()&3U)!=0U)
+        return false;
+    disable_interrupts();
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        struct kernel_thread *candidate=&thread_pool[i];
+        if (candidate->id==thread_id && candidate->state==THREAD_READY)
+            target=candidate;
+        if (candidate->state!=THREAD_FREE && candidate->state!=THREAD_DEAD &&
+            candidate->process_id==process_id) {
+            restore_interrupt_flag(saved_flags);
+            return false;
+        }
+    }
+    if (target==NULL || target->process_id!=0ULL ||
+        !process_get_info(process_id,&info) ||
+        info.state!=PROCESS_STATE_READY) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    target->process_id=process_id;
+    restore_interrupt_flag(saved_flags);
+    return true;
+}
+
+static void scheduler_switch_process_context(
+    const struct kernel_thread *outgoing,
+    const struct kernel_thread *incoming
+) {
+    const uint64_t outgoing_id=
+        outgoing==&bootstrap_thread ? 0ULL : outgoing->process_id;
+    const uint64_t incoming_id=
+        incoming==&bootstrap_thread ? 0ULL : incoming->process_id;
+    if (outgoing_id!=incoming_id) {
+        if (!process_switch_to(incoming_id)) cpu_halt_forever();
+        if (outgoing!=&bootstrap_thread &&
+            outgoing->state==THREAD_DEAD && outgoing_id!=0ULL &&
+            !process_mark_exited(outgoing_id))
+            cpu_halt_forever();
+    }
 }
 
 struct interrupt_frame *scheduler_handle_interrupt(
@@ -247,6 +297,7 @@ struct interrupt_frame *scheduler_handle_interrupt(
                 bootstrap_thread.state!=THREAD_READY ||
                 bootstrap_thread.saved_frame==NULL)
                 cpu_halt_forever();
+            scheduler_switch_process_context(self,&bootstrap_thread);
             bootstrap_thread.state=THREAD_RUNNING;
             current_thread=&bootstrap_thread;
             increment_saturated(&counters.context_switches);
@@ -261,6 +312,7 @@ struct interrupt_frame *scheduler_handle_interrupt(
         !thread_frame_valid(next,next->saved_frame))
         cpu_halt_forever();
     if (timer_interrupt) increment_saturated(&counters.timer_preemptions);
+    scheduler_switch_process_context(self,next);
     if (self->state==THREAD_RUNNING)
         self->state=THREAD_READY;
     next->state=THREAD_RUNNING;
@@ -411,6 +463,61 @@ bool scheduler_self_test(void) {
     scheduler_get_stats(&stats);
     if (stats.threads_created!=11ULL || stats.threads_exited!=11ULL ||
         stats.active_threads!=0ULL) return false;
+    return true;
+}
+
+static volatile uint64_t process_context_test_counts[2];
+struct process_context_test_argument {
+    uint64_t process_id;
+    uintptr_t index;
+};
+static void scheduler_process_context_worker(void *argument) {
+    const struct process_context_test_argument *context=
+        (const struct process_context_test_argument *)argument;
+    if (context==NULL || context->index>=2U ||
+        process_active_id()!=context->process_id)
+        cpu_halt_forever();
+    ++process_context_test_counts[context->index];
+    kernel_thread_yield();
+    if (process_active_id()!=context->process_id)
+        cpu_halt_forever();
+    ++process_context_test_counts[context->index];
+}
+
+bool scheduler_process_context_self_test(void) {
+    uint64_t process_ids[2]={0ULL,0ULL};
+    uint64_t thread_ids[2]={0ULL,0ULL};
+    struct process_info info={0};
+    struct process_context_test_argument arguments[2];
+    if (!initialized || scheduler_running ||
+        current_thread!=&bootstrap_thread || process_active_id()!=0ULL)
+        return false;
+    process_context_test_counts[0]=0ULL;
+    process_context_test_counts[1]=0ULL;
+    for (uintptr_t index=0U;index<2U;index++) {
+        if (!process_create(&process_ids[index]) ||
+            !process_mark_ready(process_ids[index]))
+            return false;
+        arguments[index].process_id=process_ids[index];
+        arguments[index].index=index;
+        if (!kernel_thread_create(scheduler_process_context_worker,
+                                  &arguments[index],&thread_ids[index]) ||
+            !kernel_thread_bind_process(thread_ids[index],process_ids[index]))
+            return false;
+    }
+    if (!kernel_thread_bind_process(thread_ids[0],process_ids[1]) ||
+        !scheduler_run_until_idle() ||
+        process_context_test_counts[0]!=2ULL ||
+        process_context_test_counts[1]!=2ULL ||
+        process_active_id()!=0ULL)
+        return false;
+    for (size_t index=0U;index<2U;index++) {
+        if (!process_get_info(process_ids[index],&info) ||
+            info.state!=PROCESS_STATE_EXITED ||
+            !process_reap(process_ids[index]) ||
+            process_get_info(process_ids[index],&info))
+            return false;
+    }
     return true;
 }
 
