@@ -657,6 +657,14 @@ void kernel_main(void) {
 
 #endif
 
+    if (!gdt_tss_initialize()) {
+        serial_write("DAWN-OS: FAIL: GDT/TSS initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: kernel GDT and 64-bit TSS loaded; privilege stack ready\n");
 #ifdef DAWN_KERNEL_TEST
     if (!user_mode_self_test()) {
         serial_write("DAWN-TEST: FAIL: user-mode entry argument validation\n");
@@ -666,14 +674,6 @@ void kernel_main(void) {
     serial_write("DAWN-TEST: PASS: user-mode entry rejects invalid addresses and stack alignment\n");
 #endif
 
-    if (!gdt_tss_initialize()) {
-        serial_write("DAWN-OS: FAIL: GDT/TSS initialization\n");
-#ifdef DAWN_KERNEL_TEST
-        qemu_debug_exit(QEMU_TEST_FAIL);
-#endif
-        cpu_halt_forever();
-    }
-    serial_write("DAWN-OS: kernel GDT and 64-bit TSS loaded; privilege stack ready\n");
 #ifdef DAWN_KERNEL_TEST
     if (!gdt_tss_self_test()) {
         serial_write("DAWN-TEST: FAIL: GDT/TSS selector and stack validation\n");
