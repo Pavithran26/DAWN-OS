@@ -715,6 +715,17 @@ void kernel_main(void) {
                 cpu_halt_forever();
             }
             serial_write("DAWN-TEST: PASS: Local APIC one-shot timer interrupt\n");
+            if (!apic_local_timer_calibrate(100U)) {
+                serial_write("DAWN-TEST: FAIL: Local APIC timer calibration against PIT channel 2\n");
+                qemu_debug_exit(QEMU_TEST_FAIL);
+                cpu_halt_forever();
+            }
+            serial_write("DAWN-OS: Local APIC timer calibrated for ");
+            serial_write_u64(apic_local_timer_calibrated_hz());
+            serial_write(" Hz; initial count ");
+            serial_write_u64(apic_local_timer_calibrated_period_count());
+            serial_write("\n");
+            serial_write("DAWN-TEST: PASS: Local APIC timer calibration\n");
 #endif
         }
     }
@@ -735,7 +746,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards\n");
-    if (!apic_local_timer_start_periodic(10000U) ||
+    if (!apic_local_timer_start_calibrated_periodic() ||
         !scheduler_preemption_self_test()) {
         apic_local_timer_stop();
         serial_write("DAWN-TEST: FAIL: timer-driven kernel-thread preemption\n");
@@ -743,7 +754,13 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     apic_local_timer_stop();
-    serial_write("DAWN-TEST: PASS: timer-driven kernel-thread preemption\n");
+    serial_write("DAWN-TEST: PASS: repeated timer-driven kernel-thread preemption\n");
+    if (!apic_local_timer_periodic_self_test()) {
+        serial_write("DAWN-TEST: FAIL: Local APIC periodic stop/restart checks\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: Local APIC periodic stop/restart checks\n");
 #endif
 
     if (framebuffer_response_valid()) {

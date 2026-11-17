@@ -354,23 +354,35 @@ bool scheduler_self_test(void) {
 }
 
 bool scheduler_preemption_self_test(void) {
+    struct scheduler_stats before={0};
+    struct scheduler_stats after={0};
     const uint64_t saved_flags=read_rflags();
     if (!initialized || current_thread!=&bootstrap_thread || scheduler_running)
         return false;
-    disable_interrupts();
-    ready_cursor=0ULL;
-    preemption_peer_progress=0ULL;
-    preemption_peer_observed=0ULL;
-    preemption_wait_expired=0ULL;
-    restore_interrupt_flag(saved_flags);
+    scheduler_get_stats(&before);
 
-    /* The waiter is deliberately first and does not yield. Only a timer
-     * interrupt can run the second worker before its bounded wait expires. */
-    if (!kernel_thread_create(scheduler_preemption_waiter,NULL,NULL) ||
-        !kernel_thread_create(scheduler_preemption_peer,NULL,NULL) ||
-        !scheduler_run_until_idle()) return false;
-    return preemption_peer_observed==1ULL &&
-           preemption_wait_expired==0ULL &&
-           preemption_peer_progress==1ULL;
+    /* Repeat to exercise DEAD-slot reuse and a worker exiting after its peer
+     * has been preempted by the periodic timer. */
+    for (uint32_t round=0U;round<4U;round++) {
+        disable_interrupts();
+        ready_cursor=0ULL;
+        preemption_peer_progress=0ULL;
+        preemption_peer_observed=0ULL;
+        preemption_wait_expired=0ULL;
+        restore_interrupt_flag(saved_flags);
+        if (!kernel_thread_create(scheduler_preemption_waiter,NULL,NULL) ||
+            !kernel_thread_create(scheduler_preemption_peer,NULL,NULL) ||
+            !scheduler_run_until_idle()) return false;
+        if (preemption_peer_observed!=1ULL ||
+            preemption_wait_expired!=0ULL ||
+            preemption_peer_progress!=1ULL) return false;
+        scheduler_get_stats(&after);
+        if (after.active_threads!=0ULL) return false;
+    }
+
+    scheduler_get_stats(&after);
+    return after.threads_exited>=before.threads_exited+8ULL &&
+           after.context_switches>=before.context_switches+16ULL &&
+           after.active_threads==0ULL;
 }
 #endif

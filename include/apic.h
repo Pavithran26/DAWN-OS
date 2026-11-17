@@ -18,9 +18,14 @@ uint64_t apic_delivered_irq_count(void);
 uint64_t apic_local_timer_tick_count(void);
 bool apic_local_timer_start_oneshot(uint32_t initial_count);
 bool apic_local_timer_start_periodic(uint32_t initial_count);
+bool apic_local_timer_calibrate(uint32_t target_hz);
+bool apic_local_timer_start_calibrated_periodic(void);
+uint32_t apic_local_timer_calibrated_hz(void);
+uint32_t apic_local_timer_calibrated_period_count(void);
 void apic_local_timer_stop(void);
 #ifdef DAWN_KERNEL_TEST
 bool apic_local_timer_self_test(void);
+bool apic_local_timer_periodic_self_test(void);
 #endif
 bool apic_is_initialized(void);
 

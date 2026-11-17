@@ -2,7 +2,7 @@
 
 ## Status
 
-The scheduler uses saved x86-64 interrupt frames for context switches. Voluntary yields use software vector 0x42; Local APIC timer vector 0x41 can preempt a running worker when the periodic timer is armed. The timer count is a raw hardware count with divide-by-16; no calibrated wall-clock frequency is claimed.
+The scheduler uses saved x86-64 interrupt frames for context switches. Voluntary yields use software vector 0x42; Local APIC timer vector 0x41 can preempt a running worker when the periodic timer is armed. The Local APIC timer is calibrated against a 50 ms PIT channel 2 reference and configured for a nominal 100 Hz scheduler tick (10 ms quantum). This is a scheduler reference interval, not a wall-clock clocksource.
 
 ## Thread model
 
@@ -30,7 +30,7 @@ The scheduler disables interrupts while changing thread state. Voluntary yields 
 
 ## Validation
 
-The QEMU self-test creates two worker threads. Each increments an independent counter four times while voluntarily yielding. It checks both counters, unique thread IDs, exactly two thread exits, zero active workers, the yield/switch counters, and intact stack guards. A second test arms the periodic Local APIC timer and makes the first worker busy-wait without yielding; the second worker must run and release it before its bounded wait expires, proving timer-driven preemption.
+The QEMU self-test creates two worker threads. Each increments an independent counter four times while voluntarily yielding. It checks both counters, unique thread IDs, exactly two thread exits, zero active workers, the yield/switch counters, and intact stack guards. A second test runs four preemption rounds. In each round the first worker busy-waits without yielding; the second worker must run on a timer preemption, update shared progress and exit while the first worker is READY. The tests also check repeated DEAD-slot reuse and scheduler switch/exit counts. APIC tests verify multiple periodic deliveries, that ticks stop after masking, and that a restarted timer delivers again.
 
 BIOS and UEFI QEMU tests must retain all earlier ACPI/MADT, xAPIC/IOAPIC real PIT IRQ, page-table and physical allocator tests.
 

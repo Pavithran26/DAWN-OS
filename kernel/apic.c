@@ -19,6 +19,7 @@
 #define LAPIC_SVR 0x0f0U
 #define LAPIC_LVT_TIMER 0x320U
 #define LAPIC_TIMER_INITIAL_COUNT 0x380U
+#define LAPIC_TIMER_CURRENT_COUNT 0x390U
 #define LAPIC_TIMER_DIVIDE_CONFIG 0x3e0U
 
 #define LAPIC_SVR_VECTOR_MASK 0xffU
@@ -36,8 +37,14 @@
 
 #define PIT_COMMAND 0x43U
 #define PIT_CHANNEL0 0x40U
+#define PIT_CHANNEL2 0x42U
+#define PIT_SPEAKER_CONTROL 0x61U
+#define PIT_CHANNEL2_MODE0_LOHI 0xb0U
 #define PIT_BASE_HZ 1193182U
 #define PIT_TEST_HZ 1000U
+#define PIT_CALIBRATION_INTERVAL_MS 50U
+#define PIT_CALIBRATION_COUNT ((PIT_BASE_HZ*PIT_CALIBRATION_INTERVAL_MS)/1000U)
+#define LAPIC_TIMER_CALIBRATION_MAX_POLLS 100000000ULL
 
 static volatile uint32_t *local_apic;
 static volatile uint32_t *io_apic;
@@ -47,6 +54,8 @@ static uint32_t bsp_apic_id;
 static bool initialized;
 static volatile uint64_t delivered_irq_count;
 static volatile uint64_t local_timer_tick_count;
+static uint32_t local_timer_calibrated_hz;
+static uint32_t local_timer_calibrated_period_count;
 
 static void cpu_cpuid(uint32_t leaf, uint32_t subleaf,
                       uint32_t *eax, uint32_t *ebx,
@@ -162,6 +171,20 @@ static void pit_program_frequency(uint32_t frequency_hz) {
                       "Nd"((uint16_t)PIT_CHANNEL0));
 }
 
+static uint64_t cpu_read_rflags(void) {
+    uint64_t flags=0ULL;
+    __asm__ volatile ("pushfq; popq %0" : "=r"(flags));
+    return flags;
+}
+static void cpu_restore_interrupt_flag(uint64_t flags) {
+    if ((flags&(1ULL<<9))!=0ULL)
+        __asm__ volatile ("sti" : : : "memory");
+}
+static inline uint8_t inb(uint16_t port) {
+    uint8_t value=0U;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
 static void cpu_sti(void) {
     __asm__ volatile ("sti" : : : "memory");
 }
@@ -238,6 +261,8 @@ bool apic_initialize(const struct acpi_platform_info *platform) {
     initialized=true;
     delivered_irq_count=0ULL;
     local_timer_tick_count=0ULL;
+    local_timer_calibrated_hz=0U;
+    local_timer_calibrated_period_count=0U;
     return true;
 }
 
@@ -273,6 +298,104 @@ static bool apic_local_timer_start(uint32_t initial_count,bool periodic) {
     return true;
 }
 
+bool apic_local_timer_calibrate(uint32_t target_hz) {
+    const uint64_t saved_flags=cpu_read_rflags();
+    uint8_t speaker_control=0U;
+    uint32_t start_count=0U;
+    uint32_t end_count=0U;
+    uint32_t elapsed_count=0U;
+    uint32_t period_count=0U;
+    bool output_started=false;
+    bool reference_elapsed=false;
+    bool success=false;
+
+    if (!initialized || local_apic==NULL || target_hz<10U || target_hz>1000U)
+        return false;
+
+    cpu_cli();
+    speaker_control=inb((uint16_t)PIT_SPEAKER_CONTROL);
+    local_timer_calibrated_hz=0U;
+    local_timer_calibrated_period_count=0U;
+    apic_local_timer_stop();
+
+    /* PIT channel 2 supplies a 50 ms mode-0 reference. Channel 0 is kept
+     * for the IOAPIC IRQ test; speaker output remains disabled. */
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)(speaker_control&~0x03U)),
+                      "Nd"((uint16_t)PIT_SPEAKER_CONTROL));
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)PIT_CHANNEL2_MODE0_LOHI),
+                      "Nd"((uint16_t)PIT_COMMAND));
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)(PIT_CALIBRATION_COUNT&0xffU)),
+                      "Nd"((uint16_t)PIT_CHANNEL2));
+    __asm__ volatile ("outb %0, %1" : :
+                      "a"((uint8_t)((PIT_CALIBRATION_COUNT>>8)&0xffU)),
+                      "Nd"((uint16_t)PIT_CHANNEL2));
+
+    /* Mode 0 drives OUT2 low until the programmed count expires. */
+    if ((inb((uint16_t)PIT_SPEAKER_CONTROL)&0x20U)==0U) {
+        local_apic_write(LAPIC_LVT_TIMER,
+                         APIC_LOCAL_TIMER_VECTOR|LAPIC_LVT_MASK);
+        local_apic_write(LAPIC_TIMER_DIVIDE_CONFIG,LAPIC_TIMER_DIVIDE_BY_16);
+        local_apic_write(LAPIC_TIMER_INITIAL_COUNT,UINT32_MAX);
+        /* Rising GATE2 starts the PIT one-shot. */
+        __asm__ volatile ("outb %0, %1" : :
+                          "a"((uint8_t)((speaker_control&~0x02U)|0x01U)),
+                          "Nd"((uint16_t)PIT_SPEAKER_CONTROL));
+        start_count=local_apic_read(LAPIC_TIMER_CURRENT_COUNT);
+        output_started=true;
+    }
+
+    if (output_started) {
+        for (uint64_t attempt=0ULL;attempt<LAPIC_TIMER_CALIBRATION_MAX_POLLS;attempt++) {
+            if ((inb((uint16_t)PIT_SPEAKER_CONTROL)&0x20U)!=0U) {
+                reference_elapsed=true;
+                break;
+            }
+            cpu_pause();
+        }
+    }
+
+    if (reference_elapsed) {
+        end_count=local_apic_read(LAPIC_TIMER_CURRENT_COUNT);
+        if (end_count<start_count) {
+            elapsed_count=start_count-end_count;
+            if (elapsed_count>0U) {
+                const uint64_t numerator=(uint64_t)elapsed_count*1000ULL;
+                const uint64_t denominator=(uint64_t)PIT_CALIBRATION_INTERVAL_MS*
+                                            (uint64_t)target_hz;
+                const uint64_t calculated=numerator/denominator;
+                if (calculated>0ULL && calculated<=UINT32_MAX) {
+                    period_count=(uint32_t)calculated;
+                    success=true;
+                }
+            }
+        }
+    }
+
+    apic_local_timer_stop();
+    __asm__ volatile ("outb %0, %1" : : "a"(speaker_control),
+                      "Nd"((uint16_t)PIT_SPEAKER_CONTROL));
+    if (success) {
+        local_timer_calibrated_hz=target_hz;
+        local_timer_calibrated_period_count=period_count;
+    }
+    cpu_restore_interrupt_flag(saved_flags);
+    return success;
+}
+
+bool apic_local_timer_start_calibrated_periodic(void) {
+    if (local_timer_calibrated_hz==0U ||
+        local_timer_calibrated_period_count==0U) return false;
+    return apic_local_timer_start_periodic(local_timer_calibrated_period_count);
+}
+
+uint32_t apic_local_timer_calibrated_hz(void) {
+    return local_timer_calibrated_hz;
+}
+
+uint32_t apic_local_timer_calibrated_period_count(void) {
+    return local_timer_calibrated_period_count;
+}
+
 bool apic_local_timer_start_oneshot(uint32_t initial_count) {
     return apic_local_timer_start(initial_count,false);
 }
@@ -297,6 +420,46 @@ bool apic_local_timer_self_test(void) {
     if (!apic_local_timer_start_oneshot(1000000U)) return false;
     cpu_sti();
     for (uint64_t attempt=0ULL;attempt<100000000ULL;attempt++) {
+        if (apic_local_timer_tick_count()>initial_ticks) {
+            delivered=true;
+            break;
+        }
+        cpu_pause();
+    }
+    cpu_cli();
+    apic_local_timer_stop();
+    return delivered;
+}
+bool apic_local_timer_periodic_self_test(void) {
+    uint64_t initial_ticks=0ULL;
+    uint64_t stopped_ticks=0ULL;
+    bool delivered=false;
+    if (local_timer_calibrated_hz==0U ||
+        local_timer_calibrated_period_count==0U) return false;
+
+    if (!apic_local_timer_start_calibrated_periodic()) return false;
+    initial_ticks=apic_local_timer_tick_count();
+    cpu_sti();
+    for (uint64_t attempt=0ULL;attempt<LAPIC_TIMER_CALIBRATION_MAX_POLLS;attempt++) {
+        if (apic_local_timer_tick_count()>=initial_ticks+3ULL) {
+            delivered=true;
+            break;
+        }
+        cpu_pause();
+    }
+    cpu_cli();
+    apic_local_timer_stop();
+    if (!delivered) return false;
+
+    stopped_ticks=apic_local_timer_tick_count();
+    for (uint64_t attempt=0ULL;attempt<10000000ULL;attempt++) cpu_pause();
+    if (apic_local_timer_tick_count()!=stopped_ticks) return false;
+
+    if (!apic_local_timer_start_calibrated_periodic()) return false;
+    initial_ticks=apic_local_timer_tick_count();
+    cpu_sti();
+    delivered=false;
+    for (uint64_t attempt=0ULL;attempt<LAPIC_TIMER_CALIBRATION_MAX_POLLS;attempt++) {
         if (apic_local_timer_tick_count()>initial_ticks) {
             delivered=true;
             break;

@@ -24,7 +24,7 @@ During the bounded PIT test only, the MADT-resolved ISA IRQ0 GSI is programmed a
 
 ## Local APIC timer
 
-The BSP Local APIC timer has a dedicated IDT vector (0x41), separate from the IOAPIC PIT route (0x40). Initialization leaves the timer masked with an initial count of zero. The timer handler increments a monotonic tick counter and acknowledges the Local APIC with EOI. The driver exposes explicit one-shot and periodic start calls plus a stop call; each start configures divide-by-16 and accepts a raw hardware count. No timer frequency is claimed: calibration against a reference clock is a separate requirement before selecting a scheduler quantum. The QEMU self-test arms a bounded one-shot and verifies delivery before masking and stopping it again. A separate scheduler self-test arms the periodic timer and verifies that a busy-waiting worker is preempted so a peer worker can run. The scheduler's software reschedule vector (0x42) does not send a LAPIC EOI.
+The BSP Local APIC timer has a dedicated IDT vector (0x41), separate from the IOAPIC PIT route (0x40). Initialization leaves the timer masked with an initial count of zero. The timer handler increments a monotonic tick counter and acknowledges the Local APIC with EOI. The driver exposes explicit one-shot and periodic start calls plus a stop call; each start configures divide-by-16 and accepts a raw hardware count. A calibration routine uses PIT channel 2 mode 0 for a 50 ms reference interval (channel 0 remains reserved for the IOAPIC PIT test), measures the LAPIC current-count delta, and derives a requested periodic count. The PC speaker is disabled during measurement and its control-port state is restored afterward. The current scheduler target is 100 Hz (nominal 10 ms); the calibrated raw count is reported rather than treating it as milliseconds. The QEMU self-test arms a bounded one-shot and verifies delivery before masking and stopping it again. The periodic tests verify multiple tick deliveries, stop stability, restart and another delivery. The scheduler self-test runs four rounds in which a busy-waiting worker is preempted so a peer worker can run and exit. The scheduler's software reschedule vector (0x42) does not send a LAPIC EOI.
 
 ## Deliberate limits
 
@@ -32,8 +32,8 @@ The BSP Local APIC timer has a dedicated IDT vector (0x41), separate from the IO
 - One IOAPIC is supported in this increment. Systems with multiple IOAPICs are rejected instead of guessed.
 - Only the ISA PIT IRQ0 route is enabled in the test path. Other IOAPIC inputs remain masked.
 - No general device-driver IRQ registration API yet.
-- Local timer counts are not calibrated to nanoseconds or hertz; no scheduler quantum is derived from them yet.
-- The periodic Local APIC timer can preempt a single-CPU kernel thread through saved interrupt frames and the scheduler's round-robin dispatcher. Its raw counter is not yet calibrated to wall-clock time.
+- Calibration is relative to the PIT reference clock; it is not a wall-clock or nanosecond clocksource and does not claim invariant behavior across power states.
+- The periodic Local APIC timer can preempt a single-CPU kernel thread through saved interrupt frames and the scheduler's round-robin dispatcher. The configured scheduler target is 100 Hz.
 - Physical hardware validation is not claimed; current verification is QEMU BIOS and OVMF UEFI.
 
 ## QEMU verification

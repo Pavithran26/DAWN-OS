@@ -14,15 +14,15 @@ The code now includes a single-CPU kernel-thread scheduler that can switch saved
 - Four-level page-table manager, mapping permissions, software translation and MMIO mapping.
 - x86_64 IDT and exception dispatch, PIC masking, ACPI MADT discovery, xAPIC and IOAPIC setup.
 - IOAPIC-routed PIT interrupt delivery test.
-- Local APIC timer vector 0x41, one-shot and periodic controls, EOI handling and one-shot delivery test.
-- Saved interrupt-frame switching, kernel-only software reschedule vector 0x42, cooperative yield, thread exit and timer-driven round-robin preemption path.
+- Local APIC timer vector 0x41, one-shot and periodic controls, EOI handling, PIT channel 2 reference calibration, nominal 100 Hz scheduler-tick configuration and periodic stop/restart self-tests.
+- Saved interrupt-frame switching, kernel-only software reschedule vector 0x42, cooperative yield, thread exit and four-round timer-driven round-robin preemption stress test.
 - Fixed-capacity worker pool, stack guards, monotonic thread IDs and DEAD-slot reuse checks.
 
 ## Remaining Phase B work
 
-1. Calibrate the Local APIC timer against a reliable reference clock; do not describe raw timer counts as milliseconds or hertz.
-2. Define and test a scheduler quantum policy and bounded timer configuration.
-3. Add stress coverage for repeated preemption, worker exit during preemption, timer stop/restart, stack guards and scheduler state transitions.
+1. Review calibration accuracy, PIT channel 2 mode-0 behavior and timer-count bounds on both QEMU firmware paths.
+2. Add longer-running scheduler stress coverage, including timer preemption while workers are near exit and repeated stop/restart under load.
+3. Complete interrupt-safe diagnostics and shared-state critical-section review.
 4. Review interrupt-safe diagnostics and all shared-state critical sections.
 5. Run and pass the complete QEMU BIOS and OVMF UEFI build/boot/self-test matrix after the code changes.
 
