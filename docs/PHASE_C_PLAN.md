@@ -171,3 +171,11 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Added a bounded self-test fixture that allocates two physical pages, maps separate user code and writable stack pages, checks a valid frame and rejects code/stack permission mismatches, then unmaps and frees both frames.
 - Validation is performed against the currently active CR3, so the same policy applies to whichever process address space is active on a CPL3 syscall.
 - No build, QEMU, or CI validation is claimed. User-mode process launch remains disabled.
+
+
+## Guarded user-entry context validation (2026-11-17)
+
+- User entry validation now requires CPL0, IF clear, a nonzero active process ID, a READY process record, the process-owned TSS.RSP0 stack, and that process address space to be the active CR3.
+- Entry RIP must map to a user executable page and the initial stack top must resolve to a user writable page in that active root.
+- Extended the user-mode self-test to create a temporary process, map separate code and stack pages, activate its address space, accept a valid entry, reject a writable/non-executable code address and reject a misaligned stack, then deactivate/reap the process and free its user frames.
+- The low-level iretq entry primitive remains a non-returning primitive, not a scheduler-managed user process launch. No build, QEMU, or CI validation is claimed.

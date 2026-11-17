@@ -66,3 +66,11 @@
 - Added self-test mapping fixtures with allocated physical pages, permission-negative cases, and cleanup.
 - Checks use the active address space. This hardens return-frame validation but does not implement user-mode scheduling, recoverable exceptions, or process exit.
 - Compilation and emulator validation remain pending.
+
+
+## Guarded user-entry context validation (2026-11-17)
+
+- user_mode_validate_entry now requires a READY process to be active with its own CR3 root and TSS.RSP0 stack, CPL0, and interrupts disabled.
+- The entry point must be user executable; the initial stack must be user writable and correctly aligned.
+- Self-test now creates and activates a temporary process with private code/stack mappings, tests positive and negative entry parameters, then tears down the process and caller-owned frames.
+- This validates launch preconditions only. Safe scheduler continuation, user timer preemption, recoverable user faults and process exit are still outstanding. Build and emulator checks remain pending.
