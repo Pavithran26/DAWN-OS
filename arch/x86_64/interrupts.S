@@ -417,6 +417,14 @@ isr_spurious_stub:
     jmp isr_common
 .size isr_spurious_stub, . - isr_spurious_stub
 
+ .global isr_syscall_stub
+.type isr_syscall_stub, @function
+isr_syscall_stub:
+    pushq $0
+    pushq $128
+    jmp isr_common
+.size isr_syscall_stub, . - isr_syscall_stub
+
 isr_common:
     cld
     pushq %rax

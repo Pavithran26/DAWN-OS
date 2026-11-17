@@ -94,3 +94,14 @@ Build a small, auditable userspace environment with a documented privilege bound
 - GUI desktop, terminal emulator, file manager, partition editor, and task manager.
 - Networking and remote filesystems.
 - Dynamic linking, package manager, writable production filesystem, and physical hardware claims.
+
+
+## Syscall interrupt-gate foundation (2026-11-17)
+
+- Installed vector `0x80` as a present, DPL3 64-bit interrupt gate.
+- Added an assembly entry stub that normalizes the vector/error-code prefix and reuses the common register-save/`iretq` path.
+- The interrupt dispatcher maps the documented x86-64 register ABI into `syscall_dispatch` and returns the result in RAX.
+- The interrupt frame type documents optional saved RSP/SS fields that exist only after a privilege transition; same-CPL handlers must not read them.
+- Added a CPL0 software-interrupt smoke test for ABI-version dispatch and gate attributes.
+
+This enables interrupt-gate dispatch but does not prove ring-3 execution. A ring-3 caller, per-process kernel stack switching, user-mode return path, and process isolation remain outstanding. No build, emulator, or CI validation is claimed for this source change.

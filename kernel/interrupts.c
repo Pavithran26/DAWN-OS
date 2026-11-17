@@ -5,6 +5,7 @@
 #include "interrupts.h"
 #include "apic.h"
 #include "scheduler.h"
+#include "syscall.h"
 
 #define IDT_ENTRIES 256U
 #define IDT_EXCEPTION_COUNT 32U
@@ -24,6 +25,7 @@
 #define SERIAL_POLL_LIMIT 100000U
 
 #define IDT_INTERRUPT_GATE 0x8eU
+#define IDT_USER_INTERRUPT_GATE 0xeeU
 #define INTERRUPT_VECTOR_TIMER 32U
 #define INTERRUPT_VECTOR_PIC_LAST 47U
 
@@ -48,14 +50,17 @@ _Static_assert(offsetof(struct interrupt_frame, vector) == 120U,
                "ISR register save order does not match C frame");
 _Static_assert(offsetof(struct interrupt_frame, rip) == 136U,
                "ISR error/vector frame layout mismatch");
-_Static_assert(sizeof(struct interrupt_frame) == 160U,
-               "same-privilege interrupt frame layout mismatch");
+_Static_assert(offsetof(struct interrupt_frame, user_rsp) == 160U,
+               "privilege-transition stack fields must follow same-CPL frame");
+_Static_assert(sizeof(struct interrupt_frame) == 176U,
+               "maximum privilege-transition interrupt frame layout mismatch");
 
 extern void isr_default_stub(void);
 extern void isr_spurious_stub(void);
 extern void isr_stub_64(void);
 extern void isr_stub_65(void);
 extern void isr_stub_66(void);
+extern void isr_syscall_stub(void);
 extern void (*isr_stub_table[48])(void);
 
 static struct idt_entry idt[IDT_ENTRIES] __attribute__((aligned(16)));
@@ -122,16 +127,21 @@ static void serial_write_hex(uint64_t value) {
     }
 }
 
-static void idt_set_gate(uint8_t vector, void (*handler)(void)) {
+static void idt_set_gate_attributes(uint8_t vector, void (*handler)(void),
+                                    uint8_t attributes) {
     const uint64_t address=(uint64_t)(uintptr_t)handler;
     struct idt_entry *entry=&idt[vector];
     entry->offset_low=(uint16_t)(address & 0xffffULL);
     entry->selector=kernel_cs;
     entry->ist=0U;
-    entry->attributes=IDT_INTERRUPT_GATE;
+    entry->attributes=attributes;
     entry->offset_middle=(uint16_t)((address>>16)&0xffffULL);
     entry->offset_high=(uint32_t)(address>>32);
     entry->reserved=0U;
+}
+
+static void idt_set_gate(uint8_t vector, void (*handler)(void)) {
+    idt_set_gate_attributes(vector,handler,IDT_INTERRUPT_GATE);
 }
 
 static void pic_write_masks(uint8_t master,uint8_t slave) {
@@ -208,6 +218,12 @@ struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame) {
         for (;;) __asm__ volatile ("cli; hlt" : : : "memory");
     }
 
+    if (frame->vector==(uint64_t)DAWN_SYSCALL_VECTOR) {
+        frame->rax=(uint64_t)syscall_dispatch(
+            frame->rax,frame->rdi,frame->rsi,frame->rdx,
+            frame->r10,frame->r8,frame->r9);
+        return frame;
+    }
     if (frame->vector==255ULL) {
         /* APIC spurious interrupts are not in the in-service register: no EOI. */
         ++spurious_interrupt_count;
@@ -262,6 +278,9 @@ bool interrupts_initialize(void) {
     idt_set_gate((uint8_t)APIC_IO_IRQ_VECTOR,isr_stub_64);
     idt_set_gate((uint8_t)APIC_LOCAL_TIMER_VECTOR,isr_stub_65);
     idt_set_gate((uint8_t)SCHEDULER_RESCHEDULE_VECTOR,isr_stub_66);
+    /* DPL3 callers enter on the TSS.RSP0 stack. */
+    idt_set_gate_attributes((uint8_t)DAWN_SYSCALL_VECTOR,isr_syscall_stub,
+                            IDT_USER_INTERRUPT_GATE);
 
     descriptor.limit=(uint16_t)(sizeof(idt)-1U);
     descriptor.base=(uint64_t)(uintptr_t)&idt[0];
@@ -293,6 +312,16 @@ bool interrupts_self_test(void) {
     __asm__ volatile ("int3" : : : "memory");
     breakpoint_expected=false;
     if (breakpoint_count!=1ULL) return false;
+
+    /* CPL0 may execute the DPL3 gate too; exercise the real IDT dispatch. */
+    {
+        uint64_t result=UINT64_MAX;
+        __asm__ volatile ("xor %%eax, %%eax; int $0x80"
+                          : "=a"(result) : : "rcx","r11","memory","cc");
+        if (result!=(uint64_t)DAWN_SYSCALL_ABI_VERSION ||
+            idt[DAWN_SYSCALL_VECTOR].attributes!=IDT_USER_INTERRUPT_GATE)
+            return false;
+    }
 
     /* APIC vector 0xFF is spurious and must return without sending an EOI. */
     __asm__ volatile ("int $0xff" : : : "memory");

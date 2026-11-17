@@ -13,6 +13,9 @@ struct interrupt_frame {
     uint64_t rip;
     uint64_t cs;
     uint64_t rflags;
+    /* Present only after a CPL3->CPL0 transition through TSS.RSP0. */
+    uint64_t user_rsp;
+    uint64_t user_ss;
 };
 
 struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame);
