@@ -301,6 +301,7 @@ static bool process_manager_self_test_locked(void) {
         !process_get_info(ids[0],&info) ||
         !vm_address_space_is_active(&processes[0].address_space) ||
         gdt_tss_kernel_stack_top()!=info.kernel_stack_top ||
+        !process_mark_ready(ids[1]) ||
         !process_switch_to(ids[1]) ||
         process_active_id()!=ids[1] ||
         !vm_address_space_is_active(&processes[1].address_space) ||

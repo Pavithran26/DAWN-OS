@@ -18,7 +18,7 @@ The first Phase C foundation increment is present on `main`:
 - The page-table self-test creates a temporary user mapping and exercises copy-in/copy-out and invalid-range cases.
 - The kernel test calls the dispatcher directly and checks ABI-version, descriptor, pointer, length, and unsupported-call errors.
 
-**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address-space and process resource lifecycle primitives now exist, including a controlled CPL0 CR3/TSS.RSP0 activation boundary. Scheduler integration, a safe user return path, and an ELF64 loader are still absent. No ring-3 program has been run. Do not describe user programs as runnable.
+**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address spaces, process resource lifecycle, and scheduler-bound CPL0 process-context switching now exist. A safe user return path and ELF64 loader are still absent. No ring-3 program has been run. Do not describe user programs as runnable.
 
 The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
 
