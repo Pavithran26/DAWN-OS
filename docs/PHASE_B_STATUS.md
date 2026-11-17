@@ -20,7 +20,7 @@ The code now includes a single-CPU kernel-thread scheduler that can switch saved
 
 ## Remaining Phase B work
 
-1. Review calibration accuracy, PIT channel 2 mode-0 behavior and timer-count bounds on both QEMU firmware paths.
+1. Review calibration accuracy, PIT channel 2 mode-0 behavior and timer-count bounds on both QEMU firmware paths; add measurement tolerance checks.
 2. Add longer-running scheduler stress coverage, including timer preemption while workers are near exit and repeated stop/restart under load.
 3. Complete interrupt-safe diagnostics and shared-state critical-section review.
 4. Run and pass the complete QEMU BIOS and OVMF UEFI build/boot/self-test matrix after the code changes.

@@ -26,6 +26,7 @@ void apic_local_timer_stop(void);
 #ifdef DAWN_KERNEL_TEST
 bool apic_local_timer_self_test(void);
 bool apic_local_timer_periodic_self_test(void);
+bool apic_local_timer_api_self_test(void);
 #endif
 bool apic_is_initialized(void);
 

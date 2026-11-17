@@ -761,6 +761,12 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: Local APIC periodic stop/restart checks\n");
+    if (!apic_local_timer_api_self_test()) {
+        serial_write("DAWN-TEST: FAIL: Local APIC timer invalid-argument checks\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: Local APIC timer invalid-argument checks\n");
 #endif
 
     if (framebuffer_response_valid()) {

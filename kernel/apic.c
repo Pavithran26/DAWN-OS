@@ -449,6 +449,7 @@ bool apic_local_timer_periodic_self_test(void) {
     }
     cpu_cli();
     apic_local_timer_stop();
+    apic_local_timer_stop();
     if (!delivered) return false;
 
     stopped_ticks=apic_local_timer_tick_count();
@@ -469,6 +470,19 @@ bool apic_local_timer_periodic_self_test(void) {
     cpu_cli();
     apic_local_timer_stop();
     return delivered;
+}
+
+bool apic_local_timer_api_self_test(void) {
+    const uint32_t calibrated_hz=local_timer_calibrated_hz;
+    const uint32_t calibrated_count=local_timer_calibrated_period_count;
+    if (!initialized || calibrated_hz==0U || calibrated_count==0U) return false;
+    if (apic_local_timer_start_oneshot(0U) ||
+        apic_local_timer_start_periodic(0U) ||
+        apic_local_timer_calibrate(0U) ||
+        apic_local_timer_calibrate(9U) ||
+        apic_local_timer_calibrate(1001U)) return false;
+    return local_timer_calibrated_hz==calibrated_hz &&
+           local_timer_calibrated_period_count==calibrated_count;
 }
 #endif
 
