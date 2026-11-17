@@ -50,3 +50,11 @@
 - Validates user CS/SS selectors, lower-canonical RIP/RSP, fixed RFLAGS bit, and rejects IOPL/NT/VM states.
 - Added synthetic positive and negative frame tests to the interrupt self-test.
 - This does not yet provide a safe user-mode return path or prove CPL3 execution. Build and emulator validation remain pending.
+
+
+## CPL3 syscall dispatch gate (2026-11-17)
+
+- Interrupt dispatch now validates CPL3-origin frames and permits only vector 0x80 from user mode. All other user-origin traps are rejected through the fatal path until user-mode scheduling and exception handling are ready.
+- Valid CPL3 syscall frames are passed to the bounded syscall dispatcher and returned through the common saved-frame/iretq epilogue. CPL0 syscall smoke tests remain supported.
+- Added a synthetic CPL3 syscall dispatch test for ABI-version result placement. This is not a hardware ring-3 transition test.
+- Ring-3 process launch is still not enabled: scheduler ownership of user trap stacks, user-mode timer preemption, recoverable user exceptions, and process exit are outstanding. Build, QEMU and CI validation remain pending.

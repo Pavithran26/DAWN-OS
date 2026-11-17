@@ -152,3 +152,13 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Validation requires the configured ring-3 code/data selectors, lower-canonical user RIP/RSP, the architectural fixed RFLAGS bit, and rejects IOPL, NT, and VM flag states.
 - Added synthetic kernel-frame and user-frame tests, including invalid selector, privileged RFLAGS, and non-user-canonical RIP cases.
 - This is a trap-frame contract and validation foundation only. It does not create a user return continuation, launch CPL3 code, or establish that the assembly/scheduler path safely resumes user tasks. No build, QEMU, or CI result is claimed.
+
+
+## CPL3 syscall dispatch gate (2026-11-17)
+
+- The common interrupt dispatcher now classifies the saved CS privilege level before handling a trap.
+- CPL3 frames must pass the user-context validator and may currently enter only through vector 0x80. Invalid user frames and all other user-origin traps fail closed in the kernel fatal path.
+- This deliberately prevents CPL3 timer/exception frames from entering the existing CPL0 kernel-thread scheduler, whose saved-frame and stack ownership model is not yet compatible with user frames.
+- Valid CPL3 syscall frames use the existing bounded syscall dispatcher. The common assembly epilogue restores the returned frame and iretq consumes the privilege-transition RSP/SS tail when returning to CPL3.
+- Added a synthetic CPL3 ABI-version syscall dispatch test. It checks dispatcher policy and RAX result placement, not the hardware privilege transition or full process lifecycle.
+- User-mode launch remains disabled pending an isolated-process end-to-end test, user trap-stack ownership, preemption policy, and a working exit path. No build, QEMU, or CI result is claimed.

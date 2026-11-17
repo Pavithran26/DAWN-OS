@@ -245,6 +245,20 @@ struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame) {
         for (;;) __asm__ volatile ("cli; hlt" : : : "memory");
     }
 
+    /*
+     * Until user-mode scheduling is implemented, accept CPL3 traps only for
+     * the synchronous syscall gate. Never feed a user-origin timer frame into
+     * the CPL0 kernel-thread scheduler: its stack ownership and saved-frame
+     * invariants are different.
+     */
+    if ((frame->cs & 3ULL)==3ULL) {
+        if (!interrupt_frame_user_context_valid(frame) ||
+            frame->vector!=(uint64_t)DAWN_SYSCALL_VECTOR)
+            interrupt_fatal(frame);
+    } else if ((frame->cs & 3ULL)!=0ULL) {
+        interrupt_fatal(frame);
+    }
+
     if (frame->vector==(uint64_t)DAWN_SYSCALL_VECTOR) {
         frame->rax=(uint64_t)syscall_dispatch(
             frame->rax,frame->rdi,frame->rsi,frame->rdx,
@@ -373,6 +387,25 @@ bool interrupts_self_test(void) {
                           : "=a"(result) : : "rcx","r11","memory","cc");
         if (result!=(uint64_t)DAWN_SYSCALL_ABI_VERSION ||
             idt[DAWN_SYSCALL_VECTOR].attributes!=IDT_USER_INTERRUPT_GATE)
+            return false;
+    }
+
+    /*
+     * Exercise CPL3 syscall dispatch with a synthetic hardware frame. This
+     * validates dispatch policy and result placement, not a hardware CPL3
+     * transition; the latter requires an isolated user process test.
+     */
+    {
+        struct interrupt_frame frame={0};
+        frame.vector=(uint64_t)DAWN_SYSCALL_VECTOR;
+        frame.cs=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL;
+        frame.user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
+        frame.rip=0x400000ULL;
+        frame.user_rsp=0x7ffffff000ULL;
+        frame.rflags=0x202ULL;
+        frame.rax=DAWN_SYS_ABI_VERSION;
+        if (interrupt_dispatch(&frame)!=&frame ||
+            frame.rax!=(uint64_t)DAWN_SYSCALL_ABI_VERSION)
             return false;
     }
 
