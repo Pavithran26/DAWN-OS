@@ -7,6 +7,7 @@
 #define GDT_ENTRY_COUNT 7U
 #define PRIVILEGE_STACK_SIZE 16384U
 #define TSS_TYPE_AVAILABLE_64 0x9ULL
+#define TSS_TYPE_BUSY_64 0x0bULL
 
 struct tss64 {
     uint32_t reserved0;
@@ -103,7 +104,9 @@ bool gdt_tss_self_test(void) {
     uint16_t selector=0U;
     __asm__ volatile ("str %0" : "=r"(selector));
     if (!initialized || selector!=(uint16_t)DAWN_TSS_SELECTOR ||
-        ((gdt[5]>>40)&0x0fULL)!=TSS_TYPE_AVAILABLE_64 ||
+        ((gdt[5]>>40)&0x0fULL)!=TSS_TYPE_BUSY_64 ||
+        ((gdt[3]>>45)&0x03ULL)!=0x03ULL ||
+        ((gdt[4]>>45)&0x03ULL)!=0x03ULL ||
         (gdt[5]&(1ULL<<47))==0ULL ||
         !canonical_address(original) || (original&0x0fULL)!=0ULL ||
         !gdt_tss_set_kernel_stack(temporary) ||
