@@ -2,11 +2,11 @@
 
 ## Status
 
-Planning document only. Phase C runtime code is not enabled yet.
+Phase C foundation code is in progress. The kernel has ABI/syscall, GDT/TSS, ring-3 entry validation, isolated address-space, privilege-stack, and process-resource lifecycle primitives. No user process has been launched; this is not yet a runnable userspace environment.
 
-The current kernel has a Limine boot path, physical and virtual memory managers, ACPI/xAPIC/IOAPIC interrupt handling, a Local APIC timer, interrupt-frame context switching, and a single-CPU timer-preemptive kernel-thread scheduler. Phase B remains in progress until its BIOS and UEFI QEMU test matrix, timer calibration, and scheduler stress checks are verified. Phase C runtime code is not enabled.
+The current kernel also has physical and virtual memory managers, ACPI/xAPIC/IOAPIC interrupt handling, a Local APIC timer, interrupt-frame context switching, and a single-CPU timer-preemptive kernel-thread scheduler. Phase B remains in progress until its BIOS and UEFI QEMU test matrix, timer calibration, and scheduler stress checks are verified.
 
-Phase C must not be represented as complete or bootable until those prerequisites and the tests below exist.
+Phase C must not be represented as complete or bootable until the prerequisites and acceptance tests below exist.
 
 ## Current implementation snapshot (2026-11-17)
 
@@ -18,7 +18,7 @@ The first Phase C foundation increment is present on `main`:
 - The page-table self-test creates a temporary user mapping and exercises copy-in/copy-out and invalid-range cases.
 - The kernel test calls the dispatcher directly and checks ABI-version, descriptor, pointer, length, and unsupported-call errors.
 
-**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present; no ring-3 program has been run, no isolated process address space or process lifecycle exists, and no ELF64 loader exists. The current page-table manager still operates on the active kernel root. Do not describe user programs as runnable.
+**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address-space and process resource lifecycle primitives now exist, but process-specific CR3/stack switching, scheduler integration, a safe user return path, and an ELF64 loader are still absent. No ring-3 program has been run. Do not describe user programs as runnable.
 
 The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
 
@@ -32,7 +32,7 @@ The kernel now has a dedicated GDT/TSS initialization increment:
 - Adds self-test coverage for TR selector, descriptor type/presence, RSP0 canonicality/alignment, and stack setter rejection/restore.
 - Initialization runs before IDT setup. No user-mode transition is attempted.
 
-**Still outstanding:** no executed ring-3 task, per-process kernel-stack lifecycle, process-specific CR3/address-space ownership, process lifecycle, or ELF loader. The privilege stack is prepared only. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
+**Still outstanding:** no executed ring-3 task, scheduler-bound process lifecycle, process-specific CR3/stack switching, or ELF loader. The privilege stacks are now owned by process resource records, but are not switched during execution. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
 
 ## Goals
 
@@ -121,7 +121,7 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Added a bounded pool of four 16 KiB, 16-byte-aligned kernel privilege stacks, reserved independently of the bootstrap TSS stack.
 - Added allocate, activate and release APIs. Activation accepts only the bootstrap stack or a currently allocated pool stack; release rejects the currently active TSS.RSP0 stack.
 - The GDT/TSS self-test now exercises two distinct allocations, activation, active-stack release rejection, restoration of the bootstrap stack, release, and stale-handle rejection.
-- This is a stack-resource primitive only. It does not yet bind stacks to process objects, switch stacks during a scheduler context switch, or permit safe ring-3 execution. Callers must serialize operations with interrupts disabled on the current single CPU.
+- The subsequent process resource manager now assigns these stacks to process records. It still does not switch stacks during scheduler context switches or permit safe ring-3 execution. Callers must serialize operations with interrupts disabled on the current single CPU.
 - No build, QEMU, or CI validation is claimed for this source update.
 
 
