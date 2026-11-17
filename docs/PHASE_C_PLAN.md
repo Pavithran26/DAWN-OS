@@ -162,3 +162,12 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Valid CPL3 syscall frames use the existing bounded syscall dispatcher. The common assembly epilogue restores the returned frame and iretq consumes the privilege-transition RSP/SS tail when returning to CPL3.
 - Added a synthetic CPL3 ABI-version syscall dispatch test. It checks dispatcher policy and RAX result placement, not the hardware privilege transition or full process lifecycle.
 - User-mode launch remains disabled pending an isolated-process end-to-end test, user trap-stack ownership, preemption policy, and a working exit path. No build, QEMU, or CI result is claimed.
+
+
+## Mapped CPL3 return-context validation (2026-11-17)
+
+- Strengthened user trap-frame validation to require the saved RIP to resolve to a user, executable, non-NX page in the active address space.
+- The saved user RSP must point just above a mapped user-writable stack byte; this supports a conventional stack-top value while rejecting supervisor-only, read-only, or unmapped stacks.
+- Added a bounded self-test fixture that allocates two physical pages, maps separate user code and writable stack pages, checks a valid frame and rejects code/stack permission mismatches, then unmaps and frees both frames.
+- Validation is performed against the currently active CR3, so the same policy applies to whichever process address space is active on a CPL3 syscall.
+- No build, QEMU, or CI validation is claimed. User-mode process launch remains disabled.

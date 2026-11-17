@@ -7,6 +7,8 @@
 #include "apic.h"
 #include "scheduler.h"
 #include "syscall.h"
+#include "page_table.h"
+#include "physical_memory.h"
 
 #define IDT_ENTRIES 256U
 #define IDT_EXCEPTION_COUNT 32U
@@ -156,6 +158,8 @@ bool interrupt_frame_from_user(const struct interrupt_frame *frame) {
 }
 
 bool interrupt_frame_user_context_valid(const struct interrupt_frame *frame) {
+    uint64_t physical=0ULL;
+    uint32_t code_flags=0U,stack_flags=0U;
     if (!interrupt_frame_from_user(frame)) return false;
 
     /* Do not inspect user_rsp/user_ss until CPL3 origin has been established. */
@@ -168,8 +172,78 @@ bool interrupt_frame_user_context_valid(const struct interrupt_frame *frame) {
     if ((frame->rflags & RFLAGS_FIXED_BIT) == 0ULL ||
         (frame->rflags & (RFLAGS_IOPL_MASK | RFLAGS_NT | RFLAGS_VM)) != 0ULL)
         return false;
+
+    /* Validate the actual return instruction and writable user stack mapping. */
+    if (!vm_translate(frame->rip,&physical,&code_flags) ||
+        (code_flags&(uint32_t)VM_PAGE_USER)==0U ||
+        (code_flags&(uint32_t)VM_PAGE_EXECUTE)==0U ||
+        (code_flags&(uint32_t)VM_PAGE_NO_EXECUTE)!=0U)
+        return false;
+    if (!vm_translate(frame->user_rsp-1ULL,&physical,&stack_flags) ||
+        (stack_flags&(uint32_t)VM_PAGE_USER)==0U ||
+        (stack_flags&(uint32_t)VM_PAGE_WRITE)==0U)
+        return false;
     return true;
 }
+
+#ifdef DAWN_KERNEL_TEST
+static bool interrupt_find_and_map_user_test_page(uint64_t physical,
+                                                   uint32_t flags,
+                                                   uint64_t *virtual_address) {
+    uint64_t translated=0ULL;
+    if (virtual_address==NULL) return false;
+    for (uint64_t pml4=1ULL;pml4<256ULL;pml4++) {
+        for (uint64_t pdpt=0ULL;pdpt<512ULL;pdpt++) {
+            const uint64_t candidate=(pml4<<39)|(pdpt<<30)|0x23456000ULL;
+            if (candidate>=USER_CANONICAL_LIMIT) continue;
+            if (vm_translate(candidate,&translated,NULL)) continue;
+            if (vm_map_page(candidate,physical,flags)) {
+                *virtual_address=candidate;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool interrupt_user_frame_mapping_self_test(void) {
+    uint64_t code_physical=0ULL,stack_physical=0ULL;
+    uint64_t code_virtual=0ULL,stack_virtual=0ULL;
+    bool code_mapped=false,stack_mapped=false,result=false;
+    struct interrupt_frame frame={0};
+    if (!physical_allocator_allocate(&code_physical)) return false;
+    if (!physical_allocator_allocate(&stack_physical)) {
+        (void)physical_allocator_free(code_physical);
+        return false;
+    }
+    code_mapped=interrupt_find_and_map_user_test_page(
+        code_physical,(uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_EXECUTE,
+        &code_virtual);
+    if (code_mapped) {
+        stack_mapped=interrupt_find_and_map_user_test_page(
+            stack_physical,(uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE,
+            &stack_virtual);
+    }
+    if (code_mapped && stack_mapped) {
+        frame.cs=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL;
+        frame.user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
+        frame.rip=code_virtual+16ULL;
+        frame.user_rsp=stack_virtual+4096ULL;
+        frame.rflags=0x202ULL;
+        result=interrupt_frame_user_context_valid(&frame);
+        frame.rip=stack_virtual+16ULL;
+        if (interrupt_frame_user_context_valid(&frame)) result=false;
+        frame.rip=code_virtual+16ULL;
+        frame.user_rsp=code_virtual+4096ULL;
+        if (interrupt_frame_user_context_valid(&frame)) result=false;
+    }
+    if (stack_mapped && !vm_unmap_page(stack_virtual)) result=false;
+    if (code_mapped && !vm_unmap_page(code_virtual)) result=false;
+    if (!physical_allocator_free(stack_physical)) result=false;
+    if (!physical_allocator_free(code_physical)) result=false;
+    return result;
+}
+#endif
 
 static void pic_write_masks(uint8_t master,uint8_t slave) {
     outb((uint16_t)PIC_MASTER_DATA,master);
@@ -348,8 +422,7 @@ bool interrupts_self_test(void) {
         return false;
     }
 
-    /* Synthetic frames verify the optional privilege-transition tail is
-     * only accepted for a well-formed CPL3 context. */
+    /* Structural privilege-frame rejection plus mapped user RIP/RSP checks. */
     {
         struct interrupt_frame frame={0};
         frame.cs=(uint64_t)kernel_cs;
@@ -362,7 +435,7 @@ bool interrupts_self_test(void) {
         frame.user_rsp=0x7ffffff000ULL;
         frame.rflags=0x202ULL;
         if (!interrupt_frame_from_user(&frame) ||
-            !interrupt_frame_user_context_valid(&frame))
+            interrupt_frame_user_context_valid(&frame))
             return false;
         frame.user_ss=(uint64_t)DAWN_KERNEL_DATA_SELECTOR;
         if (interrupt_frame_user_context_valid(&frame)) return false;
@@ -373,6 +446,7 @@ bool interrupts_self_test(void) {
         frame.rip=USER_CANONICAL_LIMIT;
         if (interrupt_frame_user_context_valid(&frame)) return false;
     }
+    if (!interrupt_user_frame_mapping_self_test()) return false;
 
     /* INT3 must traverse the real IDT with a valid same-privilege frame. */
     breakpoint_expected=true;

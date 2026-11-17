@@ -58,3 +58,11 @@
 - Valid CPL3 syscall frames are passed to the bounded syscall dispatcher and returned through the common saved-frame/iretq epilogue. CPL0 syscall smoke tests remain supported.
 - Added a synthetic CPL3 syscall dispatch test for ABI-version result placement. This is not a hardware ring-3 transition test.
 - Ring-3 process launch is still not enabled: scheduler ownership of user trap stacks, user-mode timer preemption, recoverable user exceptions, and process exit are outstanding. Build, QEMU and CI validation remain pending.
+
+
+## Mapped CPL3 return-context validation (2026-11-17)
+
+- User-origin interrupt frames now require an executable user mapping for RIP and a writable user mapping immediately below the saved RSP.
+- Added self-test mapping fixtures with allocated physical pages, permission-negative cases, and cleanup.
+- Checks use the active address space. This hardens return-frame validation but does not implement user-mode scheduling, recoverable exceptions, or process exit.
+- Compilation and emulator validation remain pending.
