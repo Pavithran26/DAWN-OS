@@ -114,3 +114,12 @@ This enables interrupt-gate dispatch but does not prove ring-3 execution. A ring
 - Added negative argument-validation self-tests and included the new source in production/test link targets.
 
 The primitive is deliberately not invoked by boot. It uses the currently active page-table root, which is still the kernel root; therefore it is not yet safe to launch an untrusted program. It also has no process-specific return continuation or exit/wait lifecycle. The next required work is isolated address-space creation and a controlled user-task return path before any ring-3 smoke program is launched. No build, QEMU, or CI result is claimed.
+
+
+## Per-process privilege-stack pool foundation (2026-11-17)
+
+- Added a bounded pool of four 16 KiB, 16-byte-aligned kernel privilege stacks, reserved independently of the bootstrap TSS stack.
+- Added allocate, activate and release APIs. Activation accepts only the bootstrap stack or a currently allocated pool stack; release rejects the currently active TSS.RSP0 stack.
+- The GDT/TSS self-test now exercises two distinct allocations, activation, active-stack release rejection, restoration of the bootstrap stack, release, and stale-handle rejection.
+- This is a stack-resource primitive only. It does not yet bind stacks to process objects, switch stacks during a scheduler context switch, or permit safe ring-3 execution. Callers must serialize operations with interrupts disabled on the current single CPU.
+- No build, QEMU, or CI validation is claimed for this source update.

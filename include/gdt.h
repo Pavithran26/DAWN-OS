@@ -11,6 +11,10 @@
 bool gdt_tss_initialize(void);
 bool gdt_tss_set_kernel_stack(uint64_t stack_top);
 uint64_t gdt_tss_kernel_stack_top(void);
+/* Fixed-size per-process privilege stacks; serialize with interrupts disabled. */
+bool gdt_tss_allocate_kernel_stack(uint64_t *stack_top);
+bool gdt_tss_activate_kernel_stack(uint64_t stack_top);
+bool gdt_tss_release_kernel_stack(uint64_t stack_top);
 #ifdef DAWN_KERNEL_TEST
 bool gdt_tss_self_test(void);
 #endif

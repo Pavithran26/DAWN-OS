@@ -6,6 +6,8 @@
 
 #define GDT_ENTRY_COUNT 7U
 #define PRIVILEGE_STACK_SIZE 16384U
+#define PROCESS_STACK_COUNT 4U
+#define PROCESS_STACK_PATTERN 0xa5U
 #define TSS_TYPE_AVAILABLE_64 0x9ULL
 #define TSS_TYPE_BUSY_64 0x0bULL
 
@@ -31,6 +33,9 @@ extern void dawn_gdt_load(const struct gdtr *descriptor);
 static uint64_t gdt[GDT_ENTRY_COUNT] __attribute__((aligned(16)));
 static struct tss64 tss __attribute__((aligned(16)));
 static uint8_t privilege_stack[PRIVILEGE_STACK_SIZE] __attribute__((aligned(16)));
+static uint8_t process_stacks[PROCESS_STACK_COUNT][PRIVILEGE_STACK_SIZE] __attribute__((aligned(16)));
+static bool process_stack_used[PROCESS_STACK_COUNT];
+static uint64_t bootstrap_stack_top;
 static bool initialized;
 
 static bool canonical_address(uint64_t address) {
@@ -64,6 +69,44 @@ uint64_t gdt_tss_kernel_stack_top(void) {
     return initialized ? tss.rsp0 : 0ULL;
 }
 
+static uint64_t process_stack_top(size_t index) {
+    return (uint64_t)(uintptr_t)(process_stacks[index]+PRIVILEGE_STACK_SIZE);
+}
+bool gdt_tss_allocate_kernel_stack(uint64_t *stack_top) {
+    if (!initialized || stack_top==NULL || *stack_top!=0ULL) return false;
+    for (size_t i=0U;i<PROCESS_STACK_COUNT;i++) {
+        if (!process_stack_used[i]) {
+            for (size_t j=0U;j<PRIVILEGE_STACK_SIZE;j++)
+                process_stacks[i][j]=PROCESS_STACK_PATTERN;
+            process_stack_used[i]=true;
+            *stack_top=process_stack_top(i);
+            return true;
+        }
+    }
+    return false;
+}
+bool gdt_tss_activate_kernel_stack(uint64_t stack_top) {
+    bool owned=(stack_top==bootstrap_stack_top);
+    if (!initialized || !canonical_address(stack_top) ||
+        (stack_top&0x0fULL)!=0ULL) return false;
+    for (size_t i=0U;i<PROCESS_STACK_COUNT;i++)
+        if (process_stack_used[i] && process_stack_top(i)==stack_top)
+            owned=true;
+    if (!owned) return false;
+    return gdt_tss_set_kernel_stack(stack_top);
+}
+bool gdt_tss_release_kernel_stack(uint64_t stack_top) {
+    if (!initialized || stack_top==0ULL || stack_top==tss.rsp0)
+        return false;
+    for (size_t i=0U;i<PROCESS_STACK_COUNT;i++) {
+        if (process_stack_used[i] && process_stack_top(i)==stack_top) {
+            process_stack_used[i]=false;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool gdt_tss_initialize(void) {
     struct gdtr descriptor={0};
     const uint64_t stack_top=(uint64_t)(uintptr_t)(privilege_stack+sizeof(privilege_stack));
@@ -79,6 +122,7 @@ bool gdt_tss_initialize(void) {
 
     tss=(struct tss64){0};
     tss.rsp0=stack_top;
+    bootstrap_stack_top=stack_top;
     tss.iomap_base=(uint16_t)sizeof(tss);
     install_tss_descriptor((uint64_t)(uintptr_t)&tss,(uint32_t)(sizeof(tss)-1U));
 
@@ -116,6 +160,20 @@ bool gdt_tss_self_test(void) {
         gdt_tss_set_kernel_stack(original+1ULL) ||
         !gdt_tss_set_kernel_stack(original) ||
         gdt_tss_kernel_stack_top()!=original) return false;
+    {
+        uint64_t first=0ULL,second=0ULL;
+        if (!gdt_tss_allocate_kernel_stack(&first) ||
+            !gdt_tss_allocate_kernel_stack(&second) ||
+            first==second || first==original || second==original ||
+            !gdt_tss_activate_kernel_stack(first) ||
+            gdt_tss_kernel_stack_top()!=first ||
+            gdt_tss_release_kernel_stack(first) ||
+            !gdt_tss_activate_kernel_stack(original) ||
+            !gdt_tss_release_kernel_stack(first) ||
+            !gdt_tss_release_kernel_stack(second) ||
+            gdt_tss_activate_kernel_stack(second) ||
+            gdt_tss_release_kernel_stack(second)) return false;
+    }
     return true;
 }
 #endif
