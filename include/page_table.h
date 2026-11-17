@@ -21,6 +21,10 @@ bool vm_manager_initialize(uint64_t hhdm_offset);
 bool vm_address_space_create(struct vm_address_space *space);
 bool vm_address_space_map_user(struct vm_address_space *space, uint64_t virtual_address, uint64_t physical_address, uint32_t flags);
 bool vm_address_space_translate(const struct vm_address_space *space, uint64_t virtual_address, uint64_t *physical_address, uint32_t *flags);
+/* CR3 switches are CPL0-only and require IF=0; kernel mappings are shared. */
+bool vm_address_space_activate(const struct vm_address_space *space);
+bool vm_address_space_activate_kernel(void);
+bool vm_address_space_is_active(const struct vm_address_space *space);
 bool vm_address_space_destroy(struct vm_address_space *space);
 bool vm_map_page(uint64_t virtual_address, uint64_t physical_address,
                  uint32_t flags);

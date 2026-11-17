@@ -78,6 +78,16 @@ static uint64_t cpu_read_cr3(void) {
     __asm__ volatile ("mov %%cr3, %0" : "=r"(value));
     return value;
 }
+static void cpu_write_cr3(uint64_t value) {
+    __asm__ volatile ("mov %0, %%cr3" : : "r"(value) : "memory");
+}
+static bool cpu_vm_switch_context_valid(void) {
+    uint64_t flags=0ULL;
+    uint16_t cs=0U;
+    __asm__ volatile ("pushfq; popq %0" : "=r"(flags) : : "memory");
+    __asm__ volatile ("mov %%cs, %0" : "=r"(cs));
+    return (cs&3U)==0U && (flags&(1ULL<<9))==0ULL;
+}
 static uint64_t cpu_read_cr4(void) {
     uint64_t value=0ULL;
     __asm__ volatile ("mov %%cr4, %0" : "=r"(value));
@@ -593,6 +603,33 @@ struct vm_address_space {
 static volatile uint64_t *address_space_root(const struct vm_address_space *space) {
     if (space==NULL || space->root_physical==0ULL) return NULL;
     return physical_to_hhdm_pointer(space->root_physical);
+}
+
+bool vm_address_space_activate(const struct vm_address_space *space) {
+    volatile uint64_t *root=NULL;
+    if (!manager.initialized || !cpu_vm_switch_context_valid() ||
+        (root=address_space_root(space))==NULL ||
+        !physical_allocator_is_allocated(space->root_physical)) return false;
+
+    /* Refresh shared supervisor PML4 slots if the kernel added a top-level
+     * mapping after this address space was created. */
+    for (uint64_t index=256ULL;index<TABLE_ENTRIES;index++)
+        root[index]=manager.root[index]&~ENTRY_USER;
+    __asm__ volatile ("mfence" : : : "memory");
+    cpu_write_cr3(space->root_physical);
+    return (cpu_read_cr3()&manager.physical_address_mask)==space->root_physical;
+}
+
+bool vm_address_space_activate_kernel(void) {
+    if (!manager.initialized || !cpu_vm_switch_context_valid() ||
+        manager.root==NULL || manager.root_physical==0ULL) return false;
+    cpu_write_cr3(manager.root_physical);
+    return (cpu_read_cr3()&manager.physical_address_mask)==manager.root_physical;
+}
+
+bool vm_address_space_is_active(const struct vm_address_space *space) {
+    if (!manager.initialized || address_space_root(space)==NULL) return false;
+    return (cpu_read_cr3()&manager.physical_address_mask)==space->root_physical;
 }
 
 bool vm_address_space_create(struct vm_address_space *space) {

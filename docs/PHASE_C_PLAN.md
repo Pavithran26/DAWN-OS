@@ -18,7 +18,7 @@ The first Phase C foundation increment is present on `main`:
 - The page-table self-test creates a temporary user mapping and exercises copy-in/copy-out and invalid-range cases.
 - The kernel test calls the dispatcher directly and checks ABI-version, descriptor, pointer, length, and unsupported-call errors.
 
-**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address-space and process resource lifecycle primitives now exist, but process-specific CR3/stack switching, scheduler integration, a safe user return path, and an ELF64 loader are still absent. No ring-3 program has been run. Do not describe user programs as runnable.
+**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address-space and process resource lifecycle primitives now exist, including a controlled CPL0 CR3/TSS.RSP0 activation boundary. Scheduler integration, a safe user return path, and an ELF64 loader are still absent. No ring-3 program has been run. Do not describe user programs as runnable.
 
 The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
 
@@ -133,4 +133,14 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Operations are CPL0-only and serialize their table/resource updates with interrupts disabled on the current single CPU.
 - This is not yet a runnable process subsystem: there is no scheduler integration, no process-specific CR3/stack switch, no ELF loader, and no user exit/wait syscall. Process resources must not be activated for ring-3 execution yet.
 - Added deterministic self-test coverage for table capacity, unique IDs, state transitions, invalid transitions, resource cleanup, stale IDs, and slot reuse.
+- No build, QEMU, or CI validation is claimed for this source update.
+
+
+## Controlled process address-space activation (2026-11-17)
+
+- Added explicit address-space activate and kernel-root restore APIs. Calls require CPL0 and IF=0; a CR3 reload changes the active root and refreshes shared supervisor PML4 entries before activation.
+- Process activation is restricted to READY records and binds the record's isolated CR3 root to its allocated TSS.RSP0 privilege stack. The current kernel stack, target privilege stack, and activation code are verified as supervisor mappings in that address space.
+- Only one process may be active through this API at a time. Deactivation restores the boot kernel CR3 root and bootstrap privilege stack. Active records cannot be marked exited or reaped.
+- Corrected the prior process self-test's null-output check and extended it to cover CR3 activation, TSS stack association, conflicting activation rejection, active-process reap/exit rejection, and restoration to the kernel context.
+- This is a controlled kernel-side activation primitive, not scheduler integration. The caller remains in CPL0; no timer/syscall context-switch path selects processes, no user execution is enabled, and user-pointer helpers still need address-space-specific variants before a ring-3 syscall path can run.
 - No build, QEMU, or CI validation is claimed for this source update.
