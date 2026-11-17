@@ -326,6 +326,8 @@ static volatile uint64_t scheduler_test_counts[2];
 static volatile uint64_t preemption_peer_progress;
 static volatile uint64_t preemption_peer_observed;
 static volatile uint64_t preemption_wait_expired;
+static volatile uint64_t preemption_stress_started_mask;
+static volatile uint64_t preemption_stress_timeout_mask;
 
 static void scheduler_test_worker(void *argument) {
     const uintptr_t worker_index=(uintptr_t)argument;
@@ -351,6 +353,17 @@ static void scheduler_preemption_waiter(void *argument) {
 static void scheduler_preemption_peer(void *argument) {
     (void)argument;
     preemption_peer_progress=1ULL;
+}
+static void scheduler_preemption_stress_worker(void *argument) {
+    const uintptr_t index=(uintptr_t)argument;
+    const uint64_t bit=1ULL<<(uint32_t)index;
+    if (index>=KERNEL_THREAD_MAX) cpu_halt_forever();
+    preemption_stress_started_mask|=bit;
+    for (uint64_t attempt=0ULL;attempt<50000000ULL;attempt++) {
+        if (preemption_stress_started_mask==((1ULL<<KERNEL_THREAD_MAX)-1ULL))
+            return;
+    }
+    preemption_stress_timeout_mask|=bit;
 }
 
 bool scheduler_self_test(void) {
@@ -435,9 +448,35 @@ bool scheduler_preemption_self_test(void) {
     }
 
     scheduler_get_stats(&after);
-    return after.threads_exited>=before.threads_exited+8ULL &&
-           after.context_switches>=before.context_switches+16ULL &&
-           after.timer_preemptions>=before.timer_preemptions+4ULL &&
-           after.active_threads==0ULL;
+    if (after.threads_exited<before.threads_exited+8ULL ||
+        after.context_switches<before.context_switches+16ULL ||
+        after.timer_preemptions<before.timer_preemptions+4ULL ||
+        after.active_threads!=0ULL) return false;
+
+    /* Eight non-yielding workers must all start before any can finish. Only
+     * periodic timer preemption can advance the run queue across this barrier. */
+    disable_interrupts();
+    ready_cursor=0ULL;
+    preemption_stress_started_mask=0ULL;
+    preemption_stress_timeout_mask=0ULL;
+    restore_interrupt_flag(saved_flags);
+    scheduler_get_stats(&before);
+    for (uintptr_t index=0U;index<KERNEL_THREAD_MAX;index++) {
+        if (!kernel_thread_create(scheduler_preemption_stress_worker,
+                                  (void *)index,NULL)) return false;
+    }
+    if (!scheduler_run_until_idle()) return false;
+    scheduler_get_stats(&after);
+    if (preemption_stress_started_mask!=((1ULL<<KERNEL_THREAD_MAX)-1ULL) ||
+        preemption_stress_timeout_mask!=0ULL || after.active_threads!=0ULL ||
+        after.threads_exited<before.threads_exited+KERNEL_THREAD_MAX ||
+        after.timer_preemptions<before.timer_preemptions+(KERNEL_THREAD_MAX-1ULL))
+        return false;
+    for (size_t slot=0U;slot<KERNEL_THREAD_MAX;slot++) {
+        if (!thread_guard_valid(&thread_pool[slot]) ||
+            !thread_frame_valid(&thread_pool[slot],thread_pool[slot].saved_frame))
+            return false;
+    }
+    return true;
 }
 #endif
