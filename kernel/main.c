@@ -814,6 +814,12 @@ void kernel_main(void) {
     }
     apic_local_timer_stop();
     serial_write("DAWN-TEST: PASS: repeated timer-driven kernel-thread preemption\n");
+    if (!scheduler_process_context_self_test()) {
+        serial_write("DAWN-TEST: FAIL: process-bound scheduler context switching\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: process-bound kernel-thread CR3/TSS switching, yield, exit and reaping\n");
     if (!apic_local_timer_periodic_self_test()) {
         serial_write("DAWN-TEST: FAIL: Local APIC periodic stop/restart checks\n");
         qemu_debug_exit(QEMU_TEST_FAIL);

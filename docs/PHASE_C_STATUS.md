@@ -31,3 +31,13 @@
 - Active-process records cannot be marked EXITED or reaped. Only one process may be active through this early API; there is no scheduling integration yet.
 - The process self-test now checks successful activation/deactivation and rejects overlapping activation and teardown while active. The previous null-output self-test condition was corrected.
 - No build, emulator, or CI result is claimed. Ring-3 execution remains disabled.
+
+
+## Scheduler-bound process contexts (2026-11-17)
+
+- Kernel threads can be bound to a READY process before the scheduler starts running. A process may be bound to only one live kernel thread in this initial model.
+- The scheduler now switches the active address-space CR3 and TSS.RSP0 when dispatching between process-bound threads and kernel-only threads. Exiting process-bound threads are marked EXITED after switching away from their address space.
+- Process context switches are CPL0-only and execute with interrupts disabled. The current kernel stack, target process kernel stack, and switch code are checked as supervisor mappings before activation.
+- Added a two-process round-robin self-test covering process A to B to A switching, yield/resume, exit, process-state transition, and resource reaping. The test is wired into the kernel test image.
+- This is still kernel-thread execution using process-owned address spaces; it does not yet enter CPL3, load ELF images, or provide user-mode syscall/return handling.
+- No compilation, QEMU, or CI validation is claimed for this source update.
