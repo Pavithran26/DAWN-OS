@@ -19,6 +19,10 @@ struct vm_address_space { uint64_t root_physical; };
 bool vm_manager_initialize(uint64_t hhdm_offset);
 /* Address spaces share supervisor kernel mappings; user frames stay caller-owned. */
 bool vm_address_space_create(struct vm_address_space *space);
+/* Switch only from CPL0 with interrupts disabled; kernel upper-half mappings
+ * remain shared. Deactivation restores the boot kernel root. */
+bool vm_address_space_activate(struct vm_address_space *space);
+bool vm_address_space_deactivate(void);
 bool vm_address_space_map_user(struct vm_address_space *space, uint64_t virtual_address, uint64_t physical_address, uint32_t flags);
 bool vm_address_space_translate(const struct vm_address_space *space, uint64_t virtual_address, uint64_t *physical_address, uint32_t *flags);
 bool vm_address_space_destroy(struct vm_address_space *space);

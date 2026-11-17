@@ -29,6 +29,8 @@
 struct vm_manager_state {
     volatile uint64_t *root;
     uint64_t root_physical;
+    volatile uint64_t *kernel_root;
+    uint64_t kernel_root_physical;
     uint64_t hhdm_offset;
     uint64_t physical_address_mask;
     uint32_t physical_address_bits;
@@ -76,6 +78,14 @@ static uint64_t cpu_read_cr0(void) {
 static uint64_t cpu_read_cr3(void) {
     uint64_t value=0ULL;
     __asm__ volatile ("mov %%cr3, %0" : "=r"(value));
+    return value;
+}
+static void cpu_write_cr3(uint64_t value) {
+    __asm__ volatile ("mov %0, %%cr3" : : "r"(value) : "memory");
+}
+static uint64_t cpu_read_rflags(void) {
+    uint64_t value=0ULL;
+    __asm__ volatile ("pushfq; popq %0" : "=r"(value));
     return value;
 }
 static uint64_t cpu_read_cr4(void) {
@@ -140,6 +150,8 @@ bool vm_manager_initialize(uint64_t hhdm_offset) {
     }
     manager.root=root;
     manager.root_physical=root_physical;
+    manager.kernel_root=root;
+    manager.kernel_root_physical=root_physical;
     manager.initialized=true;
     return true;
 }
@@ -606,10 +618,33 @@ bool vm_address_space_create(struct vm_address_space *space) {
         return false;
     }
     for (uint64_t i=0ULL;i<TABLE_ENTRIES;i++) {
-        root[i]=(i>=256ULL) ? (manager.root[i]&~ENTRY_USER) : 0ULL;
+        root[i]=(i>=256ULL) ? (manager.kernel_root[i]&~ENTRY_USER) : 0ULL;
     }
     __asm__ volatile ("mfence" : : : "memory");
     space->root_physical=root_physical;
+    return true;
+}
+
+bool vm_address_space_activate(struct vm_address_space *space) {
+    volatile uint64_t *root=address_space_root(space);
+    if (!manager.initialized || root==NULL ||
+        (cpu_read_rflags()&(1ULL<<9))!=0ULL ||
+        (cpu_read_cr3()&manager.physical_address_mask)==space->root_physical)
+        return false;
+    cpu_write_cr3(space->root_physical);
+    manager.root=root;
+    manager.root_physical=space->root_physical;
+    return true;
+}
+
+bool vm_address_space_deactivate(void) {
+    if (!manager.initialized ||
+        (cpu_read_rflags()&(1ULL<<9))!=0ULL ||
+        manager.root_physical==manager.kernel_root_physical)
+        return false;
+    cpu_write_cr3(manager.kernel_root_physical);
+    manager.root=manager.kernel_root;
+    manager.root_physical=manager.kernel_root_physical;
     return true;
 }
 
@@ -761,6 +796,8 @@ bool vm_address_space_self_test(void) {
         !physical_allocator_free(page)) return false;
     return true;
 fail:
+    if (manager.initialized && manager.root_physical!=manager.kernel_root_physical)
+        (void)vm_address_space_deactivate();
     if (first.root_physical!=0ULL) (void)vm_address_space_destroy(&first);
     if (second.root_physical!=0ULL) (void)vm_address_space_destroy(&second);
     if (page!=0ULL && physical_allocator_is_allocated(page))
