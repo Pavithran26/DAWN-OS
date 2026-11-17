@@ -10,6 +10,7 @@
 #include "acpi.h"
 #include "apic.h"
 #include "scheduler.h"
+#include "syscall.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -644,6 +645,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: virtual-memory map/translate/unmap tests\n");
+
+    if (!syscall_self_test()) {
+        serial_write("DAWN-TEST: FAIL: Phase C syscall ABI validation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: Phase C syscall ABI and bounded user-write validation\n");
+
 #endif
 
     if (!interrupts_initialize()) {

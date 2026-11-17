@@ -383,6 +383,79 @@ found:
     }
     return true;
 }
+
+#define USER_ADDRESS_LIMIT CANONICAL_SIGN_BIT
+
+bool vm_user_range_valid(uint64_t virtual_address,uint64_t length,
+                         bool require_write) {
+    uint64_t last_address=0ULL;
+    uint64_t page=0ULL;
+    uint64_t last_page=0ULL;
+    if (length==0ULL) return true;
+    if (virtual_address==0ULL || virtual_address>=USER_ADDRESS_LIMIT ||
+        length>USER_ADDRESS_LIMIT-virtual_address) return false;
+    last_address=virtual_address+length-1ULL;
+    page=virtual_address&~PAGE_MASK;
+    last_page=last_address&~PAGE_MASK;
+    for (;;) {
+        uint64_t physical=0ULL;
+        uint32_t flags=0U;
+        if (!vm_translate(page,&physical,&flags) ||
+            (flags&(uint32_t)VM_PAGE_USER)==0U ||
+            (require_write && (flags&(uint32_t)VM_PAGE_WRITE)==0U)) {
+            return false;
+        }
+        if (page==last_page) break;
+        if (page>UINT64_MAX-PAGE_SIZE) return false;
+        page+=PAGE_SIZE;
+    }
+    return true;
+}
+
+bool vm_copy_from_user(void *destination,uint64_t user_source,size_t length) {
+    size_t copied=0U;
+    if (length==0U) return true;
+    if (destination==NULL ||
+        !vm_user_range_valid(user_source,(uint64_t)length,false)) return false;
+    while (copied<length) {
+        uint64_t physical=0ULL;
+        const uint64_t source=user_source+(uint64_t)copied;
+        const uint64_t offset=source&PAGE_MASK;
+        size_t chunk=(size_t)(PAGE_SIZE-offset);
+        volatile uint8_t *mapped=NULL;
+        uint8_t *target=(uint8_t *)destination+copied;
+        if (!vm_translate(source,&physical,NULL)) return false;
+        if (chunk>length-copied) chunk=length-copied;
+        mapped=(volatile uint8_t *)physical_to_hhdm_pointer(physical&~PAGE_MASK);
+        if (mapped==NULL) return false;
+        for (size_t index=0U;index<chunk;index++) target[index]=mapped[offset+index];
+        copied+=chunk;
+    }
+    return true;
+}
+
+bool vm_copy_to_user(uint64_t user_destination,const void *source,size_t length) {
+    size_t copied=0U;
+    if (length==0U) return true;
+    if (source==NULL ||
+        !vm_user_range_valid(user_destination,(uint64_t)length,true)) return false;
+    while (copied<length) {
+        uint64_t physical=0ULL;
+        const uint64_t destination=user_destination+(uint64_t)copied;
+        const uint64_t offset=destination&PAGE_MASK;
+        size_t chunk=(size_t)(PAGE_SIZE-offset);
+        volatile uint8_t *mapped=NULL;
+        const uint8_t *input=(const uint8_t *)source+copied;
+        if (!vm_translate(destination,&physical,NULL)) return false;
+        if (chunk>length-copied) chunk=length-copied;
+        mapped=(volatile uint8_t *)physical_to_hhdm_pointer(physical&~PAGE_MASK);
+        if (mapped==NULL) return false;
+        for (size_t index=0U;index<chunk;index++) mapped[offset+index]=input[index];
+        copied+=chunk;
+    }
+    return true;
+}
+
 #ifdef DAWN_KERNEL_TEST
 static bool find_and_map_test_page(uint64_t physical_address,uint32_t flags,
                                    uint64_t *virtual_address) {
@@ -397,7 +470,9 @@ static bool find_and_map_test_page(uint64_t physical_address,uint32_t flags,
     for (uint64_t pml4=1ULL;pml4<256ULL;pml4++) {
         const uint64_t root_entry=manager.root[pml4];
         if ((root_entry & ENTRY_PRESENT)!=0ULL &&
-            (root_entry & ENTRY_WRITABLE)==0ULL) continue;
+            ((root_entry & ENTRY_WRITABLE)==0ULL ||
+             (((flags&(uint32_t)VM_PAGE_USER)!=0U) &&
+              (root_entry & ENTRY_USER)==0ULL))) continue;
         for (uint64_t pdpt=0ULL;pdpt<TABLE_ENTRIES;pdpt++) {
             const uint64_t candidate=(pml4<<39)|(pdpt<<30)|0x12345000ULL;
             if (vm_translate(candidate,&translated,NULL)) continue;
@@ -440,12 +515,57 @@ bool vm_manager_self_test(void) {
         (flags&(uint32_t)VM_PAGE_EXECUTE)==0U ||
         (flags&(uint32_t)VM_PAGE_WRITE)!=0U ||
         (flags&(uint32_t)VM_PAGE_NO_EXECUTE)!=0U ||
+        vm_user_range_valid(code_va,1ULL,false) ||
+        vm_copy_from_user(&flags,code_va,sizeof(uint32_t)) ||
+        vm_copy_to_user(code_va,&flags,sizeof(uint32_t)) ||
         !vm_unmap_page(code_va) ||
         !physical_allocator_free(code)) {
         (void)vm_unmap_page(code_va);
         (void)physical_allocator_free(code);
         return false;
     }
+
+    uint64_t user_data=0ULL,user_va=0ULL;
+    volatile uint8_t *user_alias=NULL;
+    uint8_t copied[8]={0U,0U,0U,0U,0U,0U,0U,0U};
+    const uint8_t seed[8]={0x44U,0x41U,0x57U,0x4eU,0x2dU,0x4fU,0x53U,0x21U};
+    const uint8_t update[4]={0x55U,0x53U,0x45U,0x52U};
+    if (!physical_allocator_allocate(&user_data) ||
+        !find_and_map_test_page(user_data,
+             (uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE,&user_va)) {
+        (void)physical_allocator_free(user_data);
+        return false;
+    }
+    user_alias=(volatile uint8_t *)physical_to_hhdm_pointer(user_data);
+    if (user_alias==NULL) {
+        (void)vm_unmap_page(user_va);
+        (void)physical_allocator_free(user_data);
+        return false;
+    }
+    for (size_t index=0U;index<sizeof(seed);index++) user_alias[index]=seed[index];
+    if (!vm_user_range_valid(user_va+1ULL,6ULL,false) ||
+        !vm_user_range_valid(user_va+1ULL,6ULL,true) ||
+        !vm_copy_from_user(copied,user_va+1ULL,7U) ||
+        copied[0]!=seed[1] || copied[1]!=seed[2] ||
+        copied[2]!=seed[3] || copied[3]!=seed[4] ||
+        copied[4]!=seed[5] || copied[5]!=seed[6] ||
+        copied[6]!=seed[7] ||
+        !vm_copy_to_user(user_va+8ULL,update,sizeof(update)) ||
+        user_alias[8]!=update[0] || user_alias[9]!=update[1] ||
+        user_alias[10]!=update[2] || user_alias[11]!=update[3] ||
+        vm_user_range_valid(0ULL,1ULL,false) ||
+        vm_user_range_valid(USER_ADDRESS_LIMIT-4ULL,8ULL,false) ||
+        !vm_user_range_valid(0ULL,0ULL,false) ||
+        !vm_copy_from_user(NULL,0ULL,0U) ||
+        !vm_copy_to_user(0ULL,NULL,0U)) {
+        (void)vm_unmap_page(user_va);
+        (void)physical_allocator_free(user_data);
+        return false;
+    }
+    if (!vm_unmap_page(user_va) ||
+        vm_user_range_valid(user_va,1ULL,false) ||
+        !physical_allocator_free(user_data)) return false;
+
     if (!vm_map_mmio_page(0xfee00000ULL,&mmio_va) ||
         !vm_translate(mmio_va,&translated,&flags) ||
         translated!=0xfee00000ULL ||
