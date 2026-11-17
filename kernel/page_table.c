@@ -606,7 +606,7 @@ bool vm_address_space_create(struct vm_address_space *space) {
         return false;
     }
     for (uint64_t i=0ULL;i<TABLE_ENTRIES;i++) {
-        root[i]=(i>=256ULL) ? manager.root[i] : 0ULL;
+        root[i]=(i>=256ULL) ? (manager.root[i]&~ENTRY_USER) : 0ULL;
     }
     __asm__ volatile ("mfence" : : : "memory");
     space->root_physical=root_physical;
