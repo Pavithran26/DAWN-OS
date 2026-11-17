@@ -131,28 +131,39 @@ bool process_mark_exited(uint64_t process_id) {
     return true;
 }
 
-bool process_activate(uint64_t process_id) {
-    const uint64_t flags=read_rflags();
-    struct process_record *record=NULL;
-    if (!initialized || (read_cs()&3U)!=0U ||
-        (flags&CPU_RFLAGS_INTERRUPT_ENABLE)!=0ULL) return false;
-    disable_interrupts();
-    record=find_process(process_id);
-    if (record==NULL || record->state!=PROCESS_STATE_READY ||
-        (active_process_identifier!=0ULL &&
-         active_process_identifier!=process_id) ||
-        (active_process_identifier==0ULL &&
-         gdt_tss_kernel_stack_top()!=bootstrap_kernel_stack_top)) {
-        restore_interrupt_flag(flags);
-        return false;
+static bool process_switch_to_locked(uint64_t target_id) {
+    struct process_record *current=NULL;
+    struct process_record *target=NULL;
+    uint64_t current_stack=bootstrap_kernel_stack_top;
+    if (target_id==active_process_identifier) {
+        if (target_id==0ULL)
+            return vm_address_space_activate_kernel() &&
+                   gdt_tss_activate_kernel_stack(bootstrap_kernel_stack_top);
+        target=find_process(target_id);
+        return target!=NULL && target->state==PROCESS_STATE_READY &&
+               vm_address_space_is_active(&target->address_space) &&
+               gdt_tss_kernel_stack_top()==target->kernel_stack_top;
     }
-    if (active_process_identifier==process_id) {
-        const bool already_active=
-            vm_address_space_is_active(&record->address_space) &&
-            gdt_tss_kernel_stack_top()==record->kernel_stack_top;
-        restore_interrupt_flag(flags);
-        return already_active;
+    current=find_process(active_process_identifier);
+    if (active_process_identifier!=0ULL) {
+        if (current==NULL || current->state!=PROCESS_STATE_READY)
+            return false;
+        current_stack=current->kernel_stack_top;
     }
+    if (target_id==0ULL) {
+        if (!vm_address_space_activate_kernel()) return false;
+        if (!gdt_tss_activate_kernel_stack(bootstrap_kernel_stack_top)) {
+            if (current!=NULL)
+                (void)vm_address_space_activate(&current->address_space);
+            (void)gdt_tss_activate_kernel_stack(current_stack);
+            return false;
+        }
+        active_process_identifier=0ULL;
+        return true;
+    }
+    target=find_process(target_id);
+    if (target==NULL || target->state!=PROCESS_STATE_READY ||
+        target->kernel_stack_top==0ULL) return false;
     {
         uint64_t current_rsp=0ULL;
         uint64_t mapped_physical=0ULL;
@@ -160,62 +171,54 @@ bool process_activate(uint64_t process_id) {
         uint32_t process_stack_flags=0U;
         uint32_t code_flags=0U;
         __asm__ volatile ("mov %%rsp, %0" : "=r"(current_rsp));
-        if (record->kernel_stack_top==0ULL || current_rsp==0ULL ||
-            !vm_address_space_translate(&record->address_space,current_rsp,
+        if (current_rsp==0ULL ||
+            !vm_address_space_translate(&target->address_space,current_rsp,
                 &mapped_physical,&current_stack_flags) ||
             (current_stack_flags&(uint32_t)VM_PAGE_USER)!=0U ||
             (current_stack_flags&(uint32_t)VM_PAGE_WRITE)==0U ||
-            !vm_address_space_translate(&record->address_space,
-                record->kernel_stack_top-1ULL,&mapped_physical,
+            !vm_address_space_translate(&target->address_space,
+                target->kernel_stack_top-1ULL,&mapped_physical,
                 &process_stack_flags) ||
             (process_stack_flags&(uint32_t)VM_PAGE_USER)!=0U ||
             (process_stack_flags&(uint32_t)VM_PAGE_WRITE)==0U ||
-            !vm_address_space_translate(&record->address_space,
-                (uint64_t)(uintptr_t)&process_activate,&mapped_physical,
-                &code_flags) ||
+            !vm_address_space_translate(&target->address_space,
+                (uint64_t)(uintptr_t)&process_switch_to_locked,
+                &mapped_physical,&code_flags) ||
             (code_flags&(uint32_t)VM_PAGE_USER)!=0U ||
-            (code_flags&(uint32_t)VM_PAGE_EXECUTE)==0U) {
-            restore_interrupt_flag(flags);
+            (code_flags&(uint32_t)VM_PAGE_EXECUTE)==0U)
             return false;
-        }
     }
-    if (!gdt_tss_activate_kernel_stack(record->kernel_stack_top)) {
-        restore_interrupt_flag(flags);
+    if (!gdt_tss_activate_kernel_stack(target->kernel_stack_top))
+        return false;
+    if (!vm_address_space_activate(&target->address_space)) {
+        (void)gdt_tss_activate_kernel_stack(current_stack);
+        if (current!=NULL)
+            (void)vm_address_space_activate(&current->address_space);
+        else
+            (void)vm_address_space_activate_kernel();
         return false;
     }
-    if (!vm_address_space_activate(&record->address_space)) {
-        (void)gdt_tss_activate_kernel_stack(bootstrap_kernel_stack_top);
-        restore_interrupt_flag(flags);
-        return false;
-    }
-    active_process_identifier=process_id;
-    restore_interrupt_flag(flags);
+    active_process_identifier=target_id;
     return true;
 }
 
-bool process_deactivate(void) {
+bool process_switch_to(uint64_t process_id) {
     const uint64_t flags=read_rflags();
-    struct process_record *record=NULL;
+    bool result=false;
     if (!initialized || (read_cs()&3U)!=0U ||
         (flags&CPU_RFLAGS_INTERRUPT_ENABLE)!=0ULL) return false;
     disable_interrupts();
-    record=find_process(active_process_identifier);
-    if (record==NULL) {
-        restore_interrupt_flag(flags);
-        return false;
-    }
-    if (!vm_address_space_activate_kernel()) {
-        restore_interrupt_flag(flags);
-        return false;
-    }
-    if (!gdt_tss_activate_kernel_stack(bootstrap_kernel_stack_top)) {
-        (void)vm_address_space_activate(&record->address_space);
-        restore_interrupt_flag(flags);
-        return false;
-    }
-    active_process_identifier=0ULL;
+    result=process_switch_to_locked(process_id);
     restore_interrupt_flag(flags);
-    return true;
+    return result;
+}
+
+bool process_activate(uint64_t process_id) {
+    return process_switch_to(process_id);
+}
+
+bool process_deactivate(void) {
+    return process_switch_to(0ULL);
 }
 
 uint64_t process_active_id(void) {
@@ -298,7 +301,12 @@ static bool process_manager_self_test_locked(void) {
         !process_get_info(ids[0],&info) ||
         !vm_address_space_is_active(&processes[0].address_space) ||
         gdt_tss_kernel_stack_top()!=info.kernel_stack_top ||
-        process_activate(ids[1]) ||
+        !process_switch_to(ids[1]) ||
+        process_active_id()!=ids[1] ||
+        !vm_address_space_is_active(&processes[1].address_space) ||
+        gdt_tss_kernel_stack_top()!=processes[1].kernel_stack_top ||
+        !process_switch_to(ids[0]) ||
+        process_active_id()!=ids[0] ||
         process_mark_exited(ids[0]) ||
         process_reap(ids[0]) ||
         !process_deactivate() ||

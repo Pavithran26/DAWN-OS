@@ -27,6 +27,7 @@ bool process_mark_ready(uint64_t process_id);
 bool process_mark_exited(uint64_t process_id);
 /* Activation switches CR3 and TSS.RSP0; caller must be CPL0 with IF clear. */
 bool process_activate(uint64_t process_id);
+bool process_switch_to(uint64_t process_id);
 bool process_deactivate(void);
 uint64_t process_active_id(void);
 bool process_get_info(uint64_t process_id, struct process_info *info);
