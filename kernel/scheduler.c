@@ -378,6 +378,10 @@ bool scheduler_preemption_self_test(void) {
             preemption_peer_progress!=1ULL) return false;
         scheduler_get_stats(&after);
         if (after.active_threads!=0ULL) return false;
+        for (size_t slot=0U;slot<KERNEL_THREAD_MAX;slot++) {
+            if (thread_pool[slot].state==THREAD_DEAD &&
+                !thread_guard_valid(&thread_pool[slot])) return false;
+        }
     }
 
     scheduler_get_stats(&after);

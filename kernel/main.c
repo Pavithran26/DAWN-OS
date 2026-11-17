@@ -741,7 +741,7 @@ void kernel_main(void) {
 
 #ifdef DAWN_KERNEL_TEST
     if (!scheduler_self_test()) {
-        serial_write("DAWN-TEST: FAIL: cooperative kernel-thread scheduler tests\n");
+        serial_write("DAWN-TEST: FAIL: kernel-thread scheduler lifecycle tests\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
