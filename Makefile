@@ -70,7 +70,7 @@ build/user-mode.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/
 build/page_table.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/interrupts.o: kernel/interrupts.c include/interrupts.h include/apic.h include/scheduler.h | build
+build/interrupts.o: kernel/interrupts.c include/interrupts.h include/gdt.h include/apic.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/interrupt-stubs.o: arch/x86_64/interrupts.S | build
@@ -90,7 +90,7 @@ build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h
 build/page-table-test.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/interrupts-test.o: kernel/interrupts.c include/interrupts.h include/apic.h include/scheduler.h | build
+build/interrupts-test.o: kernel/interrupts.c include/interrupts.h include/gdt.h include/apic.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/acpi-test.o: kernel/acpi.c include/acpi.h include/limine_requests.h | build

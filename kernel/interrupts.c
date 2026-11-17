@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "interrupts.h"
+#include "gdt.h"
 #include "apic.h"
 #include "scheduler.h"
 #include "syscall.h"
@@ -142,6 +143,32 @@ static void idt_set_gate_attributes(uint8_t vector, void (*handler)(void),
 
 static void idt_set_gate(uint8_t vector, void (*handler)(void)) {
     idt_set_gate_attributes(vector,handler,IDT_INTERRUPT_GATE);
+}
+
+#define USER_CANONICAL_LIMIT (1ULL << 47)
+#define RFLAGS_FIXED_BIT (1ULL << 1)
+#define RFLAGS_IOPL_MASK (3ULL << 12)
+#define RFLAGS_NT (1ULL << 14)
+#define RFLAGS_VM (1ULL << 17)
+
+bool interrupt_frame_from_user(const struct interrupt_frame *frame) {
+    return frame != NULL && (frame->cs & 3ULL) == 3ULL;
+}
+
+bool interrupt_frame_user_context_valid(const struct interrupt_frame *frame) {
+    if (!interrupt_frame_from_user(frame)) return false;
+
+    /* Do not inspect user_rsp/user_ss until CPL3 origin has been established. */
+    if (frame->cs != (uint64_t)DAWN_USER_CODE_SELECTOR + 3ULL ||
+        frame->user_ss != (uint64_t)DAWN_USER_DATA_SELECTOR + 3ULL)
+        return false;
+    if (frame->rip == 0ULL || frame->rip >= USER_CANONICAL_LIMIT ||
+        frame->user_rsp == 0ULL || frame->user_rsp >= USER_CANONICAL_LIMIT)
+        return false;
+    if ((frame->rflags & RFLAGS_FIXED_BIT) == 0ULL ||
+        (frame->rflags & (RFLAGS_IOPL_MASK | RFLAGS_NT | RFLAGS_VM)) != 0ULL)
+        return false;
+    return true;
 }
 
 static void pic_write_masks(uint8_t master,uint8_t slave) {
@@ -305,6 +332,32 @@ bool interrupts_self_test(void) {
         inb((uint16_t)PIC_MASTER_DATA)!=0xffU ||
         inb((uint16_t)PIC_SLAVE_DATA)!=0xffU) {
         return false;
+    }
+
+    /* Synthetic frames verify the optional privilege-transition tail is
+     * only accepted for a well-formed CPL3 context. */
+    {
+        struct interrupt_frame frame={0};
+        frame.cs=(uint64_t)kernel_cs;
+        if (interrupt_frame_from_user(&frame) ||
+            interrupt_frame_user_context_valid(&frame))
+            return false;
+        frame.cs=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL;
+        frame.user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
+        frame.rip=0x400000ULL;
+        frame.user_rsp=0x7ffffff000ULL;
+        frame.rflags=0x202ULL;
+        if (!interrupt_frame_from_user(&frame) ||
+            !interrupt_frame_user_context_valid(&frame))
+            return false;
+        frame.user_ss=(uint64_t)DAWN_KERNEL_DATA_SELECTOR;
+        if (interrupt_frame_user_context_valid(&frame)) return false;
+        frame.user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
+        frame.rflags|=RFLAGS_IOPL_MASK;
+        if (interrupt_frame_user_context_valid(&frame)) return false;
+        frame.rflags=0x202ULL;
+        frame.rip=USER_CANONICAL_LIMIT;
+        if (interrupt_frame_user_context_valid(&frame)) return false;
     }
 
     /* INT3 must traverse the real IDT with a valid same-privilege frame. */

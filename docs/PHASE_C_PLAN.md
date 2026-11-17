@@ -144,3 +144,11 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - The process and scheduler self-tests cover activation, switching, TSS stack association, duplicate binding rejection, active-process exit/reap rejection, kernel-context restoration, and cleanup.
 - This is still a CPL0-only context-switch foundation. No ring-3 process has been executed, no ELF loader exists, and no user-mode syscall return path is enabled.
 - No build, QEMU, or CI validation is claimed for this source update.
+
+
+## Interrupt-frame privilege validation (2026-11-17)
+
+- Added explicit helpers to classify an interrupt frame by saved CS.RPL and validate a CPL3 return context before any code reads the optional saved user RSP/SS words.
+- Validation requires the configured ring-3 code/data selectors, lower-canonical user RIP/RSP, the architectural fixed RFLAGS bit, and rejects IOPL, NT, and VM flag states.
+- Added synthetic kernel-frame and user-frame tests, including invalid selector, privileged RFLAGS, and non-user-canonical RIP cases.
+- This is a trap-frame contract and validation foundation only. It does not create a user return continuation, launch CPL3 code, or establish that the assembly/scheduler path safely resumes user tasks. No build, QEMU, or CI result is claimed.

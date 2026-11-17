@@ -42,3 +42,11 @@
 - Added a two-process round-robin self-test covering process A to B to A switching, yield/resume, exit, process-state transition, and resource reaping. The test is wired into the kernel test image.
 - This is still kernel-thread execution using process-owned address spaces; it does not yet enter CPL3, load ELF images, or provide user-mode syscall/return handling.
 - No compilation, QEMU, or CI validation is claimed for this source update.
+
+
+## Interrupt-frame privilege validation (2026-11-17)
+
+- Added `interrupt_frame_from_user` and `interrupt_frame_user_context_valid` so optional privilege-transition stack fields are only inspected after confirming a CPL3-origin frame.
+- Validates user CS/SS selectors, lower-canonical RIP/RSP, fixed RFLAGS bit, and rejects IOPL/NT/VM states.
+- Added synthetic positive and negative frame tests to the interrupt self-test.
+- This does not yet provide a safe user-mode return path or prove CPL3 execution. Build and emulator validation remain pending.
