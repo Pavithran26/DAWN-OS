@@ -18,7 +18,7 @@ The first Phase C foundation increment is present on `main`:
 - The page-table self-test creates a temporary user mapping and exercises copy-in/copy-out and invalid-range cases.
 - The kernel test calls the dispatcher directly and checks ABI-version, descriptor, pointer, length, and unsupported-call errors.
 
-**This is not yet a functioning userspace syscall path.** The dispatcher is called as a normal kernel C function by the self-test. IDT vector `0x80` is not installed; no TSS/RSP0, ring-3 transition, isolated process address space, process lifecycle, or ELF64 loader exists. The current page-table manager still operates on the active kernel root. Do not describe user programs as runnable.
+**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present; no ring-3 program has been run, no isolated process address space or process lifecycle exists, and no ELF64 loader exists. The current page-table manager still operates on the active kernel root. Do not describe user programs as runnable.
 
 The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
 
@@ -32,7 +32,7 @@ The kernel now has a dedicated GDT/TSS initialization increment:
 - Adds self-test coverage for TR selector, descriptor type/presence, RSP0 canonicality/alignment, and stack setter rejection/restore.
 - Initialization runs before IDT setup. No user-mode transition is attempted.
 
-**Still disabled:** no DPL3 syscall gate, ring-3 IRET frame, user task, process-specific CR3, process lifecycle, or ELF loader. The privilege stack is prepared only. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
+**Still outstanding:** no executed ring-3 task, per-process kernel-stack lifecycle, process-specific CR3/address-space ownership, process lifecycle, or ELF loader. The privilege stack is prepared only. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
 
 ## Goals
 
@@ -105,3 +105,12 @@ Build a small, auditable userspace environment with a documented privilege bound
 - Added a CPL0 software-interrupt smoke test for ABI-version dispatch and gate attributes.
 
 This enables interrupt-gate dispatch but does not prove ring-3 execution. A ring-3 caller, per-process kernel stack switching, user-mode return path, and process isolation remain outstanding. No build, emulator, or CI validation is claimed for this source change.
+
+
+## Ring-3 entry primitive (2026-11-17)
+
+- Added a low-level IRETQ transition routine using the configured ring-3 code/data selectors.
+- Added validation that the entry point is mapped user-accessible and executable, and that the initial stack is user-accessible, writable, canonical and 16-byte aligned.
+- Added negative argument-validation self-tests and included the new source in production/test link targets.
+
+The primitive is deliberately not invoked by boot. It uses the currently active page-table root, which is still the kernel root; therefore it is not yet safe to launch an untrusted program. It also has no process-specific return continuation or exit/wait lifecycle. The next required work is isolated address-space creation and a controlled user-task return path before any ring-3 smoke program is launched. No build, QEMU, or CI result is claimed.

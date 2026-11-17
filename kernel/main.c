@@ -11,6 +11,7 @@
 #include "apic.h"
 #include "scheduler.h"
 #include "syscall.h"
+#include "user_mode.h"
 #include "gdt.h"
 
 #define SERIAL_COM1 0x3F8U
@@ -654,6 +655,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: kernel-callable syscall dispatcher and user-memory helper unit tests (no ring-3 entry)\n");
 
+#endif
+
+#ifdef DAWN_KERNEL_TEST
+    if (!user_mode_self_test()) {
+        serial_write("DAWN-TEST: FAIL: user-mode entry argument validation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: user-mode entry rejects invalid addresses and stack alignment\n");
 #endif
 
     if (!gdt_tss_initialize()) {
