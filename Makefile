@@ -23,7 +23,7 @@ CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
 ASFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 --build-id=none
 
-KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o
+KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o build/process.o
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all
 
@@ -58,6 +58,9 @@ build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h |
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 build/user-mode.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h arch/x86_64/user_mode.S | build
 	$(CC) $(CFLAGS) -c kernel/user_mode.c -o build/user-mode-c.o
@@ -101,11 +104,14 @@ build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupt
 
 build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o
+build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o linker.ld
+	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o
 
 check: kernel
 	@set -eu; \
