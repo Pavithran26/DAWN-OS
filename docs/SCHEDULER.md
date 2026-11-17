@@ -37,7 +37,7 @@ BIOS and UEFI QEMU tests must retain all earlier ACPI/MADT, xAPIC/IOAPIC real PI
 
 ## Not implemented
 
-Timer-frequency calibration and wall-clock accounting, scheduler quantum policy, sleep/block/wakeup, priorities, a dedicated idle thread, per-CPU state, SMP, locks, user threads and process scheduling.
+Wall-clock accounting, adaptive scheduler quantum policy, sleep/block/wakeup, priorities, a dedicated idle thread, per-CPU state, SMP, locks, user threads and process scheduling.
 
 
 ## Additional lifecycle validation

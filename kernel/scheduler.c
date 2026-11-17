@@ -356,8 +356,9 @@ static void scheduler_preemption_peer(void *argument) {
 }
 static void scheduler_preemption_stress_worker(void *argument) {
     const uintptr_t index=(uintptr_t)argument;
-    const uint64_t bit=1ULL<<(uint32_t)index;
+    uint64_t bit=0ULL;
     if (index>=KERNEL_THREAD_MAX) cpu_halt_forever();
+    bit=1ULL<<(uint32_t)index;
     preemption_stress_started_mask|=bit;
     for (uint64_t attempt=0ULL;attempt<50000000ULL;attempt++) {
         if (preemption_stress_started_mask==((1ULL<<KERNEL_THREAD_MAX)-1ULL))
