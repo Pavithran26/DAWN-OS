@@ -32,7 +32,7 @@ The kernel now has a dedicated GDT/TSS initialization increment:
 - Adds self-test coverage for TR selector, descriptor type/presence, RSP0 canonicality/alignment, and stack setter rejection/restore.
 - Initialization runs before IDT setup. No user-mode transition is attempted.
 
-**Still outstanding:** no executed ring-3 task, scheduler-bound process lifecycle, process-specific CR3/stack switching, or ELF loader. The privilege stacks are now owned by process resource records, but are not switched during execution. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
+**Still outstanding:** no executed ring-3 task, CPL3 interrupt/syscall return path, or ELF loader. The privilege stacks are owned by process records and TSS.RSP0 is switched with scheduler-bound process contexts, but no CPL3 code has used them. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
 
 ## Goals
 
@@ -121,7 +121,7 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Added a bounded pool of four 16 KiB, 16-byte-aligned kernel privilege stacks, reserved independently of the bootstrap TSS stack.
 - Added allocate, activate and release APIs. Activation accepts only the bootstrap stack or a currently allocated pool stack; release rejects the currently active TSS.RSP0 stack.
 - The GDT/TSS self-test now exercises two distinct allocations, activation, active-stack release rejection, restoration of the bootstrap stack, release, and stale-handle rejection.
-- The subsequent process resource manager now assigns these stacks to process records. It still does not switch stacks during scheduler context switches or permit safe ring-3 execution. Callers must serialize operations with interrupts disabled on the current single CPU.
+- The process resource manager assigns these stacks to process records, and scheduler dispatch updates TSS.RSP0 when switching process contexts. This does not yet permit safe ring-3 execution. Callers must serialize operations with interrupts disabled on the current single CPU.
 - No build, QEMU, or CI validation is claimed for this source update.
 
 
@@ -131,7 +131,7 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Process creation now owns one isolated lower-half address-space root and one privilege-transition kernel stack. Partial allocation failure rolls back the address-space allocation.
 - Added state transitions, metadata inspection, and reaping. Reaping releases private page-table frames and the process kernel stack; VM teardown refuses to free the active CR3 root.
 - Operations are CPL0-only and serialize their table/resource updates with interrupts disabled on the current single CPU.
-- This is not yet a runnable process subsystem: there is no scheduler integration, no process-specific CR3/stack switch, no ELF loader, and no user exit/wait syscall. Process resources must not be activated for ring-3 execution yet.
+- This is not yet a runnable process subsystem: process-bound kernel threads can switch CR3/TSS.RSP0, but there is no CPL3 process entry/return path, ELF loader, or user exit/wait syscall. Process resources must not be used to launch ring-3 programs yet.
 - Added deterministic self-test coverage for table capacity, unique IDs, state transitions, invalid transitions, resource cleanup, stale IDs, and slot reuse.
 - No build, QEMU, or CI validation is claimed for this source update.
 
@@ -139,8 +139,8 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 ## Controlled process address-space activation (2026-11-17)
 
 - Added explicit address-space activate and kernel-root restore APIs. Calls require CPL0 and IF=0; a CR3 reload changes the active root and refreshes shared supervisor PML4 entries before activation.
-- Process activation is restricted to READY records and binds the record's isolated CR3 root to its allocated TSS.RSP0 privilege stack. The current kernel stack, target privilege stack, and activation code are verified as supervisor mappings in that address space.
-- Only one process may be active through this API at a time. Deactivation restores the boot kernel CR3 root and bootstrap privilege stack. Active records cannot be marked exited or reaped.
-- Corrected the prior process self-test's null-output check and extended it to cover CR3 activation, TSS stack association, conflicting activation rejection, active-process reap/exit rejection, and restoration to the kernel context.
-- This is a controlled kernel-side activation primitive, not scheduler integration. The caller remains in CPL0; no timer/syscall context-switch path selects processes, no user execution is enabled, and user-pointer helpers still need address-space-specific variants before a ring-3 syscall path can run.
+- Process switching is restricted to READY records and binds each isolated CR3 root to its allocated TSS.RSP0 privilege stack. The current kernel stack, target privilege stack, and switch code are verified as supervisor mappings in the target address space.
+- The scheduler can now switch between process-bound kernel threads, including process A to B to A transitions, and restore the bootstrap kernel root when returning to kernel-only work. Exited process records are reaped only after switching away.
+- The process and scheduler self-tests cover activation, switching, TSS stack association, duplicate binding rejection, active-process exit/reap rejection, kernel-context restoration, and cleanup.
+- This is still a CPL0-only context-switch foundation. No ring-3 process has been executed, no ELF loader exists, and no user-mode syscall return path is enabled.
 - No build, QEMU, or CI validation is claimed for this source update.

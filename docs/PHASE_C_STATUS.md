@@ -6,12 +6,12 @@
 - Added explicit user-page mapping and translation APIs operating on a supplied address-space root rather than the global active root.
 - Added teardown for private lower-half page-table frames. User data frames remain caller-owned and are not freed by address-space teardown.
 - Added self-test coverage for distinct roots, private user mappings, and teardown.
-- Added CPL0/IF-disabled address-space activation and kernel-root restoration. Process activation pairs the address-space root with the process-owned TSS.RSP0 stack. This is not scheduler integration; the scheduler still handles kernel threads only.
+- Added CPL0/IF-disabled address-space activation, process-to-process switching, and kernel-root restoration. Scheduler dispatch now pairs each bound process address space with its TSS.RSP0 stack; process-bound tasks still execute as CPL0 kernel threads.
 
 ## Remaining
 
 - Review and validate address-space mapping/teardown under BIOS and UEFI QEMU.
-- Integrate the activation boundary with scheduler/context-switch and interrupt/syscall entry paths.
+- Add a safe CPL3 interrupt/syscall entry and return path that consumes the process TSS.RSP0 stack correctly.
 - Add a safe process return/exit path, ELF64 loading, and a controlled ring-3 test.
 - Phase B validation remains pending; do not mark Phase B complete until its documented timer/scheduler and BIOS/UEFI test matrix is satisfied.
 
@@ -20,16 +20,17 @@
 
 - The bounded process manager owns one isolated address-space root and one kernel privilege stack per process record.
 - CREATED, READY, and EXITED transitions, metadata inspection, and resource reaping are implemented with CPL0 checks and single-CPU interrupt-disabled serialization.
-- The four-entry process self-test is wired into the kernel test image. It has not been compiled or executed in this update.
-- Process records are not runnable: there is no scheduler binding, CR3 activation, per-process stack switching, ELF loader, or user-mode exit path.
+- Scheduler threads can be bound one-to-one to READY process records. Dispatch switches CR3 and TSS.RSP0 between process contexts; exiting bound threads transition their process to EXITED after switching away.
+- The process-manager and two-process scheduler self-tests are wired into the kernel test image. They have not been compiled or executed in this update.
+- These are still CPL0 kernel-thread contexts, not user processes: no ELF loader, CPL3 entry/return path, or user-mode exit syscall exists.
 
 
 ## Controlled process activation (2026-11-17)
 
 - `vm_address_space_activate` and `vm_address_space_activate_kernel` perform guarded CR3 switches only from CPL0 with interrupts disabled. Address-space activation refreshes shared supervisor PML4 entries before loading the process root.
-- `process_activate` requires a READY process, verifies the current kernel stack, activation code, and process privilege stack are mapped supervisor-only, then activates its CR3 root and TSS.RSP0. `process_deactivate` restores the kernel root and bootstrap TSS stack.
-- Active-process records cannot be marked EXITED or reaped. Only one process may be active through this early API; there is no scheduling integration yet.
-- The process self-test now checks successful activation/deactivation and rejects overlapping activation and teardown while active. The previous null-output self-test condition was corrected.
+- `process_switch_to` requires CPL0 with IF clear, verifies the current kernel stack, target privilege stack, and switch code are supervisor mappings, then switches CR3 and TSS.RSP0 with rollback on activation failure. `process_deactivate` restores the kernel root and bootstrap TSS stack.
+- The scheduler binds at most one live kernel thread to each READY process and switches process contexts at dispatch boundaries. A process-bound thread that exits is marked EXITED only after its address space is no longer active.
+- The process and scheduler self-tests cover process-to-process switching, kernel-context restoration, duplicate binding rejection, lifecycle transitions, and reaping.
 - No build, emulator, or CI result is claimed. Ring-3 execution remains disabled.
 
 
