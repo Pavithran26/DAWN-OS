@@ -13,6 +13,7 @@
 #include "syscall.h"
 #include "user_mode.h"
 #include "gdt.h"
+#include "process.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -671,6 +672,21 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-OS: kernel GDT and 64-bit TSS loaded; privilege stack ready\n");
+    if (!process_manager_initialize()) {
+        serial_write("DAWN-OS: FAIL: process resource manager initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+#ifdef DAWN_KERNEL_TEST
+    if (!process_manager_self_test()) {
+        serial_write("DAWN-TEST: FAIL: process resource lifecycle tests\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: process address-space and kernel-stack ownership, lifecycle, reaping and slot reuse\n");
+#endif
 #ifdef DAWN_KERNEL_TEST
     if (!user_mode_self_test()) {
         serial_write("DAWN-TEST: FAIL: user-mode entry argument validation\n");

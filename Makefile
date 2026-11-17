@@ -42,7 +42,7 @@ build/gdt.o: kernel/gdt.c include/gdt.h arch/x86_64/gdt.S | build
 	$(CC) $(ASFLAGS) -c arch/x86_64/gdt.S -o build/gdt-asm.o
 	$(LD) -r -o $@ build/gdt-c.o build/gdt-asm.o
 
-build/main.o: kernel/main.c include/gdt.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h | build
+build/main.o: kernel/main.c include/gdt.h include/process.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/physical_memory.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
@@ -78,7 +78,7 @@ build/dawn-kernel.elf: $(KERNEL_OBJECTS) linker.ld
 
 kernel-test: build/dawn-kernel-test.elf
 
-build/main-test.o: kernel/main.c include/gdt.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h include/user_mode.h | build
+build/main-test.o: kernel/main.c include/gdt.h include/process.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h include/user_mode.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build

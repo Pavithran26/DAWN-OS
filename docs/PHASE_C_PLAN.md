@@ -123,3 +123,14 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - The GDT/TSS self-test now exercises two distinct allocations, activation, active-stack release rejection, restoration of the bootstrap stack, release, and stale-handle rejection.
 - This is a stack-resource primitive only. It does not yet bind stacks to process objects, switch stacks during a scheduler context switch, or permit safe ring-3 execution. Callers must serialize operations with interrupts disabled on the current single CPU.
 - No build, QEMU, or CI validation is claimed for this source update.
+
+
+## Process resource lifecycle foundation (2026-11-17)
+
+- Added a bounded four-entry process table with monotonically increasing process IDs and explicit CREATED, READY, and EXITED states.
+- Process creation now owns one isolated lower-half address-space root and one privilege-transition kernel stack. Partial allocation failure rolls back the address-space allocation.
+- Added state transitions, metadata inspection, and reaping. Reaping releases private page-table frames and the process kernel stack; VM teardown refuses to free the active CR3 root.
+- Operations are CPL0-only and serialize their table/resource updates with interrupts disabled on the current single CPU.
+- This is not yet a runnable process subsystem: there is no scheduler integration, no process-specific CR3/stack switch, no ELF loader, and no user exit/wait syscall. Process resources must not be activated for ring-3 execution yet.
+- Added deterministic self-test coverage for table capacity, unique IDs, state transitions, invalid transitions, resource cleanup, stale IDs, and slot reuse.
+- No build, QEMU, or CI validation is claimed for this source update.
