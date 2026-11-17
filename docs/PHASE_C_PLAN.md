@@ -22,6 +22,18 @@ The first Phase C foundation increment is present on `main`:
 
 The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
 
+## Implementation progress — GDT/TSS foundation (2026-11-17)
+
+The kernel now has a dedicated GDT/TSS initialization increment:
+
+- Installs kernel code/data and ring-3 code/data descriptors with documented selectors.
+- Installs an available 64-bit TSS descriptor and loads TR.
+- Provides an aligned 16 KiB privilege-transition kernel stack as TSS.RSP0, with an API for later per-process kernel stacks.
+- Adds self-test coverage for TR selector, descriptor type/presence, RSP0 canonicality/alignment, and stack setter rejection/restore.
+- Initialization runs before IDT setup. No user-mode transition is attempted.
+
+**Still disabled:** no DPL3 syscall gate, ring-3 IRET frame, user task, process-specific CR3, process lifecycle, or ELF loader. The privilege stack is prepared only. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
+
 ## Goals
 
 Build a small, auditable userspace environment with a documented privilege boundary and a simple, testable storage path. The initial target is QEMU x86_64 with BIOS and UEFI boot, using a virtio block device. Real hardware support comes later.

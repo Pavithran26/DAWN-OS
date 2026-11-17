@@ -23,7 +23,7 @@ CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
 ASFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 --build-id=none
 
-KERNEL_OBJECTS = build/boot.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o
+KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all
 
@@ -37,7 +37,12 @@ build:
 build/boot.o: arch/x86_64/boot.S | build
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-build/main.o: kernel/main.c include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h | build
+build/gdt.o: kernel/gdt.c include/gdt.h arch/x86_64/gdt.S | build
+	$(CC) $(CFLAGS) -c kernel/gdt.c -o build/gdt-c.o
+	$(CC) $(ASFLAGS) -c arch/x86_64/gdt.S -o build/gdt-asm.o
+	$(LD) -r -o $@ build/gdt-c.o build/gdt-asm.o
+
+build/main.o: kernel/main.c include/gdt.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/physical_memory.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
@@ -69,7 +74,7 @@ build/dawn-kernel.elf: $(KERNEL_OBJECTS) linker.ld
 
 kernel-test: build/dawn-kernel-test.elf
 
-build/main-test.o: kernel/main.c include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h | build
+build/main-test.o: kernel/main.c include/gdt.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
@@ -93,8 +98,8 @@ build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupt
 build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o
+build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o linker.ld
+	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o
 
 check: kernel
 	@set -eu; \

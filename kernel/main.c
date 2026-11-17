@@ -11,6 +11,7 @@
 #include "apic.h"
 #include "scheduler.h"
 #include "syscall.h"
+#include "gdt.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -653,6 +654,23 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: kernel-callable syscall dispatcher and user-memory helper unit tests (no ring-3 entry)\n");
 
+#endif
+
+    if (!gdt_tss_initialize()) {
+        serial_write("DAWN-OS: FAIL: GDT/TSS initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: kernel GDT and 64-bit TSS loaded; privilege stack ready\n");
+#ifdef DAWN_KERNEL_TEST
+    if (!gdt_tss_self_test()) {
+        serial_write("DAWN-TEST: FAIL: GDT/TSS selector and stack validation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: GDT/TSS descriptor, TR and RSP0 validation\n");
 #endif
 
     if (!interrupts_initialize()) {
