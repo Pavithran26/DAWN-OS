@@ -74,3 +74,11 @@
 - The entry point must be user executable; the initial stack must be user writable and correctly aligned.
 - Self-test now creates and activates a temporary process with private code/stack mappings, tests positive and negative entry parameters, then tears down the process and caller-owned frames.
 - This validates launch preconditions only. Safe scheduler continuation, user timer preemption, recoverable user faults and process exit are still outstanding. Build and emulator checks remain pending.
+
+
+## Static ELF64 executable validation (2026-11-17)
+
+- Added ELF64 x86-64 ET_EXEC structural validation for bounded static executable images and load-segment metadata.
+- Enforces file and memory bounds, user virtual range, power-of-two/congruent alignment, W^X, executable entry containment, and page-level non-overlap. Dynamic/interpreter images are rejected.
+- Added synthetic valid/invalid image self-tests and wired them into the kernel test image.
+- This is validation only: no segment allocation/copy, BSS zeroing, relocation, process image ownership, or actual ELF launch is implemented. Compilation and emulator validation remain pending.

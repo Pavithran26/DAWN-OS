@@ -12,6 +12,7 @@
 #include "scheduler.h"
 #include "syscall.h"
 #include "user_mode.h"
+#include "elf_loader.h"
 #include "gdt.h"
 #include "process.h"
 
@@ -693,7 +694,13 @@ void kernel_main(void) {
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
-    serial_write("DAWN-TEST: PASS: user-mode entry rejects invalid addresses and stack alignment\n");
+    serial_write("DAWN-TEST: PASS: user-mode entry validates active process mappings and stack alignment\n");
+    if (!elf64_loader_self_test()) {
+        serial_write("DAWN-TEST: FAIL: ELF64 executable validation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: ELF64 header, load segments, permissions and bounds validation\n");
 #endif
 
 #ifdef DAWN_KERNEL_TEST

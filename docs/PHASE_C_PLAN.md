@@ -179,3 +179,11 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Entry RIP must map to a user executable page and the initial stack top must resolve to a user writable page in that active root.
 - Extended the user-mode self-test to create a temporary process, map separate code and stack pages, activate its address space, accept a valid entry, reject a writable/non-executable code address and reject a misaligned stack, then deactivate/reap the process and free its user frames.
 - The low-level iretq entry primitive remains a non-returning primitive, not a scheduler-managed user process launch. No build, QEMU, or CI validation is claimed.
+
+
+## Static ELF64 executable validation (2026-11-17)
+
+- Added a bounded ELF64 x86-64 ET_EXEC validator with explicit header/program-header size checks, a 32-header cap, file-range and integer-overflow checks, user virtual-address bounds, alignment checks, and executable-entry validation.
+- Rejects PT_INTERP and PT_DYNAMIC, unsupported program-header types, writable+executable segments, malformed load segments, and page-level segment overlap. The supported subset is intentionally static and does not yet load or relocate an image.
+- Added synthetic image tests for a valid executable and malformed/truncated headers, machine mismatch, file/memory size mismatch, out-of-image data, W+X, alignment mismatch, invalid entry, and page-overlapping segments.
+- Wired the validator and test into production/test object lists and the kernel self-test entry point. No build, QEMU, or CI result is claimed.
