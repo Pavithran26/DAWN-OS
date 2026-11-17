@@ -23,7 +23,7 @@ The scheduler disables interrupts while changing thread state. Voluntary yields 
 ## Scheduling
 
 - Round-robin among READY worker threads on voluntary reschedule or Local APIC timer interrupts.
-- Hardware timer dispatch requires the interrupted worker to be RUNNING; software reschedule accepts only the documented READY/DEAD transition states.
+- Hardware timer dispatch requires exactly one RUNNING worker (the interrupted thread); software reschedule accepts only the documented READY/DEAD transition states and no worker may remain RUNNING at dispatch entry. Every saved worker frame must be 8-byte aligned and fully contained above its low-stack canary before it can be restored.
 - scheduler_run_until_idle() runs READY workers from the bootstrap context and returns to bootstrap after all workers exit.
 - kernel_thread_yield() makes the current worker READY and switches to another READY worker when one exists.
 - kernel_thread_exit() marks the current worker DEAD and switches to another READY worker or the waiting bootstrap context.
@@ -31,7 +31,7 @@ The scheduler disables interrupts while changing thread state. Voluntary yields 
 
 ## Validation
 
-The QEMU self-test creates two worker threads. Each increments an independent counter four times while voluntarily yielding. It checks both counters, unique thread IDs, exactly two thread exits, zero active workers, the yield/switch counters, and intact stack guards. A second test runs four preemption rounds. In each round the first worker busy-waits without yielding; the second worker must run on a timer preemption, update shared progress and exit while the first worker is READY. The tests also check repeated DEAD-slot reuse, stack guards, timer-preemption counts, and scheduler switch/exit counts. APIC tests verify multiple periodic deliveries, that ticks stop after masking, and that a restarted timer delivers again.
+The QEMU self-test creates two worker threads. Each increments an independent counter four times while voluntarily yielding. It checks both counters, unique thread IDs, exactly two thread exits, zero active workers, the yield/switch counters, and intact stack guards. A second test runs four preemption rounds. In each round the first worker busy-waits without yielding; the second worker must run on a timer preemption, update shared progress and exit while the first worker is READY. The tests also check repeated DEAD-slot reuse, stack guards, timer-preemption counts, saved-frame stack bounds, canary integrity, and scheduler switch/exit counts. APIC tests verify multiple periodic deliveries, that ticks stop after masking, and that a restarted timer delivers again.
 
 BIOS and UEFI QEMU tests must retain all earlier ACPI/MADT, xAPIC/IOAPIC real PIT IRQ, page-table and physical allocator tests.
 

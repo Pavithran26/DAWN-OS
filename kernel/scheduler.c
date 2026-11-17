@@ -88,6 +88,36 @@ static void thread_frame_initialize(struct kernel_thread *thread) {
     frame->rflags=INITIAL_THREAD_RFLAGS;
     thread->saved_frame=frame;
 }
+static bool thread_frame_valid(const struct kernel_thread *thread,
+                               const struct interrupt_frame *frame) {
+    uintptr_t frame_address=0U;
+    uintptr_t stack_begin=0U;
+    uintptr_t stack_end=0U;
+    if (thread==NULL || frame==NULL) return false;
+    frame_address=(uintptr_t)frame;
+    stack_begin=(uintptr_t)thread->stack+KERNEL_THREAD_GUARD_SIZE;
+    stack_end=(uintptr_t)(thread->stack+KERNEL_THREAD_STACK_SIZE);
+    return (frame_address&0x7U)==0U && frame_address>=stack_begin &&
+           frame_address<=stack_end-sizeof(*frame);
+}
+
+static bool scheduler_dispatch_state_valid(
+    const struct kernel_thread *self,bool timer_interrupt
+) {
+    uint32_t running_count=0U;
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        const struct kernel_thread *candidate=&thread_pool[i];
+        if (candidate->state==THREAD_RUNNING) {
+            ++running_count;
+            if (candidate!=self) return false;
+        }
+    }
+    if (timer_interrupt)
+        return self!=&bootstrap_thread && self->state==THREAD_RUNNING &&
+               running_count==1U;
+    return running_count==0U;
+}
+
 static struct kernel_thread *find_ready_thread(
     const struct kernel_thread *exclude
 ) {
@@ -200,6 +230,11 @@ struct interrupt_frame *scheduler_handle_interrupt(
         cpu_halt_forever();
     }
 
+    if (self!=&bootstrap_thread && !thread_frame_valid(self,frame))
+        cpu_halt_forever();
+    if (!scheduler_dispatch_state_valid(self,timer_interrupt))
+        cpu_halt_forever();
+
     self->saved_frame=frame;
     if (timer_interrupt) self->state=THREAD_READY;
 
@@ -222,7 +257,8 @@ struct interrupt_frame *scheduler_handle_interrupt(
         return frame;
     }
 
-    if (next->saved_frame==NULL || !thread_guard_valid(next))
+    if (next->saved_frame==NULL || !thread_guard_valid(next) ||
+        !thread_frame_valid(next,next->saved_frame))
         cpu_halt_forever();
     if (timer_interrupt) increment_saturated(&counters.timer_preemptions);
     if (self->state==THREAD_RUNNING)
@@ -391,7 +427,10 @@ bool scheduler_preemption_self_test(void) {
         if (after.active_threads!=0ULL) return false;
         for (size_t slot=0U;slot<KERNEL_THREAD_MAX;slot++) {
             if (thread_pool[slot].state==THREAD_DEAD &&
-                !thread_guard_valid(&thread_pool[slot])) return false;
+                (!thread_guard_valid(&thread_pool[slot]) ||
+                 !thread_frame_valid(&thread_pool[slot],
+                                     thread_pool[slot].saved_frame)))
+                return false;
         }
     }
 

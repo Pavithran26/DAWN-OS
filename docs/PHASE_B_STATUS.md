@@ -15,7 +15,7 @@ The code now includes a single-CPU kernel-thread scheduler that can switch saved
 - x86_64 IDT and exception dispatch, PIC masking, ACPI MADT discovery, xAPIC and IOAPIC setup.
 - IOAPIC-routed PIT interrupt delivery test.
 - Local APIC timer vector 0x41, one-shot and periodic controls, EOI handling, PIT channel 2 reference calibration, nominal 100 Hz scheduler-tick configuration and periodic stop/restart self-tests.
-- Saved interrupt-frame switching, kernel-only software reschedule vector 0x42, cooperative yield, thread exit, explicit dispatch-state invariants, and four-round timer-driven round-robin preemption stress test with timer-preemption accounting.
+- Saved interrupt-frame switching, kernel-only software reschedule vector 0x42, cooperative yield, thread exit, explicit dispatch-state invariants, per-thread saved-frame bounds validation, and four-round timer-driven round-robin preemption stress test with timer-preemption accounting.
 - Fixed-capacity worker pool, stack guards, monotonic thread IDs and DEAD-slot reuse checks.
 
 ## Remaining Phase B work
