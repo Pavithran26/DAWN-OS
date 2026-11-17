@@ -700,7 +700,11 @@ static bool address_space_free_lower_tables(volatile uint64_t *table,
         uint64_t child_physical=0ULL;
         volatile uint64_t *child=NULL;
         if ((entry&ENTRY_PRESENT)==0ULL) continue;
-        if (level==3U || (entry&ENTRY_LARGE)!=0ULL) return false;
+        if (level==3U) {
+            if ((entry&ENTRY_LARGE)!=0ULL) return false;
+            continue; /* Leaf data frames are caller-owned. */
+        }
+        if ((entry&ENTRY_LARGE)!=0ULL) return false;
         child_physical=entry&manager.physical_address_mask;
         child=physical_to_hhdm_pointer(child_physical);
         if (child==NULL) return false;
