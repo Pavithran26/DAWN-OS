@@ -11,6 +11,7 @@ struct scheduler_stats {
     uint64_t threads_exited;
     uint64_t context_switches;
     uint64_t voluntary_yields;
+    uint64_t timer_preemptions;
     uint64_t active_threads;
 };
 bool scheduler_initialize(void);

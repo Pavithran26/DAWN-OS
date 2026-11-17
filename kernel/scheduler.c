@@ -189,9 +189,19 @@ struct interrupt_frame *scheduler_handle_interrupt(
         (self!=&bootstrap_thread && !thread_guard_valid(self)))
         cpu_halt_forever();
 
+    /* A hardware tick may interrupt only the currently running worker.
+     * Software reschedule is issued only after READY/DEAD is committed. */
+    if (timer_interrupt) {
+        if (self==&bootstrap_thread || self->state!=THREAD_RUNNING)
+            cpu_halt_forever();
+    } else if ((self==&bootstrap_thread && self->state!=THREAD_READY) ||
+               (self!=&bootstrap_thread && self->state!=THREAD_READY &&
+                self->state!=THREAD_DEAD)) {
+        cpu_halt_forever();
+    }
+
     self->saved_frame=frame;
-    if (timer_interrupt && self->state==THREAD_RUNNING)
-        self->state=THREAD_READY;
+    if (timer_interrupt) self->state=THREAD_READY;
 
     next=find_ready_thread(self);
     if (next==NULL) {
@@ -214,6 +224,7 @@ struct interrupt_frame *scheduler_handle_interrupt(
 
     if (next->saved_frame==NULL || !thread_guard_valid(next))
         cpu_halt_forever();
+    if (timer_interrupt) increment_saturated(&counters.timer_preemptions);
     if (self->state==THREAD_RUNNING)
         self->state=THREAD_READY;
     next->state=THREAD_RUNNING;
@@ -387,6 +398,7 @@ bool scheduler_preemption_self_test(void) {
     scheduler_get_stats(&after);
     return after.threads_exited>=before.threads_exited+8ULL &&
            after.context_switches>=before.context_switches+16ULL &&
+           after.timer_preemptions>=before.timer_preemptions+4ULL &&
            after.active_threads==0ULL;
 }
 #endif
