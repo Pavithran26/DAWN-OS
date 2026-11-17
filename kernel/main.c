@@ -651,7 +651,7 @@ void kernel_main(void) {
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
-    serial_write("DAWN-TEST: PASS: Phase C syscall ABI and bounded user-write validation\n");
+    serial_write("DAWN-TEST: PASS: kernel-callable syscall dispatcher and user-memory helper unit tests (no ring-3 entry)\n");
 
 #endif
 

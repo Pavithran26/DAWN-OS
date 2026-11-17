@@ -8,6 +8,20 @@ The current kernel has a Limine boot path, physical and virtual memory managers,
 
 Phase C must not be represented as complete or bootable until those prerequisites and the tests below exist.
 
+## Current implementation snapshot (2026-11-17)
+
+The first Phase C foundation increment is present on `main`:
+
+- `include/syscall.h` defines ABI v1, syscall numbers, argument-register convention, return/error convention, and the 4 KiB write limit.
+- `kernel/syscall.c` implements a kernel-callable dispatcher for ABI-version lookup and bounded serial `write` to descriptors 1 and 2. Unsupported calls return `ENOSYS`.
+- `kernel/page_table.c` provides user-range validation and bounded copy helpers that require effective user mappings and, for writes into userspace, effective writable permissions.
+- The page-table self-test creates a temporary user mapping and exercises copy-in/copy-out and invalid-range cases.
+- The kernel test calls the dispatcher directly and checks ABI-version, descriptor, pointer, length, and unsupported-call errors.
+
+**This is not yet a functioning userspace syscall path.** The dispatcher is called as a normal kernel C function by the self-test. IDT vector `0x80` is not installed; no TSS/RSP0, ring-3 transition, isolated process address space, process lifecycle, or ELF64 loader exists. The current page-table manager still operates on the active kernel root. Do not describe user programs as runnable.
+
+The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
+
 ## Goals
 
 Build a small, auditable userspace environment with a documented privilege boundary and a simple, testable storage path. The initial target is QEMU x86_64 with BIOS and UEFI boot, using a virtio block device. Real hardware support comes later.
