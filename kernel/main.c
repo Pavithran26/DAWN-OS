@@ -46,6 +46,7 @@
 #include "service_manager.h"
 #include "power.h"
 #include "localization.h"
+#include "advanced.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -914,6 +915,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: localization, multi-language catalog, keymaps and accessibility ready\n");
 
+    if (!advanced_features_initialize()) {
+        serial_write("DAWN-OS: FAIL: advanced features initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: advanced features, spinlocks, ticketlocks, semaphores, shm, mmap and modules ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1266,6 +1276,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: multi-language catalog, keymap translation tables and accessibility scaling\n");
+
+    /* Phase S: Advanced OS Features */
+    if (!advanced_self_test()) {
+        serial_write("DAWN-TEST: FAIL: advanced spinlocks, semaphores, shm and modules\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules\n");
 #endif
 
     if (framebuffer_response_valid()) {

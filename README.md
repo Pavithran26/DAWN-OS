@@ -58,8 +58,9 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - Service manager and system supervisor with declarative dependency resolution, IPC message bus, and system-wide event publish/subscribe dispatch.
 - Power and reliability framework with CPU C-state idle optimization, ACPI shutdown, multi-vector reset/reboot, crash diagnostics, and Emerald Screen of Death (GSOD).
 - Multi-language localization (EN, ES, FR, DE, JA), international keyboard layout translation (QWERTY, AZERTY, QWERTZ, Dvorak), and accessibility APIs.
+- Advanced kernel concurrency (atomic spinlocks, ticket locks, semaphores, rwlocks), shared memory (`shm`), memory-mapped files (`mmap`), and dynamic kernel modules.
 
-Advanced features are scheduled in subsequent phases. Phases C through R (process, syscalls, VFS, storage, hardware, graphics desktop, terminal, shell, task manager, networking, audio, settings, installer, security, application runtime, service manager, power, and localization) are implemented.
+All core architecture and feature implementation phases (Phases A through S: bootloader, memory, interrupts, scheduler, process, syscalls, VFS, storage, hardware, desktop, terminal, shell, task manager, networking, audio, settings, installer, security, application runtime, service manager, power, localization, and advanced features) are fully implemented. Phase T (Comprehensive Testing and Release) encompasses build verification, static analysis, and QEMU validation.
 
 **Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 
