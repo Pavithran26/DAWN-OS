@@ -158,7 +158,10 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
             const struct icmp_header *icmp = (const struct icmp_header *)(packet + sizeof(struct eth_header) + ip_hdr_len);
             if (icmp->type == 8) {
                 /* Echo Request -> Send Echo Reply */
-                size_t icmp_data_len = len - (sizeof(struct eth_header) + ip_hdr_len);
+                uint16_t ip_total = ntohs(ip->total_length);
+                if (ip_total < ip_hdr_len + sizeof(struct icmp_header)) return -1;
+                if (len < sizeof(struct eth_header) + ip_total) return -1;
+                size_t icmp_data_len = (size_t)(ip_total - ip_hdr_len);
                 uint8_t reply_buf[1500];
                 if (sizeof(struct eth_header) + sizeof(struct ipv4_header) + icmp_data_len > sizeof(reply_buf)) return -1;
 
@@ -173,6 +176,8 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
                 reth->type = htons(ETHERTYPE_IPV4);
 
                 *rip = *ip;
+                rip->ihl_version = (4U << 4) | (uint8_t)(sizeof(struct ipv4_header) / 4U);
+                rip->total_length = htons((uint16_t)(sizeof(struct ipv4_header) + icmp_data_len));
                 rip->src_ip = ip->dest_ip;
                 rip->dest_ip = ip->src_ip;
                 rip->checksum = 0;

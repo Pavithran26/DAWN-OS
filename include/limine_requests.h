@@ -54,7 +54,39 @@
 #define LIMINE_MEMMAP_FRAMEBUFFER 7ULL
 #define LIMINE_MEMMAP_RESERVED_MAPPED 8ULL
 
-struct limine_framebuffer;
+struct limine_video_mode {
+    uint64_t pitch;
+    uint64_t width;
+    uint64_t height;
+    uint16_t bpp;
+    uint8_t memory_model;
+    uint8_t red_mask_size;
+    uint8_t red_mask_shift;
+    uint8_t green_mask_size;
+    uint8_t green_mask_shift;
+    uint8_t blue_mask_size;
+    uint8_t blue_mask_shift;
+};
+
+struct limine_framebuffer {
+    void *address;
+    uint64_t width;
+    uint64_t height;
+    uint64_t pitch;
+    uint16_t bpp;
+    uint8_t memory_model;
+    uint8_t red_mask_size;
+    uint8_t red_mask_shift;
+    uint8_t green_mask_size;
+    uint8_t green_mask_shift;
+    uint8_t blue_mask_size;
+    uint8_t blue_mask_shift;
+    uint8_t unused[7];
+    uint64_t edid_size;
+    void *edid;
+    uint64_t mode_count;
+    struct limine_video_mode **modes;
+};
 
 struct limine_framebuffer_response {
     uint64_t revision;
@@ -150,5 +182,9 @@ _Static_assert(sizeof(struct limine_rsdp_response) == 16U,
                "Limine RSDP response ABI size mismatch");
 _Static_assert(sizeof(struct limine_rsdp_request) == 48U,
                "Limine RSDP request ABI size mismatch");
+_Static_assert(sizeof(struct limine_framebuffer_response) == 24U,
+               "Limine framebuffer response ABI size mismatch");
+_Static_assert(sizeof(struct limine_framebuffer_request) == 48U,
+               "Limine framebuffer request ABI size mismatch");
 
 #endif

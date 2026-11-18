@@ -103,32 +103,32 @@ bool power_format_crash_report(const char *reason, const struct cpu_crash_contex
     if (reason != NULL) {
         while (*reason && pos + 1 < max_len) buf[pos++] = *reason++;
     }
-    buf[pos++] = '\n';
+    if (pos + 1 < max_len) buf[pos++] = '\n';
 
     if (ctx != NULL) {
         #define APPEND_REG(name, val) do { \
             for (const char *n = name "="; *n && pos + 1 < max_len; n++) buf[pos++] = *n; \
             char hbuf[20]; hex_to_str(val, hbuf); \
             for (char *h = hbuf; *h && pos + 1 < max_len; h++) buf[pos++] = *h; \
-            buf[pos++] = ' '; \
+            if (pos + 1 < max_len) buf[pos++] = ' '; \
         } while (0)
 
         APPEND_REG("RIP", ctx->rip);
         APPEND_REG("RSP", ctx->rsp);
         APPEND_REG("RBP", ctx->rbp);
-        buf[pos++] = '\n';
+        if (pos + 1 < max_len) buf[pos++] = '\n';
         APPEND_REG("RAX", ctx->rax);
         APPEND_REG("RBX", ctx->rbx);
         APPEND_REG("RCX", ctx->rcx);
         APPEND_REG("RDX", ctx->rdx);
-        buf[pos++] = '\n';
+        if (pos + 1 < max_len) buf[pos++] = '\n';
         APPEND_REG("RSI", ctx->rsi);
         APPEND_REG("RDI", ctx->rdi);
         APPEND_REG("FLG", ctx->rflags);
-        buf[pos++] = '\n';
+        if (pos + 1 < max_len) buf[pos++] = '\n';
         APPEND_REG("CR2", ctx->cr2);
         APPEND_REG("CR3", ctx->cr3);
-        buf[pos++] = '\n';
+        if (pos + 1 < max_len) buf[pos++] = '\n';
     }
 
     buf[pos] = '\0';

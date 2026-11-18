@@ -41,13 +41,21 @@ static inline size_t str_len(const char *s) {
 static void make_slice_name(char *dest, const char *parent_name, uint32_t index) {
     size_t plen = str_len(parent_name);
     size_t d = 0;
-    for (size_t i = 0; i < plen && d + 4 < BLOCK_DEV_NAME_MAX; i++) {
+    for (size_t i = 0; i < plen && d + 6 < BLOCK_DEV_NAME_MAX; i++) {
         dest[d++] = parent_name[i];
     }
     if (plen > 0 && is_digit(parent_name[plen - 1])) {
         dest[d++] = 'p';
     }
-    dest[d++] = (char)('0' + (index % 10U));
+    if (index >= 100U && d + 1 < BLOCK_DEV_NAME_MAX) {
+        dest[d++] = (char)('0' + ((index / 100U) % 10U));
+    }
+    if (index >= 10U && d + 1 < BLOCK_DEV_NAME_MAX) {
+        dest[d++] = (char)('0' + ((index / 10U) % 10U));
+    }
+    if (d + 1 < BLOCK_DEV_NAME_MAX) {
+        dest[d++] = (char)('0' + (index % 10U));
+    }
     dest[d] = '\0';
 }
 

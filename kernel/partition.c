@@ -38,13 +38,21 @@ static inline bool is_digit(char c) {
 static void make_slice_name(char *dest, const char *parent_name, uint32_t index) {
     size_t plen = str_len(parent_name);
     size_t d = 0;
-    for (size_t i = 0; i < plen && d + 4 < BLOCK_DEV_NAME_MAX; i++) {
+    for (size_t i = 0; i < plen && d + 6 < BLOCK_DEV_NAME_MAX; i++) {
         dest[d++] = parent_name[i];
     }
     if (plen > 0 && is_digit(parent_name[plen - 1])) {
         dest[d++] = 'p';
     }
-    dest[d++] = (char)('0' + (index % 10U));
+    if (index >= 100U && d + 1 < BLOCK_DEV_NAME_MAX) {
+        dest[d++] = (char)('0' + ((index / 100U) % 10U));
+    }
+    if (index >= 10U && d + 1 < BLOCK_DEV_NAME_MAX) {
+        dest[d++] = (char)('0' + ((index / 10U) % 10U));
+    }
+    if (d + 1 < BLOCK_DEV_NAME_MAX) {
+        dest[d++] = (char)('0' + (index % 10U));
+    }
     dest[d] = '\0';
 }
 
@@ -239,7 +247,7 @@ int partition_create_mbr(struct block_device *disk, uint32_t index, uint64_t sta
     if (!partition_validate_safe_operation(disk, start_lba, count)) return -1;
 
     uint8_t sector_buf[512] = {0};
-    (void)block_dev_read(disk, 0, 1, sector_buf);
+    if (block_dev_read(disk, 0, 1, sector_buf) != 0) return -1;
 
     struct mbr_sector *mbr = (struct mbr_sector *)sector_buf;
     mbr->entries[index - 1].boot_indicator = bootable ? 0x80U : 0x00U;

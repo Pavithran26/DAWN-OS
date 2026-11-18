@@ -127,10 +127,11 @@ static struct vfs_node *iso9660_finddir(struct vfs_node *node, const char *name)
             char formatted[VFS_MAX_NAME];
             iso_format_name(d->name, d->name_len, formatted, sizeof(formatted));
             if (iso_str_equal(formatted, name)) {
-                if (iso_node_count >= 16) return NULL;
-                struct vfs_node *n = &iso_file_nodes[iso_node_count++];
+                size_t slot = iso_node_count % 16;
+                iso_node_count++;
+                struct vfs_node *n = &iso_file_nodes[slot];
                 static struct iso9660_file_info fi_pool[16];
-                struct iso9660_file_info *fi = &fi_pool[iso_node_count - 1];
+                struct iso9660_file_info *fi = &fi_pool[slot];
                 fi->extent_lba = d->extent_lba_le;
                 *n = (struct vfs_node){0};
                 iso_str_copy(n->name, formatted, VFS_MAX_NAME);

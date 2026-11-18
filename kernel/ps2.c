@@ -143,8 +143,7 @@ bool ps2_initialize(void) {
     outb(PS2_COMMAND_PORT, 0x20);
     ps2_wait_read();
     uint8_t config = inb(PS2_DATA_PORT);
-    config |= 0x03; /* Enable interrupts for port 1 and 2 */
-    config &= (uint8_t)~0x40U; /* Disable translation */
+    config |= 0x43; /* Enable interrupts for port 1 and 2, keep translation enabled (Set 1) */
 
     /* Write back config */
     ps2_wait_write();

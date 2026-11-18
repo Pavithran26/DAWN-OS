@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "ahci.h"
+#include "page_table.h"
 
 static struct ahci_hba_memory *hba_mem = NULL;
 static struct ahci_device ahci_devices[AHCI_MAX_PORTS];
@@ -114,15 +115,18 @@ bool ahci_initialize(void) {
         uint32_t bar5 = controllers[0].bar[5];
         if (bar5 != 0 && (bar5 & 1U) == 0) {
             uint64_t phys_addr = (uint64_t)(bar5 & ~0x0FU);
-            hba_mem = (struct ahci_hba_memory *)phys_addr;
+            uint64_t virt_addr = 0;
+            if (vm_map_mmio_page(phys_addr, &virt_addr)) {
+                hba_mem = (struct ahci_hba_memory *)virt_addr;
 
-            /* Enable AHCI mode */
-            hba_mem->ghc |= (1U << 31);
+                /* Enable AHCI mode */
+                hba_mem->ghc |= (1U << 31);
 
-            uint32_t pi = hba_mem->pi;
-            for (uint32_t p = 0; p < AHCI_MAX_PORTS; p++) {
-                if ((pi & (1U << p)) != 0) {
-                    probe_port(p);
+                uint32_t pi = hba_mem->pi;
+                for (uint32_t p = 0; p < AHCI_MAX_PORTS; p++) {
+                    if ((pi & (1U << p)) != 0) {
+                        probe_port(p);
+                    }
                 }
             }
         }

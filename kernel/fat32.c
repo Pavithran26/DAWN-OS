@@ -209,10 +209,11 @@ static struct vfs_node *fat32_finddir(struct vfs_node *node, const char *name) {
             char formatted[16];
             fat32_format_short_name(d[i].name, formatted);
             if (fat_str_equal(formatted, name)) {
-                if (fat32_node_count >= 16) return NULL;
-                struct vfs_node *n = &fat32_file_nodes[fat32_node_count++];
+                size_t slot = fat32_node_count % 16;
+                fat32_node_count++;
+                struct vfs_node *n = &fat32_file_nodes[slot];
                 static struct fat32_file_info fi_pool[16];
-                struct fat32_file_info *fi = &fi_pool[fat32_node_count - 1];
+                struct fat32_file_info *fi = &fi_pool[slot];
                 fi->first_cluster = ((uint32_t)d[i].first_cluster_high << 16) | d[i].first_cluster_low;
                 fi->dir_cluster = cluster;
                 fi->dir_offset = i * sizeof(struct fat32_dirent);

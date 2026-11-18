@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "xhci.h"
 #include "device.h"
+#include "page_table.h"
 
 #define XHCI_MAX_CONTROLLERS 2U
 
@@ -37,9 +38,14 @@ bool xhci_initialize(void) {
             mmio_base |= ((uint64_t)bar1) << 32;
         }
 
+        uint64_t mmio_virt = 0;
+        if (!vm_map_mmio_page(mmio_base, &mmio_virt)) {
+            continue;
+        }
+
         struct xhci_controller *ctrl = &controllers[controller_count];
-        ctrl->cap = (struct xhci_cap_regs *)mmio_base;
-        ctrl->op = (struct xhci_op_regs *)(mmio_base + ctrl->cap->caplength);
+        ctrl->cap = (struct xhci_cap_regs *)mmio_virt;
+        ctrl->op = (struct xhci_op_regs *)(mmio_virt + ctrl->cap->caplength);
         ctrl->active = true;
 
         uint32_t p1 = ctrl->cap->hcsparams1;

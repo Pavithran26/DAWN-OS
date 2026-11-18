@@ -222,7 +222,10 @@ void *mmap_file(struct vfs_node *node, uint64_t offset, size_t length, int prot,
             r->active = true;
 
             /* Load file contents */
-            (void)vfs_read(node, offset, length, (void *)r->vaddr);
+            if (vfs_read(node, offset, length, (void *)r->vaddr) < 0) {
+                r->active = false;
+                return NULL;
+            }
             return (void *)r->vaddr;
         }
     }
@@ -237,7 +240,10 @@ bool munmap_file(void *addr, size_t length) {
             /* If shared & writable, write back changes */
             if ((mmap_table[i].flags & MAP_SHARED) && (mmap_table[i].prot & PROT_WRITE)) {
                 size_t write_len = (length < mmap_table[i].length) ? length : mmap_table[i].length;
-                (void)vfs_write(mmap_table[i].file_node, mmap_table[i].file_offset, write_len, addr);
+                if (vfs_write(mmap_table[i].file_node, mmap_table[i].file_offset, write_len, addr) < 0) {
+                    mmap_table[i].active = false;
+                    return false;
+                }
             }
             mmap_table[i].active = false;
             return true;

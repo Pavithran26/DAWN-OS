@@ -96,6 +96,12 @@ bool service_stop(const char *name) {
         if (service_registry[i].active && str_equal(service_registry[i].name, name)) {
             service_registry[i].state = SERVICE_STOPPED;
             service_registry[i].pid = 0;
+            for (size_t j = 0; j < SERVICE_MAX_UNITS; j++) {
+                if (service_registry[j].active && service_registry[j].state == SERVICE_RUNNING &&
+                    str_equal(service_registry[j].requires, name)) {
+                    (void)service_stop(service_registry[j].name);
+                }
+            }
             return true;
         }
     }

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "nvme.h"
+#include "page_table.h"
 
 #define NVME_MAX_CONTROLLERS 2U
 
@@ -68,8 +69,13 @@ bool nvme_initialize(void) {
             phys_base |= ((uint64_t)bar1) << 32;
         }
 
+        uint64_t virt_base = 0;
+        if (!vm_map_mmio_page(phys_base, &virt_base)) {
+            continue;
+        }
+
         struct nvme_controller *ctrl = &controllers[controller_count];
-        ctrl->regs = (struct nvme_controller_registers *)phys_base;
+        ctrl->regs = (struct nvme_controller_registers *)virt_base;
         ctrl->active = true;
 
         uint64_t cap = ctrl->regs->cap;
