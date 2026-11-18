@@ -55,8 +55,9 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - Operating system installer with automated MBR/GPT partitioning, FAT32 formatting, system tree deployment, Limine bootloader installation, and emergency recovery rescue shell.
 - Security subsystem with salted password hashing, user accounts, POSIX file permission checks, user/kernel pointer boundary validation, and audit logging.
 - Application runtime with standalone C library subset (`dlibc`), user heap memory allocator, native application lifecycle management, and DAWN Package Manager (`dpkg`).
+- Service manager and system supervisor with declarative dependency resolution, IPC message bus, and system-wide event publish/subscribe dispatch.
 
-Services, power, and accessibility are scheduled in subsequent phases. Phases C through O (process, syscalls, VFS, storage, hardware, graphics desktop, terminal, shell, task manager, networking, audio, settings, installer, security, and application runtime) are implemented.
+Power, accessibility, and advanced features are scheduled in subsequent phases. Phases C through P (process, syscalls, VFS, storage, hardware, graphics desktop, terminal, shell, task manager, networking, audio, settings, installer, security, application runtime, and service manager) are implemented.
 
 **Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 
