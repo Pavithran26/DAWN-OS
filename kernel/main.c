@@ -45,6 +45,7 @@
 #include "app_runtime.h"
 #include "service_manager.h"
 #include "power.h"
+#include "localization.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -904,6 +905,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: ACPI power management, reboot/shutdown and panic diagnostics ready\n");
 
+    if (!localization_initialize()) {
+        serial_write("DAWN-OS: FAIL: localization initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: localization, multi-language catalog, keymaps and accessibility ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1248,6 +1258,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: ACPI power states, reboot vectors and kernel panic diagnostics\n");
+
+    /* Phase R: Accessibility, Localization and User Experience */
+    if (!localization_self_test()) {
+        serial_write("DAWN-TEST: FAIL: localization multi-language, keymaps and accessibility\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: multi-language catalog, keymap translation tables and accessibility scaling\n");
 #endif
 
     if (framebuffer_response_valid()) {
