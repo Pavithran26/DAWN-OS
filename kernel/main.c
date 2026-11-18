@@ -41,6 +41,7 @@
 #include "audio.h"
 #include "settings.h"
 #include "installer.h"
+#include "security.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -864,6 +865,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: installer workflow, partition deployment and rescue shell ready\n");
 
+    if (!security_initialize()) {
+        serial_write("DAWN-OS: FAIL: security subsystem initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: security subsystem, user accounts, authentication and audit logging ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1176,6 +1186,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: installer disk verification, partition formatting, file copy and rescue shell\n");
+
+    /* Phase N: Security and User Management */
+    if (!security_self_test()) {
+        serial_write("DAWN-TEST: FAIL: security password hashing, user authentication and permissions\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: security password hashing, user authentication, permissions and address boundaries\n");
 #endif
 
     if (framebuffer_response_valid()) {
