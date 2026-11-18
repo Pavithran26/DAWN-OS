@@ -151,56 +151,54 @@ void kernel_panic(const char *reason, const struct cpu_crash_context *ctx) {
         gfx_draw_rect_filled(fb, 0, 0, fb->width, 48, 0xFF00C853U);
         gfx_draw_string(fb, 32, 16, "DAWN-OS SYSTEM CRASH — EMERALD DIAGNOSTIC SCREEN", 0xFF05150AU);
 
-        int32_t y = 80;
-        gfx_draw_string(fb, 32, y, "A critical kernel exception has occurred and execution was halted.", 0xFFFFFFFFU);
-        y += 30;
-        gfx_draw_string(fb, 32, y, "Reason: ", 0xFF00E676U);
-        gfx_draw_string(fb, 96, y, (reason != NULL) ? reason : "Unknown Fault", 0xFFFFFFFFU);
-        y += 40;
+        uint32_t y = 80U;
+        gfx_draw_string(fb, 32U, y, "A critical kernel exception has occurred and execution was halted.", 0xFFFFFFFFU);
+        y += 30U;
+        gfx_draw_string(fb, 32U, y, "Reason: ", 0xFF00E676U);
+        gfx_draw_string(fb, 96U, y, (reason != NULL) ? reason : "Unknown Fault", 0xFFFFFFFFU);
+        y += 40U;
 
         if (ctx != NULL) {
-            char reg_line[64];
             char h[20];
 
             hex_to_str(ctx->rip, h);
-            gfx_draw_string(fb, 32, y, "RIP: ", 0xFF00E676U);
-            gfx_draw_string(fb, 72, y, h, 0xFFFFFFFFU);
+            gfx_draw_string(fb, 32U, y, "RIP: ", 0xFF00E676U);
+            gfx_draw_string(fb, 72U, y, h, 0xFFFFFFFFU);
 
             hex_to_str(ctx->rsp, h);
-            gfx_draw_string(fb, 260, y, "RSP: ", 0xFF00E676U);
-            gfx_draw_string(fb, 300, y, h, 0xFFFFFFFFU);
-            y += 24;
+            gfx_draw_string(fb, 260U, y, "RSP: ", 0xFF00E676U);
+            gfx_draw_string(fb, 300U, y, h, 0xFFFFFFFFU);
+            y += 24U;
 
             hex_to_str(ctx->rax, h);
-            gfx_draw_string(fb, 32, y, "RAX: ", 0xFF00E676U);
-            gfx_draw_string(fb, 72, y, h, 0xFFFFFFFFU);
+            gfx_draw_string(fb, 32U, y, "RAX: ", 0xFF00E676U);
+            gfx_draw_string(fb, 72U, y, h, 0xFFFFFFFFU);
 
             hex_to_str(ctx->rbx, h);
-            gfx_draw_string(fb, 260, y, "RBX: ", 0xFF00E676U);
-            gfx_draw_string(fb, 300, y, h, 0xFFFFFFFFU);
-            y += 24;
+            gfx_draw_string(fb, 260U, y, "RBX: ", 0xFF00E676U);
+            gfx_draw_string(fb, 300U, y, h, 0xFFFFFFFFU);
+            y += 24U;
 
             hex_to_str(ctx->rcx, h);
-            gfx_draw_string(fb, 32, y, "RCX: ", 0xFF00E676U);
-            gfx_draw_string(fb, 72, y, h, 0xFFFFFFFFU);
+            gfx_draw_string(fb, 32U, y, "RCX: ", 0xFF00E676U);
+            gfx_draw_string(fb, 72U, y, h, 0xFFFFFFFFU);
 
             hex_to_str(ctx->rdx, h);
-            gfx_draw_string(fb, 260, y, "RDX: ", 0xFF00E676U);
-            gfx_draw_string(fb, 300, y, h, 0xFFFFFFFFU);
-            y += 24;
+            gfx_draw_string(fb, 260U, y, "RDX: ", 0xFF00E676U);
+            gfx_draw_string(fb, 300U, y, h, 0xFFFFFFFFU);
+            y += 24U;
 
             hex_to_str(ctx->cr2, h);
-            gfx_draw_string(fb, 32, y, "CR2: ", 0xFF00E676U);
-            gfx_draw_string(fb, 72, y, h, 0xFFFFFFFFU);
+            gfx_draw_string(fb, 32U, y, "CR2: ", 0xFF00E676U);
+            gfx_draw_string(fb, 72U, y, h, 0xFFFFFFFFU);
 
             hex_to_str(ctx->cr3, h);
-            gfx_draw_string(fb, 260, y, "CR3: ", 0xFF00E676U);
-            gfx_draw_string(fb, 300, y, h, 0xFFFFFFFFU);
-            y += 40;
-            (void)reg_line;
+            gfx_draw_string(fb, 260U, y, "CR3: ", 0xFF00E676U);
+            gfx_draw_string(fb, 300U, y, h, 0xFFFFFFFFU);
+            y += 40U;
         }
 
-        gfx_draw_string(fb, 32, y, "Please restart your computer. Diagnostic telemetry was recorded to serial COM1.", 0xFF80CBC4U);
+        gfx_draw_string(fb, 32U, y, "Please restart your computer. Diagnostic telemetry was recorded to serial COM1.", 0xFF80CBC4U);
         gfx_flip();
     }
 
