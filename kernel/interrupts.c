@@ -338,6 +338,10 @@ struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame) {
                 return scheduler_user_yield(frame);
             if (frame->rax==(uint64_t)DAWN_SYS_WAIT)
                 return scheduler_user_wait(frame);
+            if (frame->rax==(uint64_t)DAWN_SYS_SPAWN)
+                return scheduler_user_spawn(frame);
+            if (frame->rax==(uint64_t)DAWN_SYS_EXEC)
+                return scheduler_user_exec(frame);
             frame->rax=(uint64_t)syscall_dispatch(
                 frame->rax,frame->rdi,frame->rsi,frame->rdx,
                 frame->r10,frame->r8,frame->r9);

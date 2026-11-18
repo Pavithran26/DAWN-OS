@@ -7,6 +7,25 @@
 
 #define DAWN_PROCESS_MAX 4U
 #define DAWN_PROCESS_MAX_USER_PAGES 256U
+#define DAWN_PROCESS_MAX_FDS 16U
+
+enum dawn_fd_type {
+    DAWN_FD_TYPE_UNUSED = 0,
+    DAWN_FD_TYPE_SERIAL = 1,
+    DAWN_FD_TYPE_NULL = 2,
+    DAWN_FD_TYPE_VFS = 3
+};
+
+#define DAWN_O_RDONLY 0x0001U
+#define DAWN_O_WRONLY 0x0002U
+#define DAWN_O_RDWR   0x0003U
+
+struct dawn_fd_entry {
+    enum dawn_fd_type type;
+    uint32_t flags;
+    uint64_t offset;
+    void *node;
+};
 
 enum process_state {
     PROCESS_STATE_FREE = 0,
@@ -54,6 +73,18 @@ bool process_user_memory_write(uint64_t process_id,uint64_t destination,const vo
 bool process_user_memory_zero(uint64_t process_id,uint64_t destination,size_t length);
 bool process_user_memory_rollback(uint64_t process_id,size_t checkpoint);
 bool process_reap(uint64_t process_id);
+/* File descriptor table operations */
+bool process_fd_get(uint64_t process_id,int fd,struct dawn_fd_entry *entry);
+bool process_fd_set(uint64_t process_id,int fd,const struct dawn_fd_entry *entry);
+bool process_fd_allocate(uint64_t process_id,enum dawn_fd_type type,uint32_t flags,
+                         void *node,int *out_fd);
+bool process_fd_close(uint64_t process_id,int fd);
+bool process_fd_dup(uint64_t process_id,int oldfd,int *out_newfd);
+bool process_fd_dup2(uint64_t process_id,int oldfd,int newfd);
+/* Process spawning from in-memory ELF image */
+bool process_spawn(const void *image,size_t image_size,
+                   int argc,const char *const argv[],const char *const envp[],
+                   uint64_t *out_pid);
 
 #ifdef DAWN_KERNEL_TEST
 bool process_manager_self_test(void);

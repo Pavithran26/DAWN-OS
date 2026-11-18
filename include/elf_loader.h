@@ -29,6 +29,13 @@ bool elf64_validate_image(const void *image,size_t image_size,
  * and transitions the supplied CREATED process to READY. */
 bool elf64_load_process(uint64_t process_id,const void *image,size_t image_size,
                         struct elf64_loaded_process *loaded);
+/* Setup process arguments and environment on the initial user stack (SysV AMD64 ABI). */
+bool elf64_setup_user_stack(uint64_t process_id,uint64_t *inout_stack_top,
+                            int argc,const char *const argv[],const char *const envp[],
+                            uint64_t *out_rdi,uint64_t *out_rsi,uint64_t *out_rdx);
+
+/* Build the embedded init process ELF image */
+bool elf64_build_init_image(void *buffer,size_t capacity,size_t *image_size);
 
 #ifdef DAWN_KERNEL_TEST
 bool elf64_loader_self_test(void);

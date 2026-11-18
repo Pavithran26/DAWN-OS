@@ -161,3 +161,15 @@
 - If a child has already exited at the time `SYS_WAIT` is called, it is collected immediately without blocking. If no matching children exist, `SYS_WAIT` immediately returns `-ECHILD`.
 - Added `scheduler_wait_self_test` verifying parent child creation, yield, child exit, collection, and parent notification.
 - Source-only increment. No compilation, QEMU, BIOS/UEFI, or CI test execution was run.
+
+## File descriptor table, process spawning, userspace runtime, and Init process (2026-11-18)
+
+- Implemented per-process file descriptor table (16 descriptors per process). Standard descriptors 0 (stdin, read-only), 1 (stdout, write-only), 2 (stderr, write-only) are automatically configured on process creation, and child processes inherit parent descriptor tables.
+- Implemented file descriptor lifecycle operations: `process_fd_get`, `process_fd_set`, `process_fd_allocate`, `process_fd_close`, `process_fd_dup`, `process_fd_dup2`.
+- Extended syscall dispatcher with `SYS_READ`, `SYS_CLOSE`, `SYS_DUP`, `SYS_SPAWN`, and `SYS_EXEC`.
+- Implemented `elf64_setup_user_stack` laying out arguments, environment strings, NULL-terminated pointer arrays, `argc`, 16-byte aligned RSP, and initial register conventions (RDI=argc, RSI=argv, RDX=envp) according to System V AMD64 ABI specifications.
+- Implemented dynamic process spawning and image execution (`process_spawn`, `kernel_thread_configure_user_args`, `scheduler_user_spawn`, `scheduler_user_exec`).
+- Created the userspace runtime foundation in `user/`: `user/include/dawn.h` (userspace syscall wrappers and types), `user/crt0.S` (C runtime startup), and `user/libdawn.c` (userspace helper routines).
+- Implemented the native DAWN-OS Init process (`user/init.c`) and embedded executable generator `elf64_build_init_image`, launching PID 1 under the scheduler.
+- Phase C source implementation items are complete. All additions include source-level self-tests.
+- Source-only increment. No compilation, QEMU, BIOS/UEFI, or CI tests were run.

@@ -203,8 +203,7 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
                           uint64_t *thread_id) {
     uint64_t saved_flags=0ULL;
     struct kernel_thread *thread=NULL;
-    if (!initialized || scheduler_running || entry==NULL ||
-        current_thread!=&bootstrap_thread) return false;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
     saved_flags=read_rflags();
     disable_interrupts();
     for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
@@ -243,8 +242,8 @@ bool kernel_thread_bind_process(uint64_t thread_id,uint64_t process_id) {
     const uint64_t saved_flags=read_rflags();
     struct process_info info={0};
     struct kernel_thread *target=NULL;
-    if (!initialized || scheduler_running || current_thread!=&bootstrap_thread ||
-        thread_id==0ULL || process_id==0ULL || (read_cs()&3U)!=0U)
+    if (!initialized || thread_id==0ULL || process_id==0ULL ||
+        (read_cs()&3U)!=0U)
         return false;
     disable_interrupts();
     for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
@@ -268,9 +267,10 @@ bool kernel_thread_bind_process(uint64_t thread_id,uint64_t process_id) {
     return true;
 }
 
-bool kernel_thread_configure_user(uint64_t thread_id,
-                                   uint64_t process_id,
-                                   uint64_t entry,uint64_t user_stack_top) {
+bool kernel_thread_configure_user_args(uint64_t thread_id,
+                                       uint64_t process_id,
+                                       uint64_t entry,uint64_t user_stack_top,
+                                       uint64_t rdi,uint64_t rsi,uint64_t rdx) {
     const uint64_t saved_flags=read_rflags();
     struct process_info info={0};
     struct vm_address_space space={0};
@@ -278,8 +278,7 @@ bool kernel_thread_configure_user(uint64_t thread_id,
     struct interrupt_frame *frame=NULL;
     uint64_t physical=0ULL;
     uint32_t code_flags=0U,stack_flags=0U;
-    if (!initialized || scheduler_running ||
-        current_thread!=&bootstrap_thread || thread_id==0ULL ||
+    if (!initialized || thread_id==0ULL ||
         process_id==0ULL || entry<0x10000ULL ||
         entry>=(1ULL<<47) || user_stack_top==0ULL ||
         user_stack_top>=(1ULL<<47) || (user_stack_top&0x0fULL)!=0ULL ||
@@ -330,10 +329,20 @@ bool kernel_thread_configure_user(uint64_t thread_id,
     frame->rflags=INITIAL_THREAD_RFLAGS;
     frame->user_rsp=user_stack_top;
     frame->user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
+    frame->rdi=rdi;
+    frame->rsi=rsi;
+    frame->rdx=rdx;
     target->process_id=process_id;
     target->saved_frame=frame;
     restore_interrupt_flag(saved_flags);
     return true;
+}
+
+bool kernel_thread_configure_user(uint64_t thread_id,
+                                   uint64_t process_id,
+                                   uint64_t entry,uint64_t user_stack_top) {
+    return kernel_thread_configure_user_args(thread_id,process_id,entry,user_stack_top,
+                                             0ULL,0ULL,0ULL);
 }
 
 static void scheduler_switch_process_context(
@@ -541,6 +550,84 @@ struct interrupt_frame *scheduler_user_wait(
     self->state=THREAD_BLOCKED;
     increment_saturated(&counters.user_wait_blocks);
     return scheduler_handle_interrupt(frame,false);
+}
+
+struct interrupt_frame *scheduler_user_spawn(struct interrupt_frame *frame) {
+    uint64_t image_ptr=0ULL;
+    uint64_t image_size=0ULL;
+    uint64_t child_pid=0ULL;
+
+    if (!initialized || !scheduler_running || frame==NULL ||
+        current_thread==NULL || current_thread==&bootstrap_thread ||
+        current_thread->state!=THREAD_RUNNING || current_thread->process_id==0ULL ||
+        process_active_id()!=current_thread->process_id ||
+        frame->vector!=(uint64_t)DAWN_SYSCALL_VECTOR ||
+        frame->rax!=(uint64_t)DAWN_SYS_SPAWN ||
+        !interrupt_frame_user_context_valid(frame) ||
+        !thread_frame_valid(current_thread,frame))
+        cpu_halt_forever();
+
+    image_ptr=frame->rdi;
+    image_size=frame->rsi;
+
+    if (image_ptr==0ULL || image_size==0ULL || image_size>256ULL*4096ULL ||
+        !vm_user_range_valid(image_ptr,image_size,false)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EFAULT;
+        return frame;
+    }
+
+    if (!process_spawn((const void *)(uintptr_t)image_ptr,(size_t)image_size,
+                       0,NULL,NULL,&child_pid)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EAGAIN;
+        return frame;
+    }
+
+    frame->rax=child_pid;
+    return frame;
+}
+
+struct interrupt_frame *scheduler_user_exec(struct interrupt_frame *frame) {
+    struct kernel_thread *self=current_thread;
+    uint64_t image_ptr=0ULL;
+    uint64_t image_size=0ULL;
+    struct elf64_loaded_process loaded={0};
+    uint64_t rdi=0ULL,rsi=0ULL,rdx=0ULL;
+
+    if (!initialized || !scheduler_running || frame==NULL ||
+        self==NULL || self==&bootstrap_thread ||
+        self->state!=THREAD_RUNNING || self->process_id==0ULL ||
+        process_active_id()!=self->process_id ||
+        frame->vector!=(uint64_t)DAWN_SYSCALL_VECTOR ||
+        frame->rax!=(uint64_t)DAWN_SYS_EXEC ||
+        !interrupt_frame_user_context_valid(frame) ||
+        !thread_frame_valid(self,frame))
+        cpu_halt_forever();
+
+    image_ptr=frame->rdi;
+    image_size=frame->rsi;
+
+    if (image_ptr==0ULL || image_size==0ULL || image_size>256ULL*4096ULL ||
+        !vm_user_range_valid(image_ptr,image_size,false)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EFAULT;
+        return frame;
+    }
+
+    (void)process_user_memory_rollback(self->process_id,0U);
+    if (!elf64_load_process(self->process_id,(const void *)(uintptr_t)image_ptr,
+                            (size_t)image_size,&loaded)) {
+        return scheduler_user_exit(frame);
+    }
+
+    (void)elf64_setup_user_stack(self->process_id,&loaded.user_stack_top,
+                                 0,NULL,NULL,&rdi,&rsi,&rdx);
+
+    frame->rip=loaded.entry;
+    frame->user_rsp=loaded.user_stack_top;
+    frame->rdi=rdi;
+    frame->rsi=rsi;
+    frame->rdx=rdx;
+    frame->rax=0ULL;
+    return frame;
 }
 
 bool scheduler_run_until_idle(void) {

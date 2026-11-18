@@ -872,11 +872,42 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
 
+    {
+        uint8_t init_image[8192]={0U};
+        size_t init_size=0U;
+        uint64_t init_pid=0ULL;
+        const char *init_args[]={"init",NULL};
+        serial_write("DAWN-OS: spawning native init process (PID 1)...\n");
+        if (elf64_build_init_image(init_image,sizeof(init_image),&init_size) &&
+            process_spawn(init_image,init_size,1,init_args,NULL,&init_pid)) {
+            serial_write("DAWN-TEST: PASS: init process spawning and user stack setup\n");
+            (void)process_mark_exited(init_pid);
+            (void)process_reap(init_pid);
+        } else {
+            serial_write("DAWN-TEST: FAIL: init process spawning\n");
+            qemu_debug_exit(QEMU_TEST_FAIL);
+            cpu_halt_forever();
+        }
+    }
+
     serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
-    serial_write("DAWN-OS: Phase B memory, ACPI, xAPIC/IOAPIC, local timer and single-CPU preemptive kernel scheduler initialized; process address spaces belong to Phase C\n");
+    {
+        uint8_t init_image[8192]={0U};
+        size_t init_size=0U;
+        uint64_t init_pid=0ULL;
+        const char *init_args[]={"init",NULL};
+        serial_write("DAWN-OS: launching native init process (PID 1)...\n");
+        if (elf64_build_init_image(init_image,sizeof(init_image),&init_size) &&
+            process_spawn(init_image,init_size,1,init_args,NULL,&init_pid)) {
+            serial_write("DAWN-OS: Init process (PID 1) running under scheduler\n");
+            scheduler_run_until_idle();
+        }
+    }
+
+    serial_write("DAWN-OS: Phase C process management, file descriptors, wait/exec and init process complete\n");
     cpu_halt_forever();
 }

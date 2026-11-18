@@ -6,6 +6,8 @@
 #include "page_table.h"
 #include "physical_memory.h"
 #include "process.h"
+#include "elf_loader.h"
+#include "scheduler.h"
 
 #define CPU_RFLAGS_INTERRUPT_ENABLE (1ULL << 9)
 
@@ -18,6 +20,7 @@ struct process_record {
     struct vm_address_space address_space;
     struct process_user_page user_pages[DAWN_PROCESS_MAX_USER_PAGES];
     size_t user_page_count;
+    struct dawn_fd_entry fds[DAWN_PROCESS_MAX_FDS];
     uint64_t id;
     uint64_t parent_id;
     uint64_t kernel_stack_top;
@@ -113,6 +116,14 @@ bool process_create(uint64_t *process_id) {
     slot->kernel_stack_top=stack_top;
     slot->id=next_process_id++;
     slot->state=PROCESS_STATE_CREATED;
+    for (size_t f=0U;f<DAWN_PROCESS_MAX_FDS;f++) slot->fds[f]=(struct dawn_fd_entry){0};
+    if (parent!=NULL) {
+        for (size_t f=0U;f<DAWN_PROCESS_MAX_FDS;f++) slot->fds[f]=parent->fds[f];
+    } else {
+        slot->fds[0]=(struct dawn_fd_entry){ .type=DAWN_FD_TYPE_SERIAL, .flags=DAWN_O_RDONLY };
+        slot->fds[1]=(struct dawn_fd_entry){ .type=DAWN_FD_TYPE_SERIAL, .flags=DAWN_O_WRONLY };
+        slot->fds[2]=(struct dawn_fd_entry){ .type=DAWN_FD_TYPE_SERIAL, .flags=DAWN_O_WRONLY };
+    }
     *process_id=slot->id;
     restore_interrupt_flag(flags);
     return true;
@@ -547,6 +558,168 @@ bool process_reap(uint64_t process_id) {
     return true;
 }
 
+bool process_fd_get(uint64_t process_id,int fd,struct dawn_fd_entry *entry) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || fd<0 || fd>=(int)DAWN_PROCESS_MAX_FDS || entry==NULL ||
+        (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->fds[fd].type==DAWN_FD_TYPE_UNUSED) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    *entry=record->fds[fd];
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_fd_set(uint64_t process_id,int fd,const struct dawn_fd_entry *entry) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || fd<0 || fd>=(int)DAWN_PROCESS_MAX_FDS || entry==NULL ||
+        (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    record->fds[fd]=*entry;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_fd_allocate(uint64_t process_id,enum dawn_fd_type type,uint32_t flags,
+                         void *node,int *out_fd) {
+    const uint64_t saved_flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || type==DAWN_FD_TYPE_UNUSED || out_fd==NULL ||
+        (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    for (int fd=0;fd<(int)DAWN_PROCESS_MAX_FDS;fd++) {
+        if (record->fds[fd].type==DAWN_FD_TYPE_UNUSED) {
+            record->fds[fd].type=type;
+            record->fds[fd].flags=flags;
+            record->fds[fd].offset=0ULL;
+            record->fds[fd].node=node;
+            *out_fd=fd;
+            restore_interrupt_flag(saved_flags);
+            return true;
+        }
+    }
+    restore_interrupt_flag(saved_flags);
+    return false;
+}
+
+bool process_fd_close(uint64_t process_id,int fd) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || fd<0 || fd>=(int)DAWN_PROCESS_MAX_FDS ||
+        (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->fds[fd].type==DAWN_FD_TYPE_UNUSED) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    record->fds[fd]=(struct dawn_fd_entry){0};
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_fd_dup(uint64_t process_id,int oldfd,int *out_newfd) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || oldfd<0 || oldfd>=(int)DAWN_PROCESS_MAX_FDS ||
+        out_newfd==NULL || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->fds[oldfd].type==DAWN_FD_TYPE_UNUSED) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    for (int fd=0;fd<(int)DAWN_PROCESS_MAX_FDS;fd++) {
+        if (record->fds[fd].type==DAWN_FD_TYPE_UNUSED) {
+            record->fds[fd]=record->fds[oldfd];
+            *out_newfd=fd;
+            restore_interrupt_flag(flags);
+            return true;
+        }
+    }
+    restore_interrupt_flag(flags);
+    return false;
+}
+
+bool process_fd_dup2(uint64_t process_id,int oldfd,int newfd) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || oldfd<0 || oldfd>=(int)DAWN_PROCESS_MAX_FDS ||
+        newfd<0 || newfd>=(int)DAWN_PROCESS_MAX_FDS || (read_cs()&3U)!=0U)
+        return false;
+    if (oldfd==newfd) return true;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->fds[oldfd].type==DAWN_FD_TYPE_UNUSED) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    record->fds[newfd]=record->fds[oldfd];
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_spawn(const void *image,size_t image_size,
+                   int argc,const char *const argv[],const char *const envp[],
+                   uint64_t *out_pid) {
+    uint64_t child_pid=0ULL;
+    uint64_t thread_id=0ULL;
+    struct elf64_loaded_process loaded={0};
+    uint64_t rdi=0ULL,rsi=0ULL,rdx=0ULL;
+
+    if (image==NULL || image_size==0U || out_pid==NULL || (read_cs()&3U)!=0U)
+        return false;
+
+    if (!process_create(&child_pid)) return false;
+
+    if (!elf64_load_process(child_pid,image,image_size,&loaded)) {
+        (void)process_mark_exited(child_pid);
+        (void)process_reap(child_pid);
+        return false;
+    }
+
+    if (argc>0 && argv!=NULL) {
+        if (!elf64_setup_user_stack(child_pid,&loaded.user_stack_top,
+                                    argc,argv,envp,&rdi,&rsi,&rdx)) {
+            (void)process_mark_exited(child_pid);
+            (void)process_reap(child_pid);
+            return false;
+        }
+    }
+
+    if (!kernel_thread_create(NULL,NULL,&thread_id)) {
+        (void)process_mark_exited(child_pid);
+        (void)process_reap(child_pid);
+        return false;
+    }
+
+    if (!kernel_thread_configure_user_args(thread_id,child_pid,
+                                          loaded.entry,loaded.user_stack_top,
+                                          rdi,rsi,rdx)) {
+        (void)process_mark_exited(child_pid);
+        (void)process_reap(child_pid);
+        return false;
+    }
+
+    *out_pid=child_pid;
+    return true;
+}
+
 #ifdef DAWN_KERNEL_TEST
 static bool process_manager_self_test_locked(void) {
     uint64_t ids[DAWN_PROCESS_MAX]={0ULL};
@@ -623,6 +796,42 @@ static bool process_manager_self_test_locked(void) {
             !process_reap(parent_id) ||
             process_get_child_info(parent_id,child_id,&child_info))
             return false;
+    }
+
+    /* File descriptor table validation */
+    {
+        uint64_t pid=0ULL;
+        struct dawn_fd_entry fd_entry={0};
+        int new_fd=-1,dup_fd=-1;
+        if (!process_create(&pid) || !process_mark_ready(pid)) return false;
+        if (!process_fd_get(pid,0,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
+            (fd_entry.flags&DAWN_O_RDONLY)==0U) return false;
+        if (!process_fd_get(pid,1,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
+            (fd_entry.flags&DAWN_O_WRONLY)==0U) return false;
+        if (!process_fd_get(pid,2,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
+            (fd_entry.flags&DAWN_O_WRONLY)==0U) return false;
+        if (process_fd_get(pid,3,&fd_entry)) return false;
+        if (!process_fd_allocate(pid,DAWN_FD_TYPE_NULL,DAWN_O_RDWR,NULL,&new_fd) || new_fd!=3)
+            return false;
+        if (!process_fd_dup(pid,new_fd,&dup_fd) || dup_fd!=4) return false;
+        if (!process_fd_dup2(pid,new_fd,10)) return false;
+        if (!process_fd_get(pid,10,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_NULL) return false;
+        if (!process_fd_close(pid,new_fd) || process_fd_get(pid,new_fd,&fd_entry)) return false;
+        if (!process_mark_exited(pid) || !process_reap(pid)) return false;
+    }
+
+    /* Process spawning from memory image validation */
+    {
+        uint8_t image[8192]={0U};
+        size_t image_size=0U;
+        uint64_t spawned_pid=0ULL;
+        const char *test_args[]={"spawned",NULL};
+        if (elf64_build_test_exit_image(image,sizeof(image),&image_size)) {
+            if (!process_spawn(image,image_size,1,test_args,NULL,&spawned_pid) || spawned_pid==0ULL)
+                return false;
+            if (!process_mark_exited(spawned_pid) || !process_reap(spawned_pid))
+                return false;
+        }
     }
     return true;
 }

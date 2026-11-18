@@ -210,6 +210,93 @@ rollback:
     return false;
 }
 
+bool elf64_setup_user_stack(uint64_t process_id,uint64_t *inout_stack_top,
+                            int argc,const char *const argv[],const char *const envp[],
+                            uint64_t *out_rdi,uint64_t *out_rsi,uint64_t *out_rdx) {
+    uint64_t sp=0ULL;
+    uint64_t argv_ptrs[64]={0ULL};
+    uint64_t envp_ptrs[64]={0ULL};
+    int effective_argc=0;
+    int envc=0;
+    uint64_t table_size=0ULL;
+    uint64_t target_sp=0ULL;
+    const uint64_t stack_floor=DAWN_ELF64_STACK_TOP-
+        (uint64_t)DAWN_ELF64_STACK_PAGES*ELF64_PAGE_SIZE;
+
+    if (inout_stack_top==NULL || *inout_stack_top==0ULL ||
+        *inout_stack_top>DAWN_ELF64_STACK_TOP ||
+        *inout_stack_top<stack_floor+ELF64_PAGE_SIZE)
+        return false;
+
+    sp=*inout_stack_top;
+    if (argc>0 && argv!=NULL) {
+        effective_argc=argc>64 ? 64 : argc;
+    }
+    if (envp!=NULL) {
+        while (envp[envc]!=NULL && envc<64) ++envc;
+    }
+
+    for (int i=envc-1;i>=0;i--) {
+        size_t len=0U;
+        if (envp[i]==NULL) continue;
+        while (envp[i][len]!='\0' && len<4096U) len++;
+        len++;
+        if (sp<stack_floor+ELF64_PAGE_SIZE+len) return false;
+        sp-=len;
+        if (!process_user_memory_write(process_id,sp,envp[i],len)) return false;
+        envp_ptrs[i]=sp;
+    }
+
+    for (int i=effective_argc-1;i>=0;i--) {
+        size_t len=0U;
+        if (argv[i]==NULL) continue;
+        while (argv[i][len]!='\0' && len<4096U) len++;
+        len++;
+        if (sp<stack_floor+ELF64_PAGE_SIZE+len) return false;
+        sp-=len;
+        if (!process_user_memory_write(process_id,sp,argv[i],len)) return false;
+        argv_ptrs[i]=sp;
+    }
+
+    table_size=(1ULL+(uint64_t)effective_argc+1ULL+(uint64_t)envc+1ULL)*8ULL;
+    if (sp<stack_floor+ELF64_PAGE_SIZE+table_size) return false;
+
+    target_sp=(sp-table_size)&~0x0fULL;
+    sp=target_sp+table_size;
+
+    sp-=8ULL;
+    {
+        uint64_t null_val=0ULL;
+        if (!process_user_memory_write(process_id,sp,&null_val,8U)) return false;
+    }
+    for (int i=envc-1;i>=0;i--) {
+        sp-=8ULL;
+        if (!process_user_memory_write(process_id,sp,&envp_ptrs[i],8U)) return false;
+    }
+    if (out_rdx!=NULL) *out_rdx=(envc>0) ? sp : 0ULL;
+
+    sp-=8ULL;
+    {
+        uint64_t null_val=0ULL;
+        if (!process_user_memory_write(process_id,sp,&null_val,8U)) return false;
+    }
+    for (int i=effective_argc-1;i>=0;i--) {
+        sp-=8ULL;
+        if (!process_user_memory_write(process_id,sp,&argv_ptrs[i],8U)) return false;
+    }
+    if (out_rsi!=NULL) *out_rsi=(effective_argc>0) ? sp : 0ULL;
+
+    sp-=8ULL;
+    {
+        uint64_t argc_val=(uint64_t)effective_argc;
+        if (!process_user_memory_write(process_id,sp,&argc_val,8U)) return false;
+    }
+    if (out_rdi!=NULL) *out_rdi=(uint64_t)effective_argc;
+
+    *inout_stack_top=sp;
+    return true;
+}
+
 bool elf64_validate_image(const void *image,size_t image_size,
                           struct elf64_image_info *info) {
     const uint8_t *bytes=(const uint8_t *)image;
@@ -408,6 +495,65 @@ bool elf64_build_test_exit_image(void *buffer,size_t capacity,
     return true;
 }
 
+bool elf64_build_init_image(void *buffer,size_t capacity,
+                            size_t *image_size) {
+    static const uint8_t init_code[]={
+        0x48U,0xc7U,0xc0U,0x01U,0x00U,0x00U,0x00U,
+        0x48U,0xc7U,0xc7U,0x01U,0x00U,0x00U,0x00U,
+        0x48U,0xc7U,0xc6U,0x43U,0x00U,0x40U,0x00U,
+        0x48U,0xc7U,0xc2U,0x1bU,0x00U,0x00U,0x00U,
+        0xcdU,0x80U,
+        0x48U,0xc7U,0xc0U,0x03U,0x00U,0x00U,0x00U,
+        0xcdU,0x80U,
+        0x48U,0xc7U,0xc0U,0x04U,0x00U,0x00U,0x00U,
+        0xcdU,0x80U,
+        0x48U,0xc7U,0xc0U,0x02U,0x00U,0x00U,0x00U,
+        0x48U,0x31U,0xffU,
+        0xcdU,0x80U,
+        0x0fU,0x0bU,
+        '[','D','A','W','N','-','I','N','I','T',']',' ','P','I','D',' ','1',' ','a','c','t','i','v','e','.','\n','\0'
+    };
+    uint8_t *bytes=(uint8_t *)buffer;
+    struct elf64_header header={0};
+    struct elf64_program_header program={0};
+    const size_t total_size=0x1000U+sizeof(init_code);
+
+    if (buffer==NULL || image_size==NULL || capacity<total_size)
+        return false;
+    for (size_t i=0U;i<total_size;i++) bytes[i]=0U;
+
+    header.ident[0]=0x7fU;
+    header.ident[1]=(uint8_t)'E';
+    header.ident[2]=(uint8_t)'L';
+    header.ident[3]=(uint8_t)'F';
+    header.ident[4]=ELF_IDENT_CLASS_64;
+    header.ident[5]=ELF_IDENT_DATA_LSB;
+    header.ident[6]=ELF_IDENT_VERSION;
+    header.type=ELF_TYPE_EXEC;
+    header.machine=ELF_MACHINE_X86_64;
+    header.version=ELF_VERSION_CURRENT;
+    header.entry=0x400000ULL;
+    header.program_header_offset=sizeof(struct elf64_header);
+    header.header_size=(uint16_t)sizeof(struct elf64_header);
+    header.program_header_entry_size=(uint16_t)sizeof(struct elf64_program_header);
+    header.program_header_count=1U;
+
+    program.type=ELF_PROGRAM_LOAD;
+    program.flags=ELF_FLAG_READ|ELF_FLAG_EXECUTE;
+    program.offset=0x1000ULL;
+    program.virtual_address=0x400000ULL;
+    program.file_size=(uint64_t)sizeof(init_code);
+    program.memory_size=(uint64_t)sizeof(init_code);
+    program.alignment=ELF64_PAGE_SIZE;
+
+    copy_bytes(bytes,&header,sizeof(header));
+    copy_bytes(bytes+sizeof(header),&program,sizeof(program));
+    copy_bytes(bytes+0x1000U,init_code,sizeof(init_code));
+
+    *image_size=total_size;
+    return true;
+}
+
 static bool elf64_process_load_self_test(void) {
     uint8_t image[8192]={0U},bad_image[8192]={0U};
     uint8_t observed_code[128]={0U},observed_bss[32];
@@ -485,6 +631,21 @@ static bool elf64_process_load_self_test(void) {
         (stack_flags&(uint32_t)VM_PAGE_WRITE)==0U ||
         (stack_flags&(uint32_t)VM_PAGE_EXECUTE)!=0U)
         goto cleanup;
+
+    {
+        const char *test_argv[]={"test_prog","arg1",NULL};
+        const char *test_envp[]={"ENV=1",NULL};
+        uint64_t stack_top=loaded.user_stack_top;
+        uint64_t rdi=0ULL,rsi=0ULL,rdx=0ULL;
+        uint64_t read_argc=0ULL;
+        if (!elf64_setup_user_stack(process_id,&stack_top,2,test_argv,test_envp,&rdi,&rsi,&rdx) ||
+            rdi!=2ULL || rsi==0ULL || rdx==0ULL || (stack_top&0x0fULL)!=0ULL)
+            goto cleanup;
+        if (!vm_address_space_read(&space,&read_argc,stack_top,sizeof(read_argc)) ||
+            read_argc!=2ULL)
+            goto cleanup;
+    }
+
     result=true;
 cleanup:
     if (created) {

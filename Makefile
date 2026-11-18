@@ -60,7 +60,7 @@ build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h i
 build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h | build
+build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 build/user-mode.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h arch/x86_64/user_mode.S | build
 	$(CC) $(CFLAGS) -c kernel/user_mode.c -o build/user-mode-c.o
@@ -108,7 +108,7 @@ build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupt
 build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h | build
+build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@

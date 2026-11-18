@@ -25,7 +25,12 @@ enum dawn_syscall_number {
     DAWN_SYS_EXIT = 2,
     DAWN_SYS_GETPID = 3,
     DAWN_SYS_YIELD = 4,
-    DAWN_SYS_WAIT = 5
+    DAWN_SYS_WAIT = 5,
+    DAWN_SYS_READ = 6,
+    DAWN_SYS_CLOSE = 7,
+    DAWN_SYS_DUP = 8,
+    DAWN_SYS_SPAWN = 9,
+    DAWN_SYS_EXEC = 10
 };
 
 enum dawn_syscall_errno {

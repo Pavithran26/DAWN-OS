@@ -26,6 +26,9 @@ bool kernel_thread_bind_process(uint64_t thread_id, uint64_t process_id);
 /* Configure a bound thread's first IRETQ frame to enter a mapped CPL3 context. */
 bool kernel_thread_configure_user(uint64_t thread_id,uint64_t process_id,
                                    uint64_t entry,uint64_t user_stack_top);
+bool kernel_thread_configure_user_args(uint64_t thread_id,uint64_t process_id,
+                                       uint64_t entry,uint64_t user_stack_top,
+                                       uint64_t rdi,uint64_t rsi,uint64_t rdx);
 bool scheduler_run_until_idle(void);
 void kernel_thread_yield(void);
 _Noreturn void kernel_thread_exit(void);
@@ -38,6 +41,9 @@ struct interrupt_frame *scheduler_user_exit(struct interrupt_frame *frame);
 struct interrupt_frame *scheduler_user_yield(struct interrupt_frame *frame);
 /* Wait for a child process to exit; blocks until child exits if none has exited. */
 struct interrupt_frame *scheduler_user_wait(struct interrupt_frame *frame);
+/* Spawn a child process or replace image from CPL3 syscall frame. */
+struct interrupt_frame *scheduler_user_spawn(struct interrupt_frame *frame);
+struct interrupt_frame *scheduler_user_exec(struct interrupt_frame *frame);
 #ifdef DAWN_KERNEL_TEST
 bool scheduler_self_test(void);
 bool scheduler_preemption_self_test(void);
