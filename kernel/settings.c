@@ -338,20 +338,20 @@ void settings_window_render(void) {
     gfx_draw_line(&surf, 140, 0, 140, 380, GFX_COLOR_GLASS_BORDER);
 
     /* Render Tab Buttons */
-    for (int t = 0; t < TAB_COUNT; t++) {
-        int y = 12 + t * 44;
+    for (uint32_t t = 0; t < TAB_COUNT; t++) {
+        uint32_t y = 12U + t * 44U;
         if ((enum settings_tab)t == current_tab) {
-            gfx_fill_rect(&surf, 6, y, 128, 36, GFX_COLOR_EMERALD_MUTED);
-            gfx_draw_rect(&surf, 6, y, 128, 36, GFX_COLOR_EMERALD_PRIMARY);
-            gfx_draw_string(&surf, 20, y + 10, tab_names[t], GFX_COLOR_TEXT_PRIMARY);
+            gfx_fill_rect(&surf, 6U, y, 128U, 36U, GFX_COLOR_EMERALD_MUTED);
+            gfx_draw_rect(&surf, 6U, y, 128U, 36U, GFX_COLOR_EMERALD_PRIMARY);
+            gfx_draw_string(&surf, 20U, y + 10U, tab_names[t], GFX_COLOR_TEXT_PRIMARY);
         } else {
-            gfx_draw_string(&surf, 20, y + 10, tab_names[t], GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, 20U, y + 10U, tab_names[t], GFX_COLOR_TEXT_MUTED);
         }
     }
 
     /* Content Area */
-    int cx = 160;
-    int cy = 20;
+    uint32_t cx = 160U;
+    uint32_t cy = 20U;
 
     switch (current_tab) {
         case TAB_DISPLAY:
@@ -441,9 +441,9 @@ void settings_window_render(void) {
 }
 
 void settings_window_handle_click(int32_t local_x, int32_t local_y) {
-    if (local_x < 140) {
+    if (local_x >= 0 && local_x < 140 && local_y >= 12) {
         int tab_index = (local_y - 12) / 44;
-        if (tab_index >= 0 && tab_index < TAB_COUNT) {
+        if (tab_index < (int)TAB_COUNT) {
             settings_window_switch_tab((enum settings_tab)tab_index);
         }
     } else {
