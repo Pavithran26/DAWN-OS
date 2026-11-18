@@ -31,9 +31,15 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - ISO9660 filesystem driver with Primary Volume Descriptor (PVD) parsing, directory extent parsing, and file reading.
 - VFS directory entry (dentry) cache with LRU replacement and prefix invalidation.
 - File explorer backend engine supporting directory enumeration, sorting, recursive search, copy, move, and deletion.
+- Block device abstraction with unified read/write/flush operations and built-in RAM disk driver.
+- PCI bus scanner (Mechanism 1) with configuration space access and storage controller discovery.
+- SATA/AHCI 1.3 controller driver with 48-bit LBA DMA command generation and port detection.
+- NVMe 1.3/1.4 controller driver with 64-byte SQE and 16-byte CQE queues, doorbell calculation, and namespace discovery.
+- Partition subsystem supporting MBR and GPT parsing, partition creation/deletion, FAT32 formatting, and transparent partition slice block devices with 1 MiB alignment and overlap protection.
+- Central Storage Manager providing disk inventory, partition creation, formatting, and automatic filesystem mounting.
 - Emerald-green liquid-glass desktop concepts in `docs/images/`; these are design references, not screenshots of a running desktop.
 
-The terminal, partition manager, storage and USB drivers, full desktop compositor, task manager, networking, installer, and recovery environment are scheduled in subsequent phases. Phase C (process and system calls) and Phase D (virtual filesystem and filesystem drivers) are implemented.
+The terminal, USB drivers, full desktop compositor, task manager, networking, installer, and recovery environment are scheduled in subsequent phases. Phase C (process and system calls), Phase D (virtual filesystem and filesystem drivers), and Phase E (storage and partition management) are implemented.
 
 **Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 

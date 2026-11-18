@@ -20,6 +20,12 @@
 #include "iso9660.h"
 #include "vfs_cache.h"
 #include "file_explorer.h"
+#include "block_dev.h"
+#include "pci.h"
+#include "ahci.h"
+#include "nvme.h"
+#include "partition.h"
+#include "storage_manager.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -735,6 +741,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: VFS root, mounts and standard directory hierarchy initialized\n");
 
+    if (!storage_manager_initialize()) {
+        serial_write("DAWN-OS: FAIL: storage manager initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: storage manager, block devices, PCI storage, AHCI, NVMe and partitions initialized\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -903,6 +918,44 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: File explorer backend enumeration, search and copy\n");
+
+    /* Phase E: Storage and Partition Management */
+    if (!block_dev_self_test()) {
+        serial_write("DAWN-TEST: FAIL: block device registration and read/write\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: block device registration and read/write\n");
+    if (!pci_self_test()) {
+        serial_write("DAWN-TEST: FAIL: PCI bus scan and configuration space access\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: PCI bus scan and configuration space access\n");
+    if (!ahci_self_test()) {
+        serial_write("DAWN-TEST: FAIL: AHCI SATA controller and port detection\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: AHCI SATA controller and port detection\n");
+    if (!nvme_self_test()) {
+        serial_write("DAWN-TEST: FAIL: NVMe controller and namespace queues\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: NVMe controller and namespace queues\n");
+    if (!partition_self_test()) {
+        serial_write("DAWN-TEST: FAIL: MBR/GPT partition management and slice translation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: MBR/GPT partition management and slice translation\n");
+    if (!storage_manager_self_test()) {
+        serial_write("DAWN-TEST: FAIL: storage manager disk inventory and operations\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: storage manager disk inventory and operations\n");
 #endif
 
     if (framebuffer_response_valid()) {
