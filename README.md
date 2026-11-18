@@ -40,7 +40,7 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - System V AMD64 ABI compliant user argument and environment stack setup (`argc`, `argv`, `envp`), dynamic process spawning, and userspace runtime (`user/include/dawn.h`, `user/crt0.S`, `user/libdawn.c`).
 - Native DAWN-OS Init process (PID 1) supervisor architecture and embedded binary generator.
 - Virtual Filesystem (VFS) architecture with mount table, unified node operations, and root RAMFS (`/boot`, `/dev`, `/mnt`, `/tmp`, `/bin`).
-- FAT32 filesystem driver with BPB validation, cluster allocation/traversal, 8.3 filename encoding, and file read/write.
+- FAT32 read-only image driver with BPB geometry validation, bounded cluster traversal, 8.3 filename encoding, and file reads. Writable FAT32 operations remain pending until safe cluster allocation and directory-entry updates are implemented.
 - ISO9660 filesystem driver with Primary Volume Descriptor (PVD) parsing, directory extent parsing, and file reading.
 - VFS directory entry (dentry) cache with LRU replacement and prefix invalidation.
 - File explorer backend engine supporting directory enumeration, sorting, recursive search, copy, move, and deletion.

@@ -198,3 +198,19 @@
 - RAMFS refuses to unlink mounted or non-empty directories. Deleted node slots become tombstones and are not reused, preventing stale node pointers from aliasing newly allocated objects in this fixed-size implementation.
 - VFS read/write enforce node permissions and regular-file node types.
 - Source review only. No compilation, VFS self-tests, filesystem image tests, or runtime mount tests were run.
+
+## FAT32 image-reader safety boundary (2026-11-18)
+
+- FAT32 mounting now validates the boot signature, supported sector/cluster geometry, reserved/FAT region bounds, total image size, FAT entry capacity, root cluster, and computed data-cluster count.
+- FAT entry and data-cluster address calculations use checked 64-bit bounds. File reads avoid offset-plus-length overflow and cap chain traversal to the volume's cluster count.
+- Directory enumeration and lookup are bounded against cyclic FAT chains and skip deleted, long-filename, volume-label, and dot entries. Directory nodes are validated before traversal, and cached file-node slots are no longer recycled during a mount.
+- The previous FAT32 write path only modified cached image bytes and did not safely allocate clusters or persist directory-entry size/cluster metadata. It has been disabled; FAT32 is now explicitly read-only until transactional allocation and metadata updates are implemented.
+- The synthetic FAT32 self-test image now declares a consistent volume size and boot signature. Tests remain source-only and were not executed.
+
+## ISO9660 image-reader validation (2026-11-18)
+
+- ISO9660 mount now checks PVD type, identifier, version, logical block size, declared volume size, and the root directory record's extent and length before publishing a filesystem node.
+- Directory records are bounded by both directory extent and sector boundary; malformed record lengths/name lengths and out-of-volume file extents are rejected. Zero-length sector padding advances to the next logical block.
+- File reads use overflow-safe offset/length calculations and extent validation. Directory enumeration and lookup share the bounded record parser; directory nodes are checked before traversal and cached node slots are not recycled during a mount.
+- The ISO9660 synthetic image test now contains valid self/parent directory records and declared volume metadata, and includes an invalid root-extent rejection case.
+- Source-only change. ISO9660 self-tests and image mounting were not executed.
