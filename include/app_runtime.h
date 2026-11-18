@@ -49,6 +49,12 @@ void  *dlibc_memset(void *s, int c, size_t n);
 void  *dlibc_memcpy(void *dest, const void *src, size_t n);
 int    dlibc_memcmp(const void *s1, const void *s2, size_t n);
 
+/* Freestanding compiler builtin runtime routines */
+void  *memset(void *s, int c, size_t n);
+void  *memcpy(void *dest, const void *src, size_t n);
+void  *memmove(void *dest, const void *src, size_t n);
+int    memcmp(const void *s1, const void *s2, size_t n);
+
 /* User Heap Allocator */
 void  *dlibc_malloc(size_t size);
 void   dlibc_free(void *ptr);

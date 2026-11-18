@@ -65,23 +65,53 @@ char *dlibc_strncpy(char *dest, const char *src, size_t n) {
     return dest;
 }
 
-void *dlibc_memset(void *s, int c, size_t n) {
-    if (s == NULL) return NULL;
-    uint8_t *p = (uint8_t *)s;
-    while (n--) *p++ = (uint8_t)c;
-    return s;
+void *memset(void *s, int c, size_t n) {
+    void *ret = s;
+    __asm__ volatile (
+        "rep stosb"
+        : "+D"(s), "+c"(n)
+        : "a"((uint8_t)c)
+        : "memory"
+    );
+    return ret;
 }
 
-void *dlibc_memcpy(void *dest, const void *src, size_t n) {
-    if (dest == NULL || src == NULL) return dest;
-    uint8_t *d = (uint8_t *)dest;
-    const uint8_t *s = (const uint8_t *)src;
-    while (n--) *d++ = *s++;
-    return dest;
+void *memcpy(void *dest, const void *src, size_t n) {
+    void *ret = dest;
+    __asm__ volatile (
+        "rep movsb"
+        : "+D"(dest), "+S"(src), "+c"(n)
+        :
+        : "memory"
+    );
+    return ret;
 }
 
-int dlibc_memcmp(const void *s1, const void *s2, size_t n) {
-    if (s1 == NULL || s2 == NULL || n == 0) return 0;
+void *memmove(void *dest, const void *src, size_t n) {
+    void *ret = dest;
+    if (dest < src) {
+        __asm__ volatile (
+            "rep movsb"
+            : "+D"(dest), "+S"(src), "+c"(n)
+            :
+            : "memory"
+        );
+    } else if (dest > src) {
+        uint8_t *d = (uint8_t *)dest + n - 1;
+        const uint8_t *s = (const uint8_t *)src + n - 1;
+        __asm__ volatile (
+            "std\n\t"
+            "rep movsb\n\t"
+            "cld"
+            : "+D"(d), "+S"(s), "+c"(n)
+            :
+            : "memory"
+        );
+    }
+    return ret;
+}
+
+int memcmp(const void *s1, const void *s2, size_t n) {
     const uint8_t *p1 = (const uint8_t *)s1;
     const uint8_t *p2 = (const uint8_t *)s2;
     while (n--) {
@@ -90,6 +120,18 @@ int dlibc_memcmp(const void *s1, const void *s2, size_t n) {
         p2++;
     }
     return 0;
+}
+
+void *dlibc_memset(void *s, int c, size_t n) {
+    return memset(s, c, n);
+}
+
+void *dlibc_memcpy(void *dest, const void *src, size_t n) {
+    return memcpy(dest, src, n);
+}
+
+int dlibc_memcmp(const void *s1, const void *s2, size_t n) {
+    return memcmp(s1, s2, n);
 }
 
 /* Heap Allocator */
