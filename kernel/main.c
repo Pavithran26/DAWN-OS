@@ -827,6 +827,12 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: process-bound kernel-thread CR3/TSS switching, yield, exit and reaping\n");
+    if (!scheduler_user_context_self_test()) {
+        serial_write("DAWN-TEST: FAIL: scheduler-managed CPL3 initial context\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: process-owned user IRETQ frame, code/stack permissions and trap-stack bounds\n");
     if (!apic_local_timer_periodic_self_test()) {
         serial_write("DAWN-TEST: FAIL: Local APIC periodic stop/restart checks\n");
         qemu_debug_exit(QEMU_TEST_FAIL);

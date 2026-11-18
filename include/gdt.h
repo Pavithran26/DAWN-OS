@@ -8,6 +8,7 @@
 #define DAWN_USER_DATA_SELECTOR 0x18U
 #define DAWN_USER_CODE_SELECTOR 0x20U
 #define DAWN_TSS_SELECTOR 0x28U
+#define DAWN_PROCESS_KERNEL_STACK_SIZE (16U * 1024U)
 bool gdt_tss_initialize(void);
 bool gdt_tss_set_kernel_stack(uint64_t stack_top);
 uint64_t gdt_tss_kernel_stack_top(void);

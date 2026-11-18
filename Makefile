@@ -54,7 +54,7 @@ build/acpi.o: kernel/acpi.c include/acpi.h include/limine_requests.h | build
 build/apic.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h | build
+build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h | build
@@ -73,7 +73,7 @@ build/elf-loader.o: kernel/elf_loader.c include/elf_loader.h | build
 build/page_table.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/interrupts.o: kernel/interrupts.c include/interrupts.h include/gdt.h include/apic.h include/scheduler.h include/page_table.h include/physical_memory.h | build
+build/interrupts.o: kernel/interrupts.c include/interrupts.h include/gdt.h include/apic.h include/scheduler.h include/process.h include/page_table.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/interrupt-stubs.o: arch/x86_64/interrupts.S | build
@@ -93,7 +93,7 @@ build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h
 build/page-table-test.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/interrupts-test.o: kernel/interrupts.c include/interrupts.h include/gdt.h include/apic.h include/scheduler.h include/page_table.h include/physical_memory.h | build
+build/interrupts-test.o: kernel/interrupts.c include/interrupts.h include/gdt.h include/apic.h include/scheduler.h include/process.h include/page_table.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/acpi-test.o: kernel/acpi.c include/acpi.h include/limine_requests.h | build
@@ -102,7 +102,7 @@ build/acpi-test.o: kernel/acpi.c include/acpi.h include/limine_requests.h | buil
 build/apic-test.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h | build
+build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h | build

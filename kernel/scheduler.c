@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include "interrupts.h"
 #include "process.h"
+#include "gdt.h"
+#include "page_table.h"
+#include "physical_memory.h"
 #include "scheduler.h"
 
 #define KERNEL_THREAD_MAX 8U
@@ -97,8 +100,20 @@ static bool thread_frame_valid(const struct kernel_thread *thread,
     uintptr_t stack_end=0U;
     if (thread==NULL || frame==NULL) return false;
     frame_address=(uintptr_t)frame;
-    stack_begin=(uintptr_t)thread->stack+KERNEL_THREAD_GUARD_SIZE;
-    stack_end=(uintptr_t)(thread->stack+KERNEL_THREAD_STACK_SIZE);
+    if ((frame->cs&3ULL)==3ULL) {
+        struct process_info info={0};
+        if (thread->process_id==0ULL ||
+            !process_get_info(thread->process_id,&info) ||
+            info.kernel_stack_top<(uint64_t)DAWN_PROCESS_KERNEL_STACK_SIZE)
+            return false;
+        stack_begin=(uintptr_t)(info.kernel_stack_top-
+                                (uint64_t)DAWN_PROCESS_KERNEL_STACK_SIZE)+
+                    KERNEL_THREAD_GUARD_SIZE;
+        stack_end=(uintptr_t)info.kernel_stack_top;
+    } else {
+        stack_begin=(uintptr_t)thread->stack+KERNEL_THREAD_GUARD_SIZE;
+        stack_end=(uintptr_t)(thread->stack+KERNEL_THREAD_STACK_SIZE);
+    }
     return (frame_address&0x7U)==0U && frame_address>=stack_begin &&
            frame_address<=stack_end-sizeof(*frame);
 }
@@ -242,6 +257,74 @@ bool kernel_thread_bind_process(uint64_t thread_id,uint64_t process_id) {
     return true;
 }
 
+bool kernel_thread_configure_user(uint64_t thread_id,
+                                   uint64_t process_id,
+                                   uint64_t entry,uint64_t user_stack_top) {
+    const uint64_t saved_flags=read_rflags();
+    struct process_info info={0};
+    struct vm_address_space space={0};
+    struct kernel_thread *target=NULL;
+    struct interrupt_frame *frame=NULL;
+    uint64_t physical=0ULL;
+    uint32_t code_flags=0U,stack_flags=0U;
+    if (!initialized || scheduler_running ||
+        current_thread!=&bootstrap_thread || thread_id==0ULL ||
+        process_id==0ULL || entry<0x10000ULL ||
+        entry>=(1ULL<<47) || user_stack_top==0ULL ||
+        user_stack_top>=(1ULL<<47) || (user_stack_top&0x0fULL)!=0ULL ||
+        (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        struct kernel_thread *candidate=&thread_pool[i];
+        if (candidate->id==thread_id && candidate->state==THREAD_READY)
+            target=candidate;
+        if (candidate->state!=THREAD_FREE && candidate->state!=THREAD_DEAD &&
+            candidate->process_id==process_id) {
+            restore_interrupt_flag(saved_flags);
+            return false;
+        }
+    }
+    if (target==NULL || target->process_id!=0ULL ||
+        !process_get_info(process_id,&info) ||
+        info.state!=PROCESS_STATE_READY ||
+        info.kernel_stack_top<(uint64_t)DAWN_PROCESS_KERNEL_STACK_SIZE+
+                              (uint64_t)KERNEL_THREAD_GUARD_SIZE) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    space.root_physical=info.address_space_root;
+    if (!vm_address_space_translate(&space,entry,&physical,&code_flags) ||
+        (code_flags&(uint32_t)VM_PAGE_USER)==0U ||
+        (code_flags&(uint32_t)VM_PAGE_EXECUTE)==0U ||
+        (code_flags&(uint32_t)VM_PAGE_NO_EXECUTE)!=0U ||
+        !vm_address_space_translate(&space,user_stack_top-1ULL,
+                                    &physical,&stack_flags) ||
+        (stack_flags&(uint32_t)VM_PAGE_USER)==0U ||
+        (stack_flags&(uint32_t)VM_PAGE_WRITE)==0U) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    frame=(struct interrupt_frame *)(uintptr_t)
+        (info.kernel_stack_top-(uint64_t)sizeof(*frame));
+    if ((uintptr_t)frame<
+        (uintptr_t)(info.kernel_stack_top-
+                    (uint64_t)DAWN_PROCESS_KERNEL_STACK_SIZE)+
+                    KERNEL_THREAD_GUARD_SIZE) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    *frame=(struct interrupt_frame){0};
+    frame->rip=entry;
+    frame->cs=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL;
+    frame->rflags=INITIAL_THREAD_RFLAGS;
+    frame->user_rsp=user_stack_top;
+    frame->user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
+    target->process_id=process_id;
+    target->saved_frame=frame;
+    restore_interrupt_flag(saved_flags);
+    return true;
+}
+
 static void scheduler_switch_process_context(
     const struct kernel_thread *outgoing,
     const struct kernel_thread *incoming
@@ -319,6 +402,25 @@ struct interrupt_frame *scheduler_handle_interrupt(
     current_thread=next;
     increment_saturated(&counters.context_switches);
     return next->saved_frame;
+}
+
+struct interrupt_frame *scheduler_user_exit(
+    struct interrupt_frame *frame
+) {
+    struct kernel_thread *self=current_thread;
+    if (!initialized || !scheduler_running || frame==NULL ||
+        self==NULL || self==&bootstrap_thread ||
+        self->state!=THREAD_RUNNING || self->process_id==0ULL ||
+        process_active_id()!=self->process_id ||
+        !interrupt_frame_user_structure_valid(frame) ||
+        !thread_frame_valid(self,frame))
+        cpu_halt_forever();
+
+    self->saved_frame=frame;
+    self->state=THREAD_DEAD;
+    increment_saturated(&counters.threads_exited);
+    if (counters.active_threads>0ULL) --counters.active_threads;
+    return scheduler_handle_interrupt(frame,false);
 }
 
 bool scheduler_run_until_idle(void) {
@@ -519,6 +621,96 @@ bool scheduler_process_context_self_test(void) {
             return false;
     }
     return true;
+}
+
+bool scheduler_user_context_self_test(void) {
+    const uint64_t saved_flags=read_rflags();
+    const uint64_t code_address=0x0000004000000000ULL;
+    const uint64_t stack_address=0x0000004000001000ULL;
+    uint64_t process_id=0ULL,thread_id=0ULL;
+    uint64_t code_physical=0ULL,stack_physical=0ULL;
+    struct process_info info={0};
+    struct kernel_thread *thread=NULL;
+    struct interrupt_frame *frame=NULL;
+    struct vm_address_space space={0};
+    bool process_created=false,code_allocated=false,stack_allocated=false;
+    bool thread_created=false,process_active=false,cleaned=false,result=false;
+
+    if (!initialized || scheduler_running ||
+        current_thread!=&bootstrap_thread || process_active_id()!=0ULL)
+        return false;
+    disable_interrupts();
+    if (!physical_allocator_allocate(&code_physical)) goto cleanup;
+    code_allocated=true;
+    if (!physical_allocator_allocate(&stack_physical)) goto cleanup;
+    stack_allocated=true;
+    if (!process_create(&process_id)) goto cleanup;
+    process_created=true;
+    if (!process_mark_ready(process_id) ||
+        !process_get_info(process_id,&info)) goto cleanup;
+    space.root_physical=info.address_space_root;
+    if (!vm_address_space_map_user(&space,code_address,code_physical,
+            (uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_EXECUTE) ||
+        !vm_address_space_map_user(&space,stack_address,stack_physical,
+            (uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE))
+        goto cleanup;
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&thread_id))
+        goto cleanup;
+    thread_created=true;
+    if (kernel_thread_configure_user(thread_id,process_id,
+            stack_address+16ULL,stack_address+4096ULL) ||
+        kernel_thread_configure_user(thread_id,process_id,
+            code_address+16ULL,stack_address+4095ULL) ||
+        !kernel_thread_configure_user(thread_id,process_id,
+            code_address+16ULL,stack_address+4096ULL))
+        goto cleanup;
+
+    for (size_t index=0U;index<KERNEL_THREAD_MAX;index++)
+        if (thread_pool[index].id==thread_id) thread=&thread_pool[index];
+    if (thread==NULL || thread->process_id!=process_id ||
+        !thread_frame_valid(thread,thread->saved_frame)) goto cleanup;
+    frame=thread->saved_frame;
+    if (frame->rip!=code_address+16ULL ||
+        frame->cs!=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL ||
+        frame->user_rsp!=stack_address+4096ULL ||
+        frame->user_ss!=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL ||
+        (frame->rflags&0x202ULL)!=0x202ULL ||
+        (frame->rflags&(3ULL<<12))!=0ULL)
+        goto cleanup;
+
+    if (!process_switch_to(process_id)) goto cleanup;
+    process_active=true;
+    if (!interrupt_frame_user_context_valid(frame) ||
+        !process_deactivate()) goto cleanup;
+    process_active=false;
+    result=true;
+
+cleanup:
+    if (process_active) {
+        if (process_deactivate()) process_active=false;
+        else result=false;
+    }
+    if (thread_created && thread==NULL) {
+        for (size_t index=0U;index<KERNEL_THREAD_MAX;index++)
+            if (thread_pool[index].id==thread_id) thread=&thread_pool[index];
+    }
+    if (thread_created && thread!=NULL && thread->state==THREAD_READY) {
+        thread->state=THREAD_DEAD;
+        if (counters.active_threads>0ULL) --counters.active_threads;
+        increment_saturated(&counters.threads_exited);
+    }
+    if (process_created && !process_active) {
+        if (process_mark_exited(process_id) &&
+            process_reap(process_id)) cleaned=true;
+        else result=false;
+    }
+    if ((!process_created || cleaned) && stack_allocated &&
+        !physical_allocator_free(stack_physical)) result=false;
+    if ((!process_created || cleaned) && code_allocated &&
+        !physical_allocator_free(code_physical)) result=false;
+    restore_interrupt_flag(saved_flags);
+    return result && !process_active &&
+           (!process_created || cleaned);
 }
 
 bool scheduler_preemption_self_test(void) {

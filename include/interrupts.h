@@ -21,6 +21,7 @@ struct interrupt_frame {
 /* The trailing user_rsp/user_ss words exist only when CS.RPL is 3.
  * Classify the frame before reading those optional privilege-transition fields. */
 bool interrupt_frame_from_user(const struct interrupt_frame *frame);
+bool interrupt_frame_user_structure_valid(const struct interrupt_frame *frame);
 bool interrupt_frame_user_context_valid(const struct interrupt_frame *frame);
 
 struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame);

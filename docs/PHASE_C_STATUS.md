@@ -82,3 +82,12 @@
 - Enforces file and memory bounds, user virtual range, power-of-two/congruent alignment, W^X, executable entry containment, and page-level non-overlap. Dynamic/interpreter images are rejected.
 - Added synthetic valid/invalid image self-tests and wired them into the kernel test image.
 - This is validation only: no segment allocation/copy, BSS zeroing, relocation, process image ownership, or actual ELF launch is implemented. Compilation and emulator validation remain pending.
+
+
+## Scheduler-managed CPL3 trap path (2026-11-18)
+
+- Added a process-bound scheduler thread configuration API that builds a CPL3 IRETQ context on the process privilege stack after validating executable user RIP and writable user RSP.
+- The scheduler validates CPL3 frames against the process-owned kernel stack while retaining existing kernel-thread stack checks for CPL0 frames.
+- User-origin syscall and APIC timer entries are routed through the process-aware path. SYS_EXIT and recoverable user exceptions switch away from the faulting thread; NMI, double fault and machine check remain fatal.
+- Active-root virtual translation makes existing user-range/copy helpers operate on the process that received the syscall.
+- Synthetic self-tests cover the initial user frame and its mappings, but no CPL3 instruction stream is launched. Build, QEMU and CI validation remain pending.

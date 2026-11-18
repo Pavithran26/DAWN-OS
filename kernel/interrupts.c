@@ -8,6 +8,7 @@
 #include "scheduler.h"
 #include "syscall.h"
 #include "page_table.h"
+#include "process.h"
 #include "physical_memory.h"
 
 #define IDT_ENTRIES 256U
@@ -157,20 +158,24 @@ bool interrupt_frame_from_user(const struct interrupt_frame *frame) {
     return frame != NULL && (frame->cs & 3ULL) == 3ULL;
 }
 
+bool interrupt_frame_user_structure_valid(
+    const struct interrupt_frame *frame
+) {
+    if (!interrupt_frame_from_user(frame)) return false;
+    /* These fields are present only for a privilege-changing CPL3 trap. */
+    if (frame->cs!=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL ||
+        frame->user_ss!=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL)
+        return false;
+    return (frame->rflags&RFLAGS_FIXED_BIT)!=0ULL &&
+           (frame->rflags&(RFLAGS_IOPL_MASK|RFLAGS_NT|RFLAGS_VM))==0ULL;
+}
+
 bool interrupt_frame_user_context_valid(const struct interrupt_frame *frame) {
     uint64_t physical=0ULL;
     uint32_t code_flags=0U,stack_flags=0U;
-    if (!interrupt_frame_from_user(frame)) return false;
-
-    /* Do not inspect user_rsp/user_ss until CPL3 origin has been established. */
-    if (frame->cs != (uint64_t)DAWN_USER_CODE_SELECTOR + 3ULL ||
-        frame->user_ss != (uint64_t)DAWN_USER_DATA_SELECTOR + 3ULL)
-        return false;
-    if (frame->rip == 0ULL || frame->rip >= USER_CANONICAL_LIMIT ||
-        frame->user_rsp == 0ULL || frame->user_rsp >= USER_CANONICAL_LIMIT)
-        return false;
-    if ((frame->rflags & RFLAGS_FIXED_BIT) == 0ULL ||
-        (frame->rflags & (RFLAGS_IOPL_MASK | RFLAGS_NT | RFLAGS_VM)) != 0ULL)
+    if (!interrupt_frame_user_structure_valid(frame) ||
+        frame->rip==0ULL || frame->rip>=USER_CANONICAL_LIMIT ||
+        frame->user_rsp==0ULL || frame->user_rsp>=USER_CANONICAL_LIMIT)
         return false;
 
     /* Validate the actual return instruction and writable user stack mapping. */
@@ -319,17 +324,53 @@ struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame) {
         for (;;) __asm__ volatile ("cli; hlt" : : : "memory");
     }
 
-    /*
-     * Until user-mode scheduling is implemented, accept CPL3 traps only for
-     * the synchronous syscall gate. Never feed a user-origin timer frame into
-     * the CPL0 kernel-thread scheduler: its stack ownership and saved-frame
-     * invariants are different.
-     */
-    if ((frame->cs & 3ULL)==3ULL) {
-        if (!interrupt_frame_user_context_valid(frame) ||
-            frame->vector!=(uint64_t)DAWN_SYSCALL_VECTOR)
-            interrupt_fatal(frame);
-    } else if ((frame->cs & 3ULL)!=0ULL) {
+    if ((frame->cs&3ULL)==3ULL) {
+        if (process_active_id()==0ULL) interrupt_fatal(frame);
+
+        if (frame->vector==(uint64_t)DAWN_SYSCALL_VECTOR) {
+            if (!interrupt_frame_user_structure_valid(frame))
+                interrupt_fatal(frame);
+            if (frame->rax==(uint64_t)DAWN_SYS_EXIT ||
+                !interrupt_frame_user_context_valid(frame))
+                return scheduler_user_exit(frame);
+            frame->rax=(uint64_t)syscall_dispatch(
+                frame->rax,frame->rdi,frame->rsi,frame->rdx,
+                frame->r10,frame->r8,frame->r9);
+            return frame;
+        }
+        if (frame->vector==(uint64_t)APIC_LOCAL_TIMER_VECTOR ||
+            frame->vector==(uint64_t)APIC_IO_IRQ_VECTOR ||
+            frame->vector==255ULL) {
+            if (!interrupt_frame_user_structure_valid(frame))
+                interrupt_fatal(frame);
+            if (frame->vector==(uint64_t)APIC_LOCAL_TIMER_VECTOR) {
+                /* Acknowledge the LAPIC even when a bad user return frame is
+                 * about to terminate the process. */
+                apic_handle_local_timer_interrupt();
+                if (!interrupt_frame_user_context_valid(frame))
+                    return scheduler_user_exit(frame);
+                return scheduler_handle_interrupt(frame,true);
+            }
+            if (frame->vector==(uint64_t)APIC_IO_IRQ_VECTOR) {
+                apic_handle_ioapic_interrupt();
+                if (!interrupt_frame_user_context_valid(frame))
+                    return scheduler_user_exit(frame);
+                return frame;
+            }
+            ++spurious_interrupt_count;
+            if (!interrupt_frame_user_context_valid(frame))
+                return scheduler_user_exit(frame);
+            return frame;
+        }
+        /* Recoverable user exceptions terminate only the faulting process.
+         * NMI, double fault and machine check remain kernel-fatal. */
+        if (frame->vector<IDT_EXCEPTION_COUNT &&
+            frame->vector!=2ULL && frame->vector!=8ULL &&
+            frame->vector!=18ULL &&
+            interrupt_frame_user_structure_valid(frame))
+            return scheduler_user_exit(frame);
+        interrupt_fatal(frame);
+    } else if ((frame->cs&3ULL)!=0ULL) {
         interrupt_fatal(frame);
     }
 
@@ -465,22 +506,57 @@ bool interrupts_self_test(void) {
     }
 
     /*
-     * Exercise CPL3 syscall dispatch with a synthetic hardware frame. This
-     * validates dispatch policy and result placement, not a hardware CPL3
-     * transition; the latter requires an isolated user process test.
+     * Exercise the CPL3 syscall dispatch policy with a synthetic frame backed
+     * by a real temporary process address space. This is not an IRETQ launch.
      */
     {
+        const uint64_t code_va=0x0000004000000000ULL;
+        const uint64_t stack_va=0x0000004000001000ULL;
+        uint64_t process_id=0ULL,code_page=0ULL,stack_page=0ULL;
+        struct process_info info={0};
+        struct vm_address_space space={0};
         struct interrupt_frame frame={0};
+        bool active=false,created=false,code_allocated=false;
+        bool stack_allocated=false,cleaned=false,result=false;
+        if (!physical_allocator_allocate(&code_page)) goto syscall_user_cleanup;
+        code_allocated=true;
+        if (!physical_allocator_allocate(&stack_page)) goto syscall_user_cleanup;
+        stack_allocated=true;
+        if (!process_create(&process_id)) goto syscall_user_cleanup;
+        created=true;
+        if (!process_mark_ready(process_id) ||
+            !process_get_info(process_id,&info)) goto syscall_user_cleanup;
+        space.root_physical=info.address_space_root;
+        if (!vm_address_space_map_user(&space,code_va,code_page,
+                (uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_EXECUTE) ||
+            !vm_address_space_map_user(&space,stack_va,stack_page,
+                (uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE) ||
+            !process_activate(process_id)) goto syscall_user_cleanup;
+        active=true;
         frame.vector=(uint64_t)DAWN_SYSCALL_VECTOR;
         frame.cs=(uint64_t)DAWN_USER_CODE_SELECTOR+3ULL;
         frame.user_ss=(uint64_t)DAWN_USER_DATA_SELECTOR+3ULL;
-        frame.rip=0x400000ULL;
-        frame.user_rsp=0x7ffffff000ULL;
+        frame.rip=code_va+16ULL;
+        frame.user_rsp=stack_va+4096ULL;
         frame.rflags=0x202ULL;
         frame.rax=DAWN_SYS_ABI_VERSION;
-        if (interrupt_dispatch(&frame)!=&frame ||
-            frame.rax!=(uint64_t)DAWN_SYSCALL_ABI_VERSION)
-            return false;
+        result=interrupt_dispatch(&frame)==&frame &&
+               frame.rax==(uint64_t)DAWN_SYSCALL_ABI_VERSION;
+syscall_user_cleanup:
+        if (active) {
+            if (process_deactivate()) active=false;
+            else result=false;
+        }
+        if (created && !active) {
+            if (process_mark_exited(process_id) &&
+                process_reap(process_id)) cleaned=true;
+            else result=false;
+        }
+        if ((!created || cleaned) && stack_allocated &&
+            !physical_allocator_free(stack_page)) result=false;
+        if ((!created || cleaned) && code_allocated &&
+            !physical_allocator_free(code_page)) result=false;
+        if (!result || active || (created && !cleaned)) return false;
     }
 
     /* APIC vector 0xFF is spurious and must return without sending an EOI. */

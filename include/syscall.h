@@ -10,8 +10,8 @@
  *   RDI, RSI, RDX, R10, R8, R9 = arguments 0..5
  *   RAX = non-negative result or negative DAWN_ERRNO_* value
  *
- * The ABI is defined here before the ring-3 entry gate is enabled. Reserved
- * calls remain unavailable until their process-lifecycle implementation lands.
+ * SYS_EXIT is handled by the CPL3 interrupt/scheduler path; the kernel-callable
+ * dispatcher returns ENOSYS for it because it has no user thread to terminate.
  */
 #define DAWN_SYSCALL_ABI_VERSION 1ULL
 #define DAWN_SYSCALL_VECTOR 0x80U

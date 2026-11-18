@@ -352,7 +352,9 @@ bool vm_translate(uint64_t virtual_address,uint64_t *physical_address,
     ix[1]=(virtual_address>>30)&0x1ffULL;
     ix[2]=(virtual_address>>21)&0x1ffULL;
     ix[3]=(virtual_address>>12)&0x1ffULL;
-    table=manager.root;
+    table=physical_to_hhdm_pointer(
+        cpu_read_cr3()&manager.physical_address_mask);
+    if (table==NULL) return false;
     for (size_t level=0U;level<3U;level++) {
         entry=table[ix[level]];
         if ((entry & ENTRY_PRESENT)==0ULL ||

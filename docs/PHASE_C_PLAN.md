@@ -187,3 +187,13 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Rejects PT_INTERP and PT_DYNAMIC, unsupported program-header types, writable+executable segments, malformed load segments, and page-level segment overlap. The supported subset is intentionally static and does not yet load or relocate an image.
 - Added synthetic image tests for a valid executable and malformed/truncated headers, machine mismatch, file/memory size mismatch, out-of-image data, W+X, alignment mismatch, invalid entry, and page-overlapping segments.
 - Wired the validator and test into production/test object lists and the kernel self-test entry point. No build, QEMU, or CI result is claimed.
+
+
+## Scheduler-managed CPL3 context and trap handling (2026-11-18)
+
+- Added an API to configure a process-bound scheduler thread with an initial CPL3 IRETQ frame stored at the top of its process-owned TSS.RSP0 stack. The entry point and writable user stack are validated against the process address space before the frame is installed.
+- Scheduler frame ownership validation now distinguishes ordinary CPL0 thread stacks from user-origin frames on process privilege stacks.
+- CPL3 syscall and APIC timer frames are accepted only for an active process and only after validating the user return context. Timer frames can enter the existing scheduler dispatch path; SYS_EXIT and recoverable user exceptions terminate the bound process thread and return to another kernel context.
+- The page-table translation helper now follows the active CR3 root, so user-pointer validation/copy helpers operate on the current process address space during syscalls.
+- Added a self-test for user-frame construction, stack/code permissions, frame placement and mapping validation. It does not execute the frame with IRETQ.
+- Ring-3 launch is not enabled by boot. User processes still need a segment loader, an explicit launch policy and runtime QEMU validation. No build, emulator, or CI result is claimed.
