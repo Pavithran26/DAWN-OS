@@ -26,6 +26,11 @@
 #include "nvme.h"
 #include "partition.h"
 #include "storage_manager.h"
+#include "device.h"
+#include "ps2.h"
+#include "xhci.h"
+#include "usb_hid.h"
+#include "input.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -750,6 +755,24 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: storage manager, block devices, PCI storage, AHCI, NVMe and partitions initialized\n");
 
+    if (!device_manager_initialize()) {
+        serial_write("DAWN-OS: FAIL: device manager initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: device manager and driver framework initialized\n");
+
+    if (!input_initialize()) {
+        serial_write("DAWN-OS: FAIL: input subsystem initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: input subsystem, PS/2 fallback, xHCI and USB HID initialized\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -956,6 +979,38 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: storage manager disk inventory and operations\n");
+
+    /* Phase F: Hardware and Device Management */
+    if (!device_manager_self_test()) {
+        serial_write("DAWN-TEST: FAIL: device manager registry and driver binding\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: device manager registry and driver binding\n");
+    if (!ps2_self_test()) {
+        serial_write("DAWN-TEST: FAIL: PS/2 keyboard/mouse scancode decoding\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: PS/2 keyboard/mouse scancode decoding\n");
+    if (!xhci_self_test()) {
+        serial_write("DAWN-TEST: FAIL: USB xHCI controller registers and TRB parsing\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: USB xHCI controller registers and TRB parsing\n");
+    if (!usb_hid_self_test()) {
+        serial_write("DAWN-TEST: FAIL: USB HID keyboard/mouse report parsing\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: USB HID keyboard/mouse report parsing\n");
+    if (!input_self_test()) {
+        serial_write("DAWN-TEST: FAIL: unified input event queue and dispatch\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: unified input event queue and dispatch\n");
 #endif
 
     if (framebuffer_response_valid()) {
