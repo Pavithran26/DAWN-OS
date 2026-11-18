@@ -424,12 +424,15 @@ static void scheduler_switch_process_context(
                     if (t->wait_child_id<=0 || (uint64_t)t->wait_child_id==outgoing_id) {
                         struct process_info child_info={0};
                         if (process_get_info(outgoing_id,&child_info) && child_info.parent_id==t->process_id) {
-                            if (process_collect_child(t->process_id,outgoing_id,t->wait_status_address)) {
-                                if (t->saved_frame!=NULL)
+                            if (t->saved_frame!=NULL) {
+                                if (process_collect_child(t->process_id,outgoing_id,
+                                                          t->wait_status_address))
                                     t->saved_frame->rax=outgoing_id;
-                                t->wait_child_id=0;
-                                t->wait_status_address=0ULL;
+                                else
+                                    t->saved_frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_ECHILD;
                             }
+                            t->wait_child_id=0;
+                            t->wait_status_address=0ULL;
                             break;
                         }
                     }
@@ -586,6 +589,11 @@ struct interrupt_frame *scheduler_user_wait(
 
     if (status_address!=0ULL && (status_address&7ULL)!=0ULL) {
         frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EINVAL;
+        return frame;
+    }
+    if (status_address!=0ULL &&
+        !vm_user_range_valid(status_address,sizeof(int64_t),true)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EFAULT;
         return frame;
     }
 

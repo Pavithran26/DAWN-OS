@@ -404,7 +404,8 @@ bool process_user_page_checkpoint(uint64_t process_id,size_t *checkpoint) {
         return false;
     disable_interrupts();
     record=find_process(process_id);
-    if (record==NULL || record->state!=PROCESS_STATE_CREATED) {
+    if (record==NULL || record->state!=PROCESS_STATE_CREATED ||
+        active_process_identifier==process_id) {
         restore_interrupt_flag(flags);
         return false;
     }
@@ -422,6 +423,7 @@ bool process_allocate_user_page(uint64_t process_id,
     disable_interrupts();
     record=find_process(process_id);
     if (record==NULL || record->state!=PROCESS_STATE_CREATED ||
+        active_process_identifier==process_id ||
         record->user_page_count>=DAWN_PROCESS_MAX_USER_PAGES ||
         (virtual_address&4095ULL)!=0ULL || virtual_address==0ULL ||
         (flags&(uint32_t)VM_PAGE_USER)==0U ||
@@ -455,7 +457,8 @@ bool process_user_memory_write(uint64_t process_id,uint64_t destination,
     record=find_process(process_id);
     if (record!=NULL &&
         (record->state==PROCESS_STATE_CREATED ||
-         record->state==PROCESS_STATE_READY))
+         record->state==PROCESS_STATE_READY) &&
+        active_process_identifier!=process_id)
         result=vm_address_space_write(&record->address_space,destination,
                                       source,length);
     restore_interrupt_flag(flags);
@@ -470,7 +473,8 @@ bool process_user_memory_zero(uint64_t process_id,uint64_t destination,
     if (!initialized || (read_cs()&3U)!=0U) return false;
     disable_interrupts();
     record=find_process(process_id);
-    if (record!=NULL && record->state==PROCESS_STATE_CREATED)
+    if (record!=NULL && record->state==PROCESS_STATE_CREATED &&
+        active_process_identifier!=process_id)
         result=vm_address_space_zero(&record->address_space,destination,length);
     restore_interrupt_flag(flags);
     return result;
@@ -484,6 +488,7 @@ bool process_user_memory_rollback(uint64_t process_id,size_t checkpoint) {
     disable_interrupts();
     record=find_process(process_id);
     if (record==NULL || record->state!=PROCESS_STATE_CREATED ||
+        active_process_identifier==process_id ||
         checkpoint>record->user_page_count) {
         restore_interrupt_flag(flags);
         return false;
@@ -519,11 +524,9 @@ bool process_reset_for_exec(uint64_t process_id) {
     while (record->user_page_count > 0) {
         const size_t index=record->user_page_count-1U;
         const struct process_user_page page=record->user_pages[index];
-        if (!physical_allocator_is_allocated(page.physical_address) ||
-            !vm_address_space_unmap_user(&record->address_space,page.virtual_address) ||
-            !physical_allocator_free(page.physical_address)) {
-            restore_interrupt_flag(flags);
-            return false;
+        if (physical_allocator_is_allocated(page.physical_address)) {
+            (void)vm_address_space_unmap_user(&record->address_space, page.virtual_address);
+            (void)physical_allocator_free(page.physical_address);
         }
         record->user_pages[index]=(struct process_user_page){0};
         --record->user_page_count;
@@ -715,7 +718,7 @@ bool process_spawn(const void *image,size_t image_size,
         return false;
     }
 
-    if ((argc>0 && argv!=NULL) || envp!=NULL) {
+    if (argc>0 && argv!=NULL) {
         if (!elf64_setup_user_stack(child_pid,&loaded.user_stack_top,
                                     argc,argv,envp,&rdi,&rsi,&rdx)) {
             (void)process_mark_exited(child_pid);

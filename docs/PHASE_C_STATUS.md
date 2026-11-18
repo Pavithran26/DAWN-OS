@@ -182,3 +182,9 @@
 - Process address-space population helpers use explicit page-table/HHDM access and can operate on the active process from CPL0, allowing EXEC to replace its mappings and populate its new stack.
 - process_reset_for_exec now fails closed if an owned page cannot be unmapped and released.
 - Source review only. Compilation, kernel self-tests, BIOS/UEFI QEMU, and runtime SYS_SPAWN/SYS_EXEC behavior remain unverified and are deferred to Phase T.
+
+## SYS_WAIT invalid-pointer and wakeup failure handling (2026-11-18)
+
+- SYS_WAIT now validates the complete aligned writable status slot in the calling process address space before either immediate collection or blocking. Invalid destinations return -EFAULT without blocking the parent.
+- If deferred child collection fails after the child exits (for example, because the child still has unreaped descendants), the waiting parent is resumed with -ECHILD and its wait registration is cleared instead of receiving a stale syscall number as a false PID.
+- Source-only correction. Runtime WAIT scheduling and pointer-fault behavior remain unverified until Phase T.
