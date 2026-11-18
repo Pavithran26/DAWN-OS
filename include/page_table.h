@@ -17,10 +17,15 @@ struct vm_address_space { uint64_t root_physical; };
 /* vm_map_page accepts WRITE, USER and EXECUTE.
  * vm_translate reports NO_EXECUTE for an effective NX mapping. */
 bool vm_manager_initialize(uint64_t hhdm_offset);
-/* Address spaces share supervisor kernel mappings; user frames stay caller-owned. */
+/* Address spaces share supervisor mappings; page-table teardown leaves user frames to their process owner. */
 bool vm_address_space_create(struct vm_address_space *space);
 bool vm_address_space_map_user(struct vm_address_space *space, uint64_t virtual_address, uint64_t physical_address, uint32_t flags);
 bool vm_address_space_translate(const struct vm_address_space *space, uint64_t virtual_address, uint64_t *physical_address, uint32_t *flags);
+/* Kernel-only image population helpers; they write through the HHDM even to RX mappings. */
+bool vm_address_space_unmap_user(struct vm_address_space *space,uint64_t virtual_address);
+bool vm_address_space_write(const struct vm_address_space *space,uint64_t destination,const void *source,size_t length);
+bool vm_address_space_read(const struct vm_address_space *space,void *destination,uint64_t source,size_t length);
+bool vm_address_space_zero(const struct vm_address_space *space,uint64_t destination,size_t length);
 /* CR3 switches are CPL0-only and require IF=0; kernel mappings are shared. */
 bool vm_address_space_activate(const struct vm_address_space *space);
 bool vm_address_space_activate_kernel(void);

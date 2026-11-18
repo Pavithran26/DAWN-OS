@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase C foundation code is in progress. The kernel has ABI/syscall, GDT/TSS, ring-3 entry validation, isolated address-space, privilege-stack, and process-resource lifecycle primitives. No user process has been launched; this is not yet a runnable userspace environment.
+Phase C foundation code is in progress. The kernel has an ABI/syscall path, GDT/TSS, isolated address spaces, process-owned user and privilege stacks, scheduler-managed CPL3 trap handling, and a bounded static ELF64 loader. A test-only CPL3 ELF launch/exit smoke test is wired but has not been executed; this is not yet a verified runnable userspace environment.
 
 The current kernel also has physical and virtual memory managers, ACPI/xAPIC/IOAPIC interrupt handling, a Local APIC timer, interrupt-frame context switching, and a single-CPU timer-preemptive kernel-thread scheduler. Phase B remains in progress until its BIOS and UEFI QEMU test matrix, timer calibration, and scheduler stress checks are verified.
 
@@ -18,7 +18,7 @@ The first Phase C foundation increment is present on `main`:
 - The page-table self-test creates a temporary user mapping and exercises copy-in/copy-out and invalid-range cases.
 - The kernel test calls the dispatcher directly and checks ABI-version, descriptor, pointer, length, and unsupported-call errors.
 
-**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address spaces, process resource lifecycle, and scheduler-bound CPL0 process-context switching now exist. A safe user return path and ELF64 loader are still absent. No ring-3 program has been run. Do not describe user programs as runnable.
+**This is not yet a runnable userspace environment.** A DPL3 IDT vector `0x80` dispatches the ABI, but its current smoke test invokes it from CPL0. GDT/TSS and a guarded ring-3 entry primitive are present. Isolated address spaces, process resource lifecycle, scheduler-bound CPL0/CPL3 context handling, and a bounded static ELF64 segment loader now exist. A test-only ELF program is configured to enter CPL3 and exit through the syscall gate, but no build or emulator result has verified that transition. Do not describe user programs as runnable yet.
 
 The Phase B BIOS/UEFI validation gate also remains a prerequisite. No build, QEMU, or CI result is claimed by this source review.
 
@@ -32,7 +32,7 @@ The kernel now has a dedicated GDT/TSS initialization increment:
 - Adds self-test coverage for TR selector, descriptor type/presence, RSP0 canonicality/alignment, and stack setter rejection/restore.
 - Initialization runs before IDT setup. No user-mode transition is attempted.
 
-**Still outstanding:** no executed ring-3 task, CPL3 interrupt/syscall return path, or ELF loader. The privilege stacks are owned by process records and TSS.RSP0 is switched with scheduler-bound process contexts, but no CPL3 code has used them. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
+**Still outstanding:** runtime verification of the first ring-3 task, user timer preemption, and complete syscall/fault lifecycle behavior. CPL3 entry/return, scheduler routing, and static ELF segment loading are now implemented as code and wired into a test-only smoke launch, but remain unverified. BIOS/UEFI build and boot validation remain separate prerequisites; no execution result is claimed here.
 
 ## Goals
 
@@ -196,4 +196,13 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - CPL3 syscall and APIC timer frames are accepted only for an active process and only after validating the user return context. Timer frames can enter the existing scheduler dispatch path; SYS_EXIT and recoverable user exceptions terminate the bound process thread and return to another kernel context.
 - The page-table translation helper now follows the active CR3 root, so user-pointer validation/copy helpers operate on the current process address space during syscalls.
 - Added a self-test for user-frame construction, stack/code permissions, frame placement and mapping validation. It does not execute the frame with IRETQ.
-- Ring-3 launch is not enabled by boot. User processes still need a segment loader, an explicit launch policy and runtime QEMU validation. No build, emulator, or CI result is claimed.
+- Ring-3 launch is not enabled by normal boot. The bounded loader and explicit test-only launch path exist; runtime QEMU validation is still required before claiming a working userspace environment. No build, emulator, or CI result is claimed.
+
+
+## ELF64 segment loading and first controlled user task (2026-11-18)
+
+- Implemented a bounded static ET_EXEC load path for the already-validated x86-64 ELF subset. Each PT_LOAD segment receives independently allocated user pages with ELF-derived write/execute permissions and supervisor-only kernel population through the HHDM.
+- All newly mapped segment pages are zeroed before file bytes are copied. The remaining memory size is explicitly zeroed for BSS. A four-page, writable, non-executable user stack is allocated at a fixed high user address.
+- Process records now own every user data frame acquired by the loader. Partial failures roll back to a page-allocation checkpoint; process reaping unmaps and frees owned data frames before releasing private page tables and the privilege stack.
+- The kernel test image now includes a small static ELF64 program that executes `SYS_EXIT`. A scheduler self-test configures its first CPL3 IRETQ frame, launches it through the normal interrupt-return path, and expects the exit syscall to return to the bootstrap kernel context.
+- The launch test is test-only and is not invoked by normal boot. It is wired but has not been built or executed; no successful CPL3 runtime launch is claimed until QEMU evidence exists.

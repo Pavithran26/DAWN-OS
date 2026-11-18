@@ -54,20 +54,20 @@ build/acpi.o: kernel/acpi.c include/acpi.h include/limine_requests.h | build
 build/apic.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h | build
+build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h | build
+build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 build/user-mode.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h arch/x86_64/user_mode.S | build
 	$(CC) $(CFLAGS) -c kernel/user_mode.c -o build/user-mode-c.o
 	$(CC) $(ASFLAGS) -c arch/x86_64/user_mode.S -o build/user-mode-asm.o
 	$(LD) -r -o $@ build/user-mode-c.o build/user-mode-asm.o
 
-build/elf-loader.o: kernel/elf_loader.c include/elf_loader.h | build
+build/elf-loader.o: kernel/elf_loader.c include/elf_loader.h include/page_table.h include/physical_memory.h include/process.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/page_table.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
@@ -102,18 +102,18 @@ build/acpi-test.o: kernel/acpi.c include/acpi.h include/limine_requests.h | buil
 build/apic-test.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h | build
+build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h | build
+build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/elf-loader-test.o: kernel/elf_loader.c include/elf_loader.h | build
+build/elf-loader-test.o: kernel/elf_loader.c include/elf_loader.h include/page_table.h include/physical_memory.h include/process.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o linker.ld

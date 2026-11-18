@@ -10,9 +10,9 @@
 
 ## Remaining
 
-- Review and validate address-space mapping/teardown under BIOS and UEFI QEMU.
-- Add a safe CPL3 interrupt/syscall entry and return path that consumes the process TSS.RSP0 stack correctly.
-- Add a safe process return/exit path, ELF64 loading, and a controlled ring-3 test.
+- Compile and run the expanded kernel test image; validate the controlled CPL3 ELF64 launch and `SYS_EXIT` return under BIOS and UEFI QEMU.
+- Exercise user-origin timer preemption, user exception termination, syscall pointer validation, repeated process launch/reap, and loader rollback under runtime tests.
+- Add a broader userspace runtime (argument/environment setup, wait/exec lifecycle, and more syscall coverage) before treating this as a general-purpose userspace environment.
 - Phase B validation remains pending; do not mark Phase B complete until its documented timer/scheduler and BIOS/UEFI test matrix is satisfied.
 
 
@@ -91,3 +91,20 @@
 - User-origin syscall and APIC timer entries are routed through the process-aware path. SYS_EXIT and recoverable user exceptions switch away from the faulting thread; NMI, double fault and machine check remain fatal.
 - Active-root virtual translation makes existing user-range/copy helpers operate on the process that received the syscall.
 - Synthetic self-tests cover the initial user frame and its mappings, but no CPL3 instruction stream is launched. Build, QEMU and CI validation remain pending.
+
+
+## ELF64 loading and controlled first user launch (2026-11-18)
+
+- Added process-owned user-page allocation, kernel-side address-space read/write/zero helpers, and user-page unmapping for rollback and teardown.
+- The ELF loader now allocates PT_LOAD pages with their final user permissions, zeroes complete mapped pages before loading, copies file contents, zeroes BSS, and builds a four-page RW/NX user stack. Images exceeding 256 total user pages are rejected.
+- Reaping releases all process-owned user frames and their private page tables. Failed loads roll back pages allocated since the process checkpoint.
+- Loader tests verify executable bytes, RX permissions, zeroed BSS, RW/NX stack permissions, and allocator-frame recovery after reaping.
+- Added a test-only ELF64 user program that calls `SYS_WRITE`, verifies the result in user code, then issues `SYS_EXIT`; the scheduler test now attempts a real CPL3 launch and return through the syscall gate. This is wired into the kernel test image but not yet compiled or run.
+- Normal boot does not launch a user process. Phase B validation and the BIOS/UEFI QEMU test matrix remain outstanding.
+
+
+## Validation boundary (2026-11-18)
+
+- These changes are source-level implementation only. The kernel and test image have not been compiled in this increment.
+- The new CPL3 test program and `SYS_EXIT` path are wired into the kernel test target, but no QEMU run has confirmed the IRETQ transition or the return to the bootstrap frame.
+- Do not treat a wired test, ELF validation, or successful source push as evidence that DAWN-OS has booted a real userspace process.

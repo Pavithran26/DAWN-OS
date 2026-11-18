@@ -2,9 +2,11 @@
 #ifndef DAWN_PROCESS_H
 #define DAWN_PROCESS_H
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define DAWN_PROCESS_MAX 4U
+#define DAWN_PROCESS_MAX_USER_PAGES 256U
 
 enum process_state {
     PROCESS_STATE_FREE = 0,
@@ -20,7 +22,7 @@ struct process_info {
     uint64_t kernel_stack_top;
 };
 
-/* Metadata/resource lifecycle only: this manager does not schedule user tasks. */
+/* Process metadata, isolated mappings, user-frame ownership, and lifecycle. */
 bool process_manager_initialize(void);
 bool process_create(uint64_t *process_id);
 bool process_mark_ready(uint64_t process_id);
@@ -31,6 +33,12 @@ bool process_switch_to(uint64_t process_id);
 bool process_deactivate(void);
 uint64_t process_active_id(void);
 bool process_get_info(uint64_t process_id, struct process_info *info);
+/* ELF image builder APIs: only CREATED processes may acquire additional user pages. */
+bool process_user_page_checkpoint(uint64_t process_id,size_t *checkpoint);
+bool process_allocate_user_page(uint64_t process_id,uint64_t virtual_address,uint32_t flags);
+bool process_user_memory_write(uint64_t process_id,uint64_t destination,const void *source,size_t length);
+bool process_user_memory_zero(uint64_t process_id,uint64_t destination,size_t length);
+bool process_user_memory_rollback(uint64_t process_id,size_t checkpoint);
 bool process_reap(uint64_t process_id);
 
 #ifdef DAWN_KERNEL_TEST

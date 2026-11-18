@@ -7,6 +7,8 @@
 #include "gdt.h"
 #include "page_table.h"
 #include "physical_memory.h"
+#include "elf_loader.h"
+#include "syscall.h"
 #include "scheduler.h"
 
 #define KERNEL_THREAD_MAX 8U
@@ -418,6 +420,9 @@ struct interrupt_frame *scheduler_user_exit(
 
     self->saved_frame=frame;
     self->state=THREAD_DEAD;
+    if (frame->vector==(uint64_t)DAWN_SYSCALL_VECTOR &&
+        frame->rax==(uint64_t)DAWN_SYS_EXIT)
+        increment_saturated(&counters.user_exit_syscalls);
     increment_saturated(&counters.threads_exited);
     if (counters.active_threads>0ULL) --counters.active_threads;
     return scheduler_handle_interrupt(frame,false);
@@ -711,6 +716,73 @@ cleanup:
     restore_interrupt_flag(saved_flags);
     return result && !process_active &&
            (!process_created || cleaned);
+}
+
+
+bool scheduler_elf_launch_self_test(void) {
+    uint8_t image[8192]={0U};
+    size_t image_size=0U;
+    uint64_t process_id=0ULL,thread_id=0ULL;
+    struct elf64_loaded_process loaded={0};
+    struct process_info process={0};
+    struct scheduler_stats before={0},after={0};
+    bool thread_configured=false,run_result=false;
+    if (!initialized || scheduler_running ||
+        current_thread!=&bootstrap_thread || process_active_id()!=0ULL)
+        return false;
+    if (!elf64_build_test_exit_image(image,sizeof(image),&image_size) ||
+        !process_create(&process_id)) return false;
+    if (!elf64_load_process(process_id,image,image_size,&loaded) ||
+        loaded.entry==0ULL || loaded.user_stack_top==0ULL) {
+        (void)process_mark_exited(process_id);
+        (void)process_reap(process_id);
+        return false;
+    }
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&thread_id)) {
+        (void)process_mark_exited(process_id);
+        (void)process_reap(process_id);
+        return false;
+    }
+    if (!kernel_thread_configure_user(thread_id,process_id,
+            loaded.entry,loaded.user_stack_top)) {
+        for (size_t index=0U;index<KERNEL_THREAD_MAX;index++) {
+            if (thread_pool[index].id==thread_id &&
+                thread_pool[index].state==THREAD_READY) {
+                thread_pool[index].state=THREAD_DEAD;
+                if (counters.active_threads>0ULL) --counters.active_threads;
+                increment_saturated(&counters.threads_exited);
+            }
+        }
+        (void)process_mark_exited(process_id);
+        (void)process_reap(process_id);
+        return false;
+    }
+    thread_configured=true;
+
+    scheduler_get_stats(&before);
+    run_result=scheduler_run_until_idle();
+    if (!run_result || process_active_id()!=0ULL ||
+        !process_get_info(process_id,&process)) {
+        if (process_active_id()==0ULL) {
+            (void)process_mark_exited(process_id);
+            (void)process_reap(process_id);
+        }
+        return false;
+    }
+    scheduler_get_stats(&after);
+    {
+        const bool exited_by_syscall=
+            after.user_exit_syscalls==before.user_exit_syscalls+1ULL;
+        const bool scheduler_accounting=
+            after.threads_exited==before.threads_exited+1ULL &&
+            before.active_threads==after.active_threads+1ULL;
+        const bool process_exited=process.state==PROCESS_STATE_EXITED;
+        const bool reaped=process_exited && process_reap(process_id);
+        const bool stale_rejected=
+            reaped && !process_get_info(process_id,&process);
+        return thread_configured && exited_by_syscall &&
+               scheduler_accounting && process_exited && stale_rejected;
+    }
 }
 
 bool scheduler_preemption_self_test(void) {

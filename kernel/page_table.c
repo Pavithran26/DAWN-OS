@@ -592,16 +592,10 @@ bool vm_manager_self_test(void) {
 
 
 /*
- * Process address-space roots share only the supervisor half of the kernel
- * PML4. The lower half starts empty and is owned by the address-space object.
- * User data frames remain caller-owned; destroy releases page-table frames only.
- * Activation is intentionally deferred until interrupt/syscall stack switching
- * and process lifetime management are ready.
+ * Address spaces share supervisor kernel mappings and own their lower-half
+ * page-table frames. User data frames are owned and reclaimed by the process
+ * resource manager, not by vm_address_space_destroy().
  */
-struct vm_address_space {
-    uint64_t root_physical;
-};
-
 static volatile uint64_t *address_space_root(const struct vm_address_space *space) {
     if (space==NULL || space->root_physical==0ULL) return NULL;
     return physical_to_hhdm_pointer(space->root_physical);
@@ -728,6 +722,107 @@ bool vm_address_space_translate(const struct vm_address_space *space,
         *flags=(writable?(uint32_t)VM_PAGE_WRITE:0U)|
                (user?(uint32_t)VM_PAGE_USER:0U)|
                (nx?(uint32_t)VM_PAGE_NO_EXECUTE:(uint32_t)VM_PAGE_EXECUTE);
+    }
+    return true;
+}
+
+bool vm_address_space_unmap_user(struct vm_address_space *space,
+                                  uint64_t virtual_address) {
+    uint64_t ix[4]={0ULL,0ULL,0ULL,0ULL};
+    volatile uint64_t *table=address_space_root(space);
+    uint64_t entry=0ULL;
+    if (table==NULL || virtual_address==0ULL ||
+        !address_is_canonical(virtual_address) ||
+        (virtual_address&CANONICAL_SIGN_BIT)!=0ULL ||
+        (virtual_address&PAGE_MASK)!=0ULL) return false;
+    ix[0]=(virtual_address>>39)&0x1ffULL;
+    ix[1]=(virtual_address>>30)&0x1ffULL;
+    ix[2]=(virtual_address>>21)&0x1ffULL;
+    ix[3]=(virtual_address>>12)&0x1ffULL;
+    for (size_t level=0U;level<3U;level++) {
+        entry=table[ix[level]];
+        if ((entry&ENTRY_PRESENT)==0ULL || (entry&ENTRY_USER)==0ULL ||
+            (entry&ENTRY_LARGE)!=0ULL) return false;
+        table=physical_to_hhdm_pointer(entry&manager.physical_address_mask);
+        if (table==NULL) return false;
+    }
+    entry=table[ix[3]];
+    if ((entry&ENTRY_PRESENT)==0ULL || (entry&ENTRY_USER)==0ULL)
+        return false;
+    table[ix[3]]=0ULL;
+    __asm__ volatile ("mfence" : : : "memory");
+    if (vm_address_space_is_active(space)) invalidate_page(virtual_address);
+    return true;
+}
+
+static bool address_space_copy(const struct vm_address_space *space,
+                               uint64_t virtual_address,void *kernel_buffer,
+                               size_t length,bool write_to_user) {
+    size_t copied=0U;
+    uint64_t last=0ULL;
+    if (length==0U) return true;
+    if (kernel_buffer==NULL || virtual_address==0ULL ||
+        virtual_address>=CANONICAL_SIGN_BIT ||
+        (uint64_t)length>CANONICAL_SIGN_BIT-virtual_address)
+        return false;
+    last=virtual_address+(uint64_t)length-1ULL;
+    /* Validate the complete range before changing or returning any bytes. */
+    for (uint64_t page=virtual_address&~PAGE_MASK;;page+=PAGE_SIZE) {
+        uint64_t physical=0ULL;
+        uint32_t flags=0U;
+        if (!vm_address_space_translate(space,page,&physical,&flags) ||
+            (flags&(uint32_t)VM_PAGE_USER)==0U)
+            return false;
+        if (page==(last&~PAGE_MASK)) break;
+        if (page>UINT64_MAX-PAGE_SIZE) return false;
+    }
+    while (copied<length) {
+        const uint64_t address=virtual_address+(uint64_t)copied;
+        const uint64_t offset=address&PAGE_MASK;
+        uint64_t physical=0ULL;
+        volatile uint8_t *page_bytes=NULL;
+        size_t chunk=(size_t)(PAGE_SIZE-offset);
+        if (!vm_address_space_translate(space,address,&physical,NULL))
+            return false;
+        if (chunk>length-copied) chunk=length-copied;
+        page_bytes=(volatile uint8_t *)physical_to_hhdm_pointer(
+            physical&~PAGE_MASK);
+        if (page_bytes==NULL) return false;
+        if (write_to_user) {
+            const uint8_t *input=(const uint8_t *)kernel_buffer+copied;
+            for (size_t index=0U;index<chunk;index++)
+                page_bytes[offset+(uint64_t)index]=input[index];
+        } else {
+            uint8_t *output=(uint8_t *)kernel_buffer+copied;
+            for (size_t index=0U;index<chunk;index++)
+                output[index]=page_bytes[offset+(uint64_t)index];
+        }
+        copied+=chunk;
+    }
+    return true;
+}
+
+bool vm_address_space_write(const struct vm_address_space *space,
+                            uint64_t destination,const void *source,
+                            size_t length) {
+    return address_space_copy(space,destination,(void *)source,length,true);
+}
+
+bool vm_address_space_read(const struct vm_address_space *space,
+                           void *destination,uint64_t source,size_t length) {
+    return address_space_copy(space,source,destination,length,false);
+}
+
+bool vm_address_space_zero(const struct vm_address_space *space,
+                           uint64_t destination,size_t length) {
+    static const uint8_t zeroes[64]={0U};
+    size_t cleared=0U;
+    while (cleared<length) {
+        const size_t remaining=length-cleared;
+        const size_t chunk=remaining>sizeof(zeroes)?sizeof(zeroes):remaining;
+        if (!vm_address_space_write(space,destination+(uint64_t)cleared,
+                                    zeroes,chunk)) return false;
+        cleared+=chunk;
     }
     return true;
 }

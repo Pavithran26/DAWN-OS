@@ -4,12 +4,20 @@
 #include <stdint.h>
 #include "gdt.h"
 #include "page_table.h"
+#include "physical_memory.h"
 #include "process.h"
 
 #define CPU_RFLAGS_INTERRUPT_ENABLE (1ULL << 9)
 
+struct process_user_page {
+    uint64_t virtual_address;
+    uint64_t physical_address;
+};
+
 struct process_record {
     struct vm_address_space address_space;
+    struct process_user_page user_pages[DAWN_PROCESS_MAX_USER_PAGES];
+    size_t user_page_count;
     uint64_t id;
     uint64_t kernel_stack_top;
     enum process_state state;
@@ -249,6 +257,118 @@ bool process_get_info(uint64_t process_id,struct process_info *info) {
     return true;
 }
 
+bool process_user_page_checkpoint(uint64_t process_id,size_t *checkpoint) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || checkpoint==NULL || (read_cs()&3U)!=0U)
+        return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->state!=PROCESS_STATE_CREATED ||
+        active_process_identifier==process_id) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    *checkpoint=record->user_page_count;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_allocate_user_page(uint64_t process_id,
+                                uint64_t virtual_address,uint32_t flags) {
+    const uint64_t saved_flags=read_rflags();
+    struct process_record *record=NULL;
+    uint64_t physical=0ULL;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->state!=PROCESS_STATE_CREATED ||
+        active_process_identifier==process_id ||
+        record->user_page_count>=DAWN_PROCESS_MAX_USER_PAGES ||
+        (virtual_address&4095ULL)!=0ULL || virtual_address==0ULL ||
+        (flags&(uint32_t)VM_PAGE_USER)==0U ||
+        (flags&((uint32_t)VM_PAGE_WRITE|(uint32_t)VM_PAGE_EXECUTE))==
+            ((uint32_t)VM_PAGE_WRITE|(uint32_t)VM_PAGE_EXECUTE) ||
+        !physical_allocator_allocate(&physical)) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    if (!vm_address_space_map_user(&record->address_space,
+            virtual_address,physical,flags)) {
+        (void)physical_allocator_free(physical);
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    record->user_pages[record->user_page_count].virtual_address=
+        virtual_address;
+    record->user_pages[record->user_page_count].physical_address=physical;
+    ++record->user_page_count;
+    restore_interrupt_flag(saved_flags);
+    return true;
+}
+
+bool process_user_memory_write(uint64_t process_id,uint64_t destination,
+                               const void *source,size_t length) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    bool result=false;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record!=NULL && record->state==PROCESS_STATE_CREATED &&
+        active_process_identifier!=process_id)
+        result=vm_address_space_write(&record->address_space,destination,
+                                      source,length);
+    restore_interrupt_flag(flags);
+    return result;
+}
+
+bool process_user_memory_zero(uint64_t process_id,uint64_t destination,
+                              size_t length) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    bool result=false;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record!=NULL && record->state==PROCESS_STATE_CREATED &&
+        active_process_identifier!=process_id)
+        result=vm_address_space_zero(&record->address_space,destination,length);
+    restore_interrupt_flag(flags);
+    return result;
+}
+
+bool process_user_memory_rollback(uint64_t process_id,size_t checkpoint) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    bool result=true;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->state!=PROCESS_STATE_CREATED ||
+        active_process_identifier==process_id ||
+        checkpoint>record->user_page_count) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    while (record->user_page_count>checkpoint) {
+        const size_t index=record->user_page_count-1U;
+        const struct process_user_page page=record->user_pages[index];
+        if (!physical_allocator_is_allocated(page.physical_address) ||
+            !vm_address_space_unmap_user(&record->address_space,
+                                         page.virtual_address) ||
+            !physical_allocator_free(page.physical_address)) {
+            result=false;
+            break;
+        }
+        record->user_pages[index]=(struct process_user_page){0};
+        --record->user_page_count;
+    }
+    result=result && record->user_page_count==checkpoint;
+    restore_interrupt_flag(flags);
+    return result;
+}
+
 bool process_reap(uint64_t process_id) {
     const uint64_t flags=read_rflags();
     struct process_record *record=NULL;
@@ -260,7 +380,19 @@ bool process_reap(uint64_t process_id) {
         restore_interrupt_flag(flags);
         return false;
     }
-    /* VM teardown refuses to free the currently active CR3 root. */
+    while (record->user_page_count>0U) {
+        const size_t index=record->user_page_count-1U;
+        const struct process_user_page page=record->user_pages[index];
+        if (!physical_allocator_is_allocated(page.physical_address) ||
+            !vm_address_space_unmap_user(&record->address_space,
+                                         page.virtual_address) ||
+            !physical_allocator_free(page.physical_address)) {
+            restore_interrupt_flag(flags);
+            return false;
+        }
+        record->user_pages[index]=(struct process_user_page){0};
+        --record->user_page_count;
+    }
     if (record->address_space.root_physical!=0ULL &&
         !vm_address_space_destroy(&record->address_space)) {
         restore_interrupt_flag(flags);

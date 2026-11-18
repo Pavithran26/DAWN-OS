@@ -13,6 +13,7 @@ struct scheduler_stats {
     uint64_t voluntary_yields;
     uint64_t timer_preemptions;
     uint64_t active_threads;
+    uint64_t user_exit_syscalls;
 };
 bool scheduler_initialize(void);
 bool kernel_thread_create(kernel_thread_entry entry, void *argument,
@@ -35,5 +36,6 @@ bool scheduler_self_test(void);
 bool scheduler_preemption_self_test(void);
 bool scheduler_process_context_self_test(void);
 bool scheduler_user_context_self_test(void);
+bool scheduler_elf_launch_self_test(void);
 #endif
 #endif
