@@ -458,7 +458,6 @@ static bool process_manager_self_test_locked(void) {
         !process_mark_exited(extra) || !process_reap(extra)) return false;
     return true;
 }
-#endif
 
 bool process_manager_self_test(void) {
     const uint64_t flags=read_rflags();
@@ -469,3 +468,4 @@ bool process_manager_self_test(void) {
     restore_interrupt_flag(flags);
     return result;
 }
+#endif
