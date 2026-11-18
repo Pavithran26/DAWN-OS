@@ -15,6 +15,11 @@
 #include "elf_loader.h"
 #include "gdt.h"
 #include "process.h"
+#include "vfs.h"
+#include "fat32.h"
+#include "iso9660.h"
+#include "vfs_cache.h"
+#include "file_explorer.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -721,6 +726,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: 256-entry IDT loaded; legacy PIC remapped and masked\n");
 
+    if (!vfs_initialize()) {
+        serial_write("DAWN-OS: FAIL: VFS initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: VFS root, mounts and standard directory hierarchy initialized\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -857,6 +871,38 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: Local APIC timer invalid-argument checks\n");
+
+    /* Phase D: Virtual Filesystem and Filesystem Drivers */
+    if (!vfs_self_test()) {
+        serial_write("DAWN-TEST: FAIL: VFS mount, hierarchy, path resolution and operations\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: VFS mount, hierarchy, path resolution and operations\n");
+    if (!fat32_self_test()) {
+        serial_write("DAWN-TEST: FAIL: FAT32 read and write\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: FAT32 filesystem parsing, read and write\n");
+    if (!iso9660_self_test()) {
+        serial_write("DAWN-TEST: FAIL: ISO9660 read\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: ISO9660 primary volume descriptor and read\n");
+    if (!vfs_cache_self_test()) {
+        serial_write("DAWN-TEST: FAIL: VFS dentry cache\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: VFS dentry cache\n");
+    if (!explorer_self_test()) {
+        serial_write("DAWN-TEST: FAIL: File explorer backend\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: File explorer backend enumeration, search and copy\n");
 #endif
 
     if (framebuffer_response_valid()) {

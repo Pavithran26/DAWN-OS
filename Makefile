@@ -23,7 +23,7 @@ CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
 ASFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 --build-id=none
 
-KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o build/process.o build/elf-loader.o
+KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o build/process.o build/elf-loader.o build/vfs.o build/fat32.o build/iso9660.o build/vfs-cache.o build/file-explorer.o
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all
 
@@ -42,7 +42,7 @@ build/gdt.o: kernel/gdt.c include/gdt.h arch/x86_64/gdt.S | build
 	$(CC) $(ASFLAGS) -c arch/x86_64/gdt.S -o build/gdt-asm.o
 	$(LD) -r -o $@ build/gdt-c.o build/gdt-asm.o
 
-build/main.o: kernel/main.c include/gdt.h include/process.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h include/elf_loader.h | build
+build/main.o: kernel/main.c include/gdt.h include/process.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h include/elf_loader.h include/vfs.h include/fat32.h include/iso9660.h include/vfs_cache.h include/file_explorer.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/physical_memory.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
@@ -70,6 +70,21 @@ build/user-mode.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/
 build/elf-loader.o: kernel/elf_loader.c include/elf_loader.h include/page_table.h include/physical_memory.h include/process.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
+build/vfs.o: kernel/vfs.c include/vfs.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/fat32.o: kernel/fat32.c include/fat32.h include/vfs.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/iso9660.o: kernel/iso9660.c include/iso9660.h include/vfs.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/vfs-cache.o: kernel/vfs_cache.c include/vfs_cache.h include/vfs.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/file-explorer.o: kernel/file_explorer.c include/file_explorer.h include/vfs.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
 build/page_table.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -84,7 +99,7 @@ build/dawn-kernel.elf: $(KERNEL_OBJECTS) linker.ld
 
 kernel-test: build/dawn-kernel-test.elf
 
-build/main-test.o: kernel/main.c include/gdt.h include/process.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h include/user_mode.h include/elf_loader.h | build
+build/main-test.o: kernel/main.c include/gdt.h include/process.h include/limine_requests.h include/physical_memory.h include/page_table.h include/interrupts.h include/acpi.h include/apic.h include/scheduler.h include/syscall.h include/user_mode.h include/elf_loader.h include/vfs.h include/fat32.h include/iso9660.h include/vfs_cache.h include/file_explorer.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/physical-memory-test.o: kernel/physical_memory.c include/physical_memory.h include/limine_requests.h | build
@@ -116,8 +131,23 @@ build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h inc
 build/elf-loader-test.o: kernel/elf_loader.c include/elf_loader.h include/page_table.h include/physical_memory.h include/process.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o
+build/vfs-test.o: kernel/vfs.c include/vfs.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/fat32-test.o: kernel/fat32.c include/fat32.h include/vfs.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/iso9660-test.o: kernel/iso9660.c include/iso9660.h include/vfs.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/vfs-cache-test.o: kernel/vfs_cache.c include/vfs_cache.h include/vfs.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/file-explorer-test.o: kernel/file_explorer.c include/file_explorer.h include/vfs.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
+build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o linker.ld
+	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o
 
 check: kernel
 	@set -eu; \
