@@ -57,7 +57,7 @@ build/apic.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h |
 build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h include/apic.h include/app_runtime.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h | build
+build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h include/vfs.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
@@ -73,7 +73,7 @@ build/elf-loader.o: kernel/elf_loader.c include/elf_loader.h include/page_table.
 build/vfs.o: kernel/vfs.c include/vfs.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/fat32.o: kernel/fat32.c include/fat32.h include/vfs.h | build
+build/fat32.o: kernel/fat32.c include/fat32.h include/vfs.h include/block_dev.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/iso9660.o: kernel/iso9660.c include/iso9660.h include/vfs.h | build
@@ -201,7 +201,7 @@ build/apic-test.o: kernel/apic.c include/apic.h include/acpi.h include/page_tabl
 build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h include/apic.h include/app_runtime.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h | build
+build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h include/vfs.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
@@ -217,7 +217,7 @@ build/elf-loader-test.o: kernel/elf_loader.c include/elf_loader.h include/page_t
 build/vfs-test.o: kernel/vfs.c include/vfs.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/fat32-test.o: kernel/fat32.c include/fat32.h include/vfs.h | build
+build/fat32-test.o: kernel/fat32.c include/fat32.h include/vfs.h include/block_dev.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/iso9660-test.o: kernel/iso9660.c include/iso9660.h include/vfs.h | build

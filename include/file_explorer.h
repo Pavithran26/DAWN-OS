@@ -37,6 +37,8 @@ bool explorer_search(const char *root_path, const char *query, struct explorer_l
 bool explorer_copy_file(const char *src_path, const char *dst_path);
 bool explorer_move_file(const char *src_path, const char *dst_path);
 bool explorer_delete_file(const char *path);
+bool explorer_create_directory(const char *path);
+bool explorer_create_file(const char *path);
 
 #ifdef DAWN_KERNEL_TEST
 bool explorer_self_test(void);

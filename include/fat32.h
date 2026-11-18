@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "vfs.h"
+#include "block_dev.h"
 
 #define FAT32_ATTR_READ_ONLY 0x01U
 #define FAT32_ATTR_HIDDEN    0x02U
@@ -61,6 +62,8 @@ struct fat32_dirent {
 } __attribute__((packed));
 
 struct vfs_node *fat32_mount_image(void *image_data, size_t image_size);
+bool fat32_mount(struct block_device *bdev, struct vfs_node **out_root);
+int fat32_truncate(struct vfs_node *node, uint64_t new_size);
 
 #ifdef DAWN_KERNEL_TEST
 bool fat32_self_test(void);

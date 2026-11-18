@@ -5,6 +5,7 @@
 #include "syscall.h"
 #include "page_table.h"
 #include "process.h"
+#include "vfs.h"
 
 #define SERIAL_COM1 0x3f8U
 #define SERIAL_POLL_LIMIT 100000U
@@ -59,6 +60,24 @@ static int64_t syscall_write(uint64_t descriptor,uint64_t user_buffer,
     if (active_pid!=0ULL && fd_entry.type==DAWN_FD_TYPE_NULL)
         return (int64_t)count;
 
+    if (active_pid!=0ULL && fd_entry.type==DAWN_FD_TYPE_VFS && fd_entry.node!=NULL) {
+        struct vfs_node *vnode = (struct vfs_node *)fd_entry.node;
+        while (written < count) {
+            const uint64_t remaining = count - written;
+            const size_t chunk = (remaining > (uint64_t)sizeof(temporary))
+                                   ? sizeof(temporary) : (size_t)remaining;
+            if (!vm_copy_from_user(temporary, user_buffer + written, chunk))
+                return written != 0ULL ? (int64_t)written : -(int64_t)DAWN_ERRNO_EFAULT;
+            int64_t res = vfs_write(vnode, fd_entry.offset + written, chunk, temporary);
+            if (res <= 0) break;
+            written += (uint64_t)res;
+            if ((size_t)res < chunk) break;
+        }
+        fd_entry.offset += written;
+        process_fd_set(active_pid, (int)descriptor, &fd_entry);
+        return (int64_t)written;
+    }
+
     while (written<count) {
         const uint64_t remaining=count-written;
         const size_t chunk=(remaining>(uint64_t)sizeof(temporary))
@@ -104,6 +123,24 @@ static int64_t syscall_read(uint64_t descriptor,uint64_t user_buffer,
 
     if (active_pid!=0ULL && fd_entry.type==DAWN_FD_TYPE_NULL)
         return 0;
+
+    if (active_pid!=0ULL && fd_entry.type==DAWN_FD_TYPE_VFS && fd_entry.node!=NULL) {
+        struct vfs_node *vnode = (struct vfs_node *)fd_entry.node;
+        while (read_bytes < count) {
+            const uint64_t remaining = count - read_bytes;
+            const size_t chunk = (remaining > (uint64_t)sizeof(temporary))
+                                   ? sizeof(temporary) : (size_t)remaining;
+            int64_t res = vfs_read(vnode, fd_entry.offset + read_bytes, chunk, temporary);
+            if (res <= 0) break;
+            if (!vm_copy_to_user(user_buffer + read_bytes, temporary, (size_t)res))
+                return read_bytes != 0ULL ? (int64_t)read_bytes : -(int64_t)DAWN_ERRNO_EFAULT;
+            read_bytes += (uint64_t)res;
+            if ((size_t)res < chunk) break;
+        }
+        fd_entry.offset += read_bytes;
+        process_fd_set(active_pid, (int)descriptor, &fd_entry);
+        return (int64_t)read_bytes;
+    }
 
     while (read_bytes<count) {
         if ((inb((uint16_t)(SERIAL_COM1+5U))&0x01U)==0U) {

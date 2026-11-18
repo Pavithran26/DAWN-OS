@@ -146,6 +146,18 @@ bool explorer_delete_file(const char *path) {
     if (path==NULL || !vfs_resolve_path(path,&node) || node==NULL || node->type!=VFS_TYPE_FILE) return false;
     return vfs_unlink(path)==0;
 }
+
+bool explorer_create_directory(const char *path) {
+    if (path == NULL) return false;
+    struct vfs_node *node = NULL;
+    return vfs_mkdir(path, 0755, &node) == 0;
+}
+
+bool explorer_create_file(const char *path) {
+    if (path == NULL) return false;
+    struct vfs_node *node = NULL;
+    return vfs_create(path, VFS_FLAG_READ | VFS_FLAG_WRITE, &node) == 0;
+}
 #ifdef DAWN_KERNEL_TEST
 bool explorer_self_test(void) {
     struct explorer_listing listing = {0};
@@ -175,6 +187,13 @@ bool explorer_self_test(void) {
     /* Clean up */
     explorer_delete_file("/tmp/explorer_test.txt");
     explorer_delete_file("/tmp/copied.txt");
+
+    /* Directory and file creation via explorer backend */
+    if (!explorer_create_directory("/tmp/exp_subdir")) return false;
+    if (!explorer_create_file("/tmp/exp_subdir/test.dat")) return false;
+    explorer_delete_file("/tmp/exp_subdir/test.dat");
+    vfs_unlink("/tmp/exp_subdir");
+
     return true;
 }
 #endif

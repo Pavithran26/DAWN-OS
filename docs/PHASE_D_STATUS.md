@@ -31,24 +31,35 @@ Phase D implements the complete Virtual Filesystem (VFS) layer, filesystem drive
 
 ### FAT32 Read/Write Driver (`include/fat32.h`, `kernel/fat32.c`)
 - BIOS Parameter Block (BPB) and Extended Boot Record (EBR) parsing:
-  - Validates bytes per sector (512-4096), sectors per cluster (power of two), reserved sector count, FAT count, and `0xAA55` boot signature.
+  - Validates bytes per sector (512-4096), sectors per cluster (power of two), reserved sector count, FAT count (1-4), and `0xAA55` boot signature.
   - Calculates FAT region offsets, data region offsets, root cluster (`root_cluster`), and total cluster count.
-- Cluster chain traversal and FAT entry management:
-  - Cluster-to-sector translation (`fat32_cluster_to_sector`).
-  - Next-cluster lookup (`fat32_get_next_cluster`) reading 32-bit FAT entries with EOF markers (`0x0FFFFFF8`..`0x0FFFFFFF`).
-  - Cluster allocation (`fat32_alloc_cluster`) scanning FAT table for free clusters (`0x00000000`) and linking cluster chains.
-  - Cluster clearing and free cluster management (`fat32_free_cluster_chain`).
+- Cluster chain traversal, allocation, and FAT entry management:
+  - 32-bit FAT entry reading and decoding (`fat32_get_fat_entry`).
+  - Synchronized FAT mirroring (`fat32_set_fat_entry`) across all active FAT tables (`table_count`), preserving upper 4 reserved bits.
+  - Free cluster discovery and allocation (`fat32_alloc_free_cluster`) scanning cluster chain for `0x00000000`, setting EOC marker, and zeroing cluster contents.
+  - Safe cluster chain extension (`fat32_extend_chain`) with allocation failure rollback.
+  - Cluster chain freeing (`fat32_free_chain`) clearing linked clusters across all mirrored FATs.
 - 8.3 short filename encoding/decoding and normalization:
   - Reads directory entries, filters deleted (`0xE5`) and unused entries, skips volume labels and LFN entries.
-  - Formats name and extension into canonical filenames (e.g., `README.TXT`).
-- Directory traversal and lookup (`fat32_finddir`, `fat32_readdir`).
-- File I/O:
-  - Sequential and offset cluster reading (`fat32_read_file`).
-  - Cluster-aligned file writing and dynamic cluster allocation (`fat32_write_file`).
-  - Directory entry updates (file size, timestamp, starting cluster).
-- File creation (`fat32_create_file`).
-- VFS integration (`fat32_mount` creating a VFS directory node backed by FAT32 ops).
-- Integrated self-test (`fat32_self_test`) using a synthetic RAM block device with a valid formatted FAT32 filesystem, testing mount, file creation, multicluster write, read-back verification, and directory enumeration.
+  - Converts canonical filenames to 11-byte FAT format (`fat32_to_short_name`) with uppercase normalization and character validation.
+- Directory traversal, creation, and lookup:
+  - Directory enumeration (`fat32_readdir`) and lookup (`fat32_finddir`).
+  - Free directory entry slot discovery and dynamic directory cluster chain extension (`fat32_find_free_dirent`).
+  - Directory creation (`fat32_mkdir`) initializing `.` and `..` parent cluster references.
+- File I/O and Lifecycle:
+  - Sequential and offset cluster reading (`fat32_read`).
+  - Dynamic cluster-allocated writing (`fat32_write`) handling multi-cluster spans and cluster chain growth.
+  - Directory entry metadata updates (`fat32_update_dirent_meta`) synchronizing file size and starting cluster.
+  - File truncation (`fat32_truncate`) safely deallocating trailing clusters in FAT tables.
+  - File and empty directory deletion (`fat32_unlink`) marking dirent `0xE5` and freeing cluster chains.
+- VFS and Block Device Integration:
+  - Block device mount helper `fat32_mount(bdev, &out_root)` and in-memory image mount `fat32_mount_image(image, size)`.
+  - Process file descriptor integration: userspace `read` and `write` syscalls dispatch directly to underlying VFS file nodes with offset management.
+- Comprehensive Self-Test (`fat32_self_test`):
+  - Validates synthetic 64KB FAT32 volume mounting with mirrored FAT tables.
+  - Exercises reading existing file, creating new file, multi-cluster writing, read-back verification, and FAT mirror consistency.
+  - Tests nested subdirectory creation (`DOCS`), creating and writing nested file (`SUB.TXT`), directory enumeration, non-empty directory unlink rejection, sub-file deletion, directory deletion, and cluster free verification.
+  - Enforces malformed BPB rejection matrix (null image, undersized image, bad signature, invalid sector size, zero sectors per cluster, invalid root cluster).
 
 ### ISO9660 (CD-ROM / Optical Media) Read-Only Driver (`include/iso9660.h`, `kernel/iso9660.c`)
 - ISO9660 Primary Volume Descriptor (PVD) parsing:
