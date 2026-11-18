@@ -51,8 +51,9 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - Graphical Task Manager with real-time CPU utilization graph, physical RAM gauge, process list with state/memory/CPU metrics, and process termination.
 - Network subsystem with loopback (`lo`) and Ethernet (`eth0`) devices, ARP, IPv4, ICMP Ping, UDP, TCP state machine, and BSD-style Socket API.
 - Audio subsystem with PCI multimedia discovery, multi-stream PCM software mixer with 16-bit signed clipping, master volume/mute controls, and square wave tone synthesis.
+- Central Settings framework with persistent configuration (`/boot/system.cfg`), dynamic hardware reconfiguration, and graphical tabbed Settings application.
 
-Settings application, installer, security, runtime, services, power, and accessibility are scheduled in subsequent phases. Phases C through K (process, syscalls, VFS, storage, hardware, graphics desktop, terminal, shell, task manager, networking, and audio) are implemented.
+Installer, security, runtime, services, power, and accessibility are scheduled in subsequent phases. Phases C through L (process, syscalls, VFS, storage, hardware, graphics desktop, terminal, shell, task manager, networking, audio, and settings) are implemented.
 
 **Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 
