@@ -40,6 +40,7 @@
 #include "net.h"
 #include "audio.h"
 #include "settings.h"
+#include "installer.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -854,6 +855,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: settings subsystem, persistent configuration and UI controls ready\n");
 
+    if (!installer_initialize()) {
+        serial_write("DAWN-OS: FAIL: installer and recovery initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: installer workflow, partition deployment and rescue shell ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1158,6 +1168,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: settings serialization, defaults, clamping and window navigation\n");
+
+    /* Phase M: Installer, Recovery and Distribution */
+    if (!installer_self_test()) {
+        serial_write("DAWN-TEST: FAIL: installer workflow, partition deployment and rescue shell\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: installer disk verification, partition formatting, file copy and rescue shell\n");
 #endif
 
     if (framebuffer_response_valid()) {
