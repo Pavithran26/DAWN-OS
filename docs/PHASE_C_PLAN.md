@@ -206,3 +206,11 @@ The primitive is deliberately not invoked by boot. It uses the currently active 
 - Process records now own every user data frame acquired by the loader. Partial failures roll back to a page-allocation checkpoint; process reaping unmaps and frees owned data frames before releasing private page tables and the privilege stack.
 - The kernel test image now includes a small static ELF64 program that executes `SYS_EXIT`. A scheduler self-test configures its first CPL3 IRETQ frame, launches it through the normal interrupt-return path, and expects the exit syscall to return to the bootstrap kernel context.
 - The launch test is test-only and is not invoked by normal boot. It is wired but has not been built or executed; no successful CPL3 runtime launch is claimed until QEMU evidence exists.
+
+
+## CPL3 timer-preemption runtime test (2026-11-18)
+
+- Extended the test ELF with a bounded user-mode spin before its write/exit syscalls.
+- The scheduler launch test starts the calibrated periodic LAPIC timer and schedules a kernel peer behind the user process. The peer must execute only after the timer preempts the CPL3 user frame.
+- The test asserts at least one timer-driven context switch, peer execution, successful user SYS_EXIT, correct thread accounting, process exit and reaping. The timer is stopped on success and cleanup paths.
+- This is a runtime test definition only; compilation and BIOS/UEFI QEMU execution are still required to establish that the interrupt-return path works on the target emulator.

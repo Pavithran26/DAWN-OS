@@ -256,10 +256,6 @@ bool elf64_validate_image(const void *image,size_t image_size,
                 ((current.flags&~(uint32_t)ELF_FLAG_MASK)!=0U ||
                  (current.flags&ELF_FLAG_EXECUTE)!=0U))
                 return false;
-                if (current.type==ELF_PROGRAM_GNU_STACK &&
-                ((current.flags&~(uint32_t)ELF_FLAG_MASK)!=0U ||
-                 (current.flags&ELF_FLAG_EXECUTE)!=0U))
-                return false;
             if (current.type!=0U && current.type!=ELF_PROGRAM_NOTE &&
                 current.type!=ELF_PROGRAM_PHDR &&
                 current.type!=ELF_PROGRAM_GNU_STACK &&
@@ -371,10 +367,12 @@ static void test_make_image(uint8_t *image,size_t image_size,
 bool elf64_build_test_exit_image(void *buffer,size_t capacity,
                                     size_t *image_size) {
     static const uint8_t exit_code[]={
-        /* write(1, 0x400032, 13); require the full byte count; exit(0). */
+        /* Bounded CPL3 spin gives the LAPIC timer time to preempt user mode. */
+        0xb9U,0x00U,0x00U,0x00U,0x10U,
+        0xffU,0xc9U,0x75U,0xfcU,
         0x48U,0xc7U,0xc0U,0x01U,0x00U,0x00U,0x00U,
         0x48U,0xc7U,0xc7U,0x01U,0x00U,0x00U,0x00U,
-        0x48U,0xc7U,0xc6U,0x32U,0x00U,0x40U,0x00U,
+        0x48U,0xc7U,0xc6U,0x3bU,0x00U,0x40U,0x00U,
         0x48U,0xc7U,0xc2U,0x0dU,0x00U,0x00U,0x00U,
         0xcdU,0x80U,
         0x48U,0x83U,0xf8U,0x0dU,
@@ -404,7 +402,7 @@ bool elf64_build_test_exit_image(void *buffer,size_t capacity,
 
 static bool elf64_process_load_self_test(void) {
     uint8_t image[8192]={0U},bad_image[8192]={0U};
-    uint8_t observed_code[64]={0U},observed_bss[32];
+    uint8_t observed_code[96]={0U},observed_bss[32];
     struct elf64_loaded_process loaded={0};
     struct process_info info={0};
     struct vm_address_space space={0};
@@ -414,9 +412,11 @@ static bool elf64_process_load_self_test(void) {
     size_t image_size=0U;
     bool created=false,cleaned=false,result=false;
     static const uint8_t expected_code[]={
+        0xb9U,0x00U,0x00U,0x00U,0x10U,
+        0xffU,0xc9U,0x75U,0xfcU,
         0x48U,0xc7U,0xc0U,0x01U,0x00U,0x00U,0x00U,
         0x48U,0xc7U,0xc7U,0x01U,0x00U,0x00U,0x00U,
-        0x48U,0xc7U,0xc6U,0x32U,0x00U,0x40U,0x00U,
+        0x48U,0xc7U,0xc6U,0x3bU,0x00U,0x40U,0x00U,
         0x48U,0xc7U,0xc2U,0x0dU,0x00U,0x00U,0x00U,
         0xcdU,0x80U,
         0x48U,0x83U,0xf8U,0x0dU,

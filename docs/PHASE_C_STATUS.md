@@ -108,3 +108,11 @@
 - These changes are source-level implementation only. The kernel and test image have not been compiled in this increment.
 - The new CPL3 test program and `SYS_EXIT` path are wired into the kernel test target, but no QEMU run has confirmed the IRETQ transition or the return to the bootstrap frame.
 - Do not treat a wired test, ELF validation, or successful source push as evidence that DAWN-OS has booted a real userspace process.
+
+
+## CPL3 timer-preemption coverage (2026-11-18)
+
+- The test ELF now performs a bounded user-mode spin before issuing SYS_WRITE and SYS_EXIT.
+- scheduler_elf_launch_self_test runs with the calibrated periodic LAPIC timer and a READY kernel peer. It requires the timer to preempt the user thread, the peer to execute, and the user thread to resume and exit through the syscall path.
+- Assertions cover timer-preemption counters, peer progress, user-exit accounting, process exit and reaping. Timer cleanup is included on failure paths.
+- This remains uncompiled/unexecuted source until the BIOS and OVMF test matrix is run.

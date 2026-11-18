@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "interrupts.h"
+#include "apic.h"
 #include "process.h"
 #include "gdt.h"
 #include "page_table.h"
@@ -487,6 +488,7 @@ static volatile uint64_t preemption_peer_observed;
 static volatile uint64_t preemption_wait_expired;
 static volatile uint64_t preemption_stress_started_mask;
 static volatile uint64_t preemption_stress_timeout_mask;
+static volatile uint64_t user_timer_peer_ran;
 
 static void scheduler_test_worker(void *argument) {
     const uintptr_t worker_index=(uintptr_t)argument;
@@ -498,6 +500,22 @@ static void scheduler_test_worker(void *argument) {
 }
 static void scheduler_test_noop_worker(void *argument) {
     (void)argument;
+}
+static void scheduler_user_timer_peer(void *argument) {
+    (void)argument;
+    user_timer_peer_ran=1ULL;
+}
+static void scheduler_test_discard_ready_thread(uint64_t thread_id) {
+    if (thread_id==0ULL) return;
+    for (size_t index=0U;index<KERNEL_THREAD_MAX;index++) {
+        struct kernel_thread *thread=&thread_pool[index];
+        if (thread->id==thread_id && thread->state==THREAD_READY) {
+            thread->state=THREAD_DEAD;
+            if (counters.active_threads>0ULL) --counters.active_threads;
+            increment_saturated(&counters.threads_exited);
+            return;
+        }
+    }
 }
 static void scheduler_preemption_waiter(void *argument) {
     (void)argument;
@@ -722,67 +740,95 @@ cleanup:
 bool scheduler_elf_launch_self_test(void) {
     uint8_t image[8192]={0U};
     size_t image_size=0U;
-    uint64_t process_id=0ULL,thread_id=0ULL;
+    uint64_t process_id=0ULL,user_thread_id=0ULL,peer_thread_id=0ULL;
     struct elf64_loaded_process loaded={0};
     struct process_info process={0};
     struct scheduler_stats before={0},after={0};
-    bool thread_configured=false,run_result=false;
+    bool process_created=false,user_thread_created=false;
+    bool peer_thread_created=false,timer_started=false;
+    bool user_thread_configured=false,run_result=false;
+
     if (!initialized || scheduler_running ||
         current_thread!=&bootstrap_thread || process_active_id()!=0ULL)
         return false;
+    user_timer_peer_ran=0ULL;
     if (!elf64_build_test_exit_image(image,sizeof(image),&image_size) ||
         !process_create(&process_id)) return false;
+    process_created=true;
     if (!elf64_load_process(process_id,image,image_size,&loaded) ||
-        loaded.entry==0ULL || loaded.user_stack_top==0ULL) {
-        (void)process_mark_exited(process_id);
-        (void)process_reap(process_id);
-        return false;
+        loaded.entry==0ULL || loaded.user_stack_top==0ULL)
+        goto cleanup;
+
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,
+                              &user_thread_id))
+        goto cleanup;
+    user_thread_created=true;
+    if (!kernel_thread_configure_user(user_thread_id,process_id,
+            loaded.entry,loaded.user_stack_top))
+        goto cleanup;
+    user_thread_configured=true;
+
+    /* This kernel peer can run only after a timer interrupt preempts CPL3. */
+    if (!kernel_thread_create(scheduler_user_timer_peer,NULL,
+                              &peer_thread_id))
+        goto cleanup;
+    peer_thread_created=true;
+    if (!apic_local_timer_start_calibrated_periodic()) goto cleanup;
+    timer_started=true;
+    {
+        const uint64_t flags=read_rflags();
+        disable_interrupts();
+        ready_cursor=0ULL;
+        restore_interrupt_flag(flags);
     }
-    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&thread_id)) {
-        (void)process_mark_exited(process_id);
-        (void)process_reap(process_id);
-        return false;
-    }
-    if (!kernel_thread_configure_user(thread_id,process_id,
-            loaded.entry,loaded.user_stack_top)) {
-        for (size_t index=0U;index<KERNEL_THREAD_MAX;index++) {
-            if (thread_pool[index].id==thread_id &&
-                thread_pool[index].state==THREAD_READY) {
-                thread_pool[index].state=THREAD_DEAD;
-                if (counters.active_threads>0ULL) --counters.active_threads;
-                increment_saturated(&counters.threads_exited);
-            }
-        }
-        (void)process_mark_exited(process_id);
-        (void)process_reap(process_id);
-        return false;
-    }
-    thread_configured=true;
 
     scheduler_get_stats(&before);
     run_result=scheduler_run_until_idle();
+    apic_local_timer_stop();
+    timer_started=false;
     if (!run_result || process_active_id()!=0ULL ||
-        !process_get_info(process_id,&process)) {
-        if (process_active_id()==0ULL) {
-            (void)process_mark_exited(process_id);
-            (void)process_reap(process_id);
-        }
-        return false;
-    }
+        user_timer_peer_ran!=1ULL ||
+        !process_get_info(process_id,&process))
+        goto cleanup;
+
     scheduler_get_stats(&after);
     {
         const bool exited_by_syscall=
             after.user_exit_syscalls==before.user_exit_syscalls+1ULL;
         const bool scheduler_accounting=
-            after.threads_exited==before.threads_exited+1ULL &&
-            before.active_threads==after.active_threads+1ULL;
+            after.threads_exited==before.threads_exited+2ULL &&
+            before.active_threads==after.active_threads+2ULL;
+        const bool timer_preempted=
+            after.timer_preemptions>before.timer_preemptions;
         const bool process_exited=process.state==PROCESS_STATE_EXITED;
-        const bool reaped=process_exited && process_reap(process_id);
-        const bool stale_rejected=
-            reaped && !process_get_info(process_id,&process);
-        return thread_configured && exited_by_syscall &&
-               scheduler_accounting && process_exited && stale_rejected;
+        if (!exited_by_syscall || !scheduler_accounting ||
+            !timer_preempted || !process_exited)
+            goto cleanup;
     }
+    {
+        const bool reaped=process_reap(process_id);
+        return reaped && !process_get_info(process_id,&process);
+    }
+
+cleanup:
+    if (timer_started) apic_local_timer_stop();
+    if (process_active_id()==0ULL) {
+        if (user_thread_created && !user_thread_configured)
+            scheduler_test_discard_ready_thread(user_thread_id);
+        if (peer_thread_created)
+            scheduler_test_discard_ready_thread(peer_thread_id);
+        if (user_thread_created && user_thread_configured &&
+            !run_result)
+            scheduler_test_discard_ready_thread(user_thread_id);
+        if (process_created) {
+            struct process_info current={0};
+            if (process_get_info(process_id,&current) &&
+                current.state!=PROCESS_STATE_EXITED)
+                (void)process_mark_exited(process_id);
+            (void)process_reap(process_id);
+        }
+    }
+    return false;
 }
 
 bool scheduler_preemption_self_test(void) {
