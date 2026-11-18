@@ -124,3 +124,11 @@
 - The scheduler preserves the interrupted user frame, marks the process-bound thread READY, and dispatches another READY task. User-yield syscalls have separate accounting from timer preemptions and kernel-thread yields.
 - The synthetic CPL3 dispatch test checks process identity. The test ELF checks that GETPID is non-zero, requires a zero YIELD result, then writes its success marker and exits. Its kernel peer yields once so it remains available for timer-driven preemption as well.
 - This is source-level coverage only. The new syscall path, user-mode cooperative yield, timer interaction, and BIOS/UEFI boot matrix have not been compiled or executed in this increment.
+
+## User process exit status (2026-11-18)
+
+- The userspace ABI defines the first argument in RDI as the `SYS_EXIT` status.
+- The CPL3 scheduler exit path records that signed 64-bit status against the active process before marking its kernel thread dead.
+- Process metadata exposes the recorded status after the scheduler switches away and marks the process EXITED; the status remains available until the process is reaped.
+- This is exit-status recording only. A blocking `WAIT` syscall, parent/child relationships, and wait-queue wakeups are not implemented by this increment.
+- Source implementation only; no compilation, emulator, BIOS/UEFI, or CI tests were run.

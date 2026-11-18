@@ -420,10 +420,13 @@ struct interrupt_frame *scheduler_user_exit(
         cpu_halt_forever();
 
     self->saved_frame=frame;
-    self->state=THREAD_DEAD;
     if (frame->vector==(uint64_t)DAWN_SYSCALL_VECTOR &&
-        frame->rax==(uint64_t)DAWN_SYS_EXIT)
+        frame->rax==(uint64_t)DAWN_SYS_EXIT) {
+        if (!process_set_exit_status(self->process_id,(int64_t)frame->rdi))
+            cpu_halt_forever();
         increment_saturated(&counters.user_exit_syscalls);
+    }
+    self->state=THREAD_DEAD;
     increment_saturated(&counters.threads_exited);
     if (counters.active_threads>0ULL) --counters.active_threads;
     return scheduler_handle_interrupt(frame,false);

@@ -20,6 +20,7 @@ struct process_info {
     enum process_state state;
     uint64_t address_space_root;
     uint64_t kernel_stack_top;
+    int64_t exit_status;
 };
 
 /* Process metadata, isolated mappings, user-frame ownership, and lifecycle. */
@@ -27,6 +28,8 @@ bool process_manager_initialize(void);
 bool process_create(uint64_t *process_id);
 bool process_mark_ready(uint64_t process_id);
 bool process_mark_exited(uint64_t process_id);
+/* Record the status supplied by the active process's SYS_EXIT call. */
+bool process_set_exit_status(uint64_t process_id,int64_t exit_status);
 /* Activation switches CR3 and TSS.RSP0; caller must be CPL0 with IF clear. */
 bool process_activate(uint64_t process_id);
 bool process_switch_to(uint64_t process_id);

@@ -20,6 +20,7 @@ struct process_record {
     size_t user_page_count;
     uint64_t id;
     uint64_t kernel_stack_top;
+    int64_t exit_status;
     enum process_state state;
 };
 
@@ -118,6 +119,22 @@ bool process_mark_ready(uint64_t process_id) {
         return false;
     }
     record->state=PROCESS_STATE_READY;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_set_exit_status(uint64_t process_id,int64_t exit_status) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->state!=PROCESS_STATE_READY ||
+        active_process_identifier!=process_id) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    record->exit_status=exit_status;
     restore_interrupt_flag(flags);
     return true;
 }
@@ -253,6 +270,7 @@ bool process_get_info(uint64_t process_id,struct process_info *info) {
     info->state=record->state;
     info->address_space_root=record->address_space.root_physical;
     info->kernel_stack_top=record->kernel_stack_top;
+    info->exit_status=record->exit_status;
     restore_interrupt_flag(flags);
     return true;
 }
