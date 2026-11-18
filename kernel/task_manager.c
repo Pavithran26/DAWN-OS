@@ -188,7 +188,6 @@ void task_manager_render(struct task_manager *tm) {
         if (bar_w > 486) bar_w = 486;
         gfx_draw_rect_filled(&surf, 16, 250, bar_w, 28, GFX_COLOR_EMERALD_PRIMARY);
 
-        char mem_str[64];
         char num1[16], num2[16];
         u64_to_str(used_ram / (1024 * 1024), num1);
         u64_to_str(tm->total_ram_bytes / (1024 * 1024), num2);

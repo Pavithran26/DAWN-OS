@@ -7,6 +7,7 @@
 
 static struct install_status current_status = {0};
 static struct install_config current_config = {0};
+static char installed_root_slice[BLOCK_DEV_NAME_MAX] = {0};
 static char install_log_buffer[2048] = {0};
 static size_t install_log_len = 0;
 static bool installer_initialized = false;
@@ -124,7 +125,7 @@ bool installer_step(void) {
             }
 
             /* Create Root System partition */
-            (void)storage_create_partition(disk->name, sys_lba_count, MBR_TYPE_FAT32_LBA, slice_name);
+            (void)storage_create_partition(disk->name, sys_lba_count, MBR_TYPE_FAT32_LBA, installed_root_slice);
 
             current_status.current_stage = INSTALL_STAGE_FORMATTING;
             current_status.progress_percent = 35;
@@ -135,8 +136,9 @@ bool installer_step(void) {
         case INSTALL_STAGE_FORMATTING: {
             installer_log("Formatting partitions with FAT32 filesystem");
             const struct storage_disk_desc *disk = storage_get_disk_info(current_config.target_disk_id);
-            if (disk != NULL && disk->partition_count > 0) {
-                const char *slice = disk->partitions[0].slice_name;
+            const char *slice = (installed_root_slice[0] != '\0') ? installed_root_slice :
+                                ((disk != NULL && disk->partition_count > 0) ? disk->partitions[0].slice_name : NULL);
+            if (slice != NULL) {
                 (void)storage_format_partition(slice, "fat32", "DAWN-ROOT");
             }
 
