@@ -13,6 +13,18 @@ bool physical_allocator_allocate(uint64_t *physical_address);
 bool physical_allocator_free(uint64_t physical_address);
 bool physical_allocator_is_allocated(uint64_t physical_address);
 void physical_allocator_get_stats(struct physical_allocator_stats *stats);
+
+static inline uint64_t physical_memory_total_bytes(void) {
+    struct physical_allocator_stats stats = {0};
+    physical_allocator_get_stats(&stats);
+    return stats.managed_frames * PHYSICAL_ALLOCATOR_PAGE_SIZE;
+}
+
+static inline uint64_t physical_memory_free_bytes(void) {
+    struct physical_allocator_stats stats = {0};
+    physical_allocator_get_stats(&stats);
+    return stats.free_frames * PHYSICAL_ALLOCATOR_PAGE_SIZE;
+}
 #ifdef DAWN_KERNEL_TEST
 bool physical_allocator_self_test(void);
 #endif

@@ -115,7 +115,7 @@ build/xhci.o: kernel/xhci.c include/xhci.h include/device.h include/pci.h | buil
 build/usb_hid.o: kernel/usb_hid.c include/usb_hid.h include/ps2.h include/device.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/input.o: kernel/input.c include/input.h include/ps2.h include/usb_hid.h | build
+build/input.o: kernel/input.c include/input.h include/ps2.h include/usb_hid.h include/xhci.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/gfx.o: kernel/gfx.c include/gfx.h include/limine_requests.h | build
@@ -206,8 +206,10 @@ build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h in
 
 build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
-build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h | build
-	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h arch/x86_64/user_mode.S | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c kernel/user_mode.c -o build/user-mode-test-c.o
+	$(CC) $(ASFLAGS) -c arch/x86_64/user_mode.S -o build/user-mode-test-asm.o
+	$(LD) -r -o $@ build/user-mode-test-c.o build/user-mode-test-asm.o
 
 build/elf-loader-test.o: kernel/elf_loader.c include/elf_loader.h include/page_table.h include/physical_memory.h include/process.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
@@ -257,7 +259,7 @@ build/xhci-test.o: kernel/xhci.c include/xhci.h include/device.h include/pci.h |
 build/usb-hid-test.o: kernel/usb_hid.c include/usb_hid.h include/ps2.h include/device.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/input-test.o: kernel/input.c include/input.h include/ps2.h include/usb_hid.h | build
+build/input-test.o: kernel/input.c include/input.h include/ps2.h include/usb_hid.h include/xhci.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/gfx-test.o: kernel/gfx.c include/gfx.h include/limine_requests.h | build
@@ -308,8 +310,8 @@ build/localization-test.o: kernel/localization.c include/localization.h | build
 build/advanced-test.o: kernel/advanced.c include/advanced.h include/vfs.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/user-mode.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o
+build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o linker.ld
+	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o
 
 check: kernel
 	@set -eu; \

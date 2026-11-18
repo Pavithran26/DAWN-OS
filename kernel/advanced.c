@@ -237,7 +237,7 @@ bool munmap_file(void *addr, size_t length) {
             /* If shared & writable, write back changes */
             if ((mmap_table[i].flags & MAP_SHARED) && (mmap_table[i].prot & PROT_WRITE)) {
                 size_t write_len = (length < mmap_table[i].length) ? length : mmap_table[i].length;
-                (void)vfs_write(mmap_table[i].file_node, mmap_table[i].file_offset, addr, write_len);
+                (void)vfs_write(mmap_table[i].file_node, mmap_table[i].file_offset, write_len, addr);
             }
             mmap_table[i].active = false;
             return true;

@@ -56,6 +56,7 @@ bool gfx_initialize(void);
 struct gfx_surface *gfx_get_framebuffer(void);
 struct gfx_surface *gfx_get_backbuffer(void);
 void gfx_flip(void);
+static inline void gfx_swap_buffers(void) { gfx_flip(); }
 
 /* Primitives */
 void gfx_put_pixel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t color);

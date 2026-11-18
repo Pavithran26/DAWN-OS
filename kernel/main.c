@@ -239,14 +239,6 @@ static uint64_t memory_map_highest_usable_end(
     return highest;
 }
 
-static bool framebuffer_response_valid(void) {
-    struct limine_framebuffer_response *response =
-        limine_framebuffer_request.response;
-
-    return response != NULL && response->framebuffer_count > 0ULL &&
-           response->framebuffers != NULL && response->framebuffers[0] != NULL;
-}
-
 static enum memory_map_error validate_memory_map(
     const struct limine_memmap_response *response,
     struct memory_map_summary *summary

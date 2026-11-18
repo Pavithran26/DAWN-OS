@@ -201,7 +201,7 @@ void kernel_panic(const char *reason, const struct cpu_crash_context *ctx) {
         }
 
         gfx_draw_string(fb, 32, y, "Please restart your computer. Diagnostic telemetry was recorded to serial COM1.", 0xFF80CBC4U);
-        gfx_swap_buffers();
+        gfx_flip();
     }
 
     for (;;) {

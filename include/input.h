@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "ps2.h"
 #include "usb_hid.h"
+#include "xhci.h"
 
 #define INPUT_QUEUE_CAPACITY 64U
 

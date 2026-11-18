@@ -16,6 +16,8 @@
 #ifndef DAWN_LIMINE_REQUESTS_H
 #define DAWN_LIMINE_REQUESTS_H
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define LIMINE_REQUESTS_START_MARKER \
@@ -65,6 +67,16 @@ struct limine_framebuffer_request {
     uint64_t revision;
     struct limine_framebuffer_response *response;
 };
+
+extern volatile struct limine_framebuffer_request limine_framebuffer_request;
+
+static inline bool framebuffer_response_valid(void) {
+    struct limine_framebuffer_response *response =
+        limine_framebuffer_request.response;
+
+    return response != NULL && response->framebuffer_count > 0ULL &&
+           response->framebuffers != NULL && response->framebuffers[0] != NULL;
+}
 
 struct limine_memmap_entry {
     uint64_t base;
