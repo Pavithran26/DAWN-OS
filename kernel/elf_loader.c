@@ -101,7 +101,6 @@ bool elf64_load_process(uint64_t process_id,const void *image,
     struct elf64_header header={0};
     struct elf64_image_info validated={0};
     struct process_info process={0};
-    struct vm_address_space space={0};
     size_t checkpoint=0U;
     uint64_t page_total=(uint64_t)DAWN_ELF64_STACK_PAGES;
     const uint64_t stack_floor=DAWN_ELF64_STACK_TOP-
@@ -148,7 +147,6 @@ bool elf64_load_process(uint64_t process_id,const void *image,
         return false;
     }
 
-    space.root_physical=process.address_space_root;
     for (uint16_t index=0U;index<header.program_header_count;index++) {
         struct elf64_program_header program={0};
         uint64_t end=0ULL,page_start=0ULL,page_end=0ULL;
@@ -258,40 +256,41 @@ bool elf64_setup_user_stack(uint64_t process_id,uint64_t *inout_stack_top,
         argv_ptrs[i]=sp;
     }
 
-    table_size=(1ULL+(uint64_t)effective_argc+1ULL+(uint64_t)envc+1ULL)*8ULL;
+    const uint64_t total_ptrs=(uint64_t)(3U+(uint32_t)effective_argc+(uint32_t)envc);
+    table_size=total_ptrs*8U;
     if (sp<stack_floor+ELF64_PAGE_SIZE+table_size) return false;
 
-    target_sp=(sp-table_size)&~0x0fULL;
+    target_sp=(sp-table_size)&~(uint64_t)0x0fU;
     sp=target_sp+table_size;
 
-    sp-=8ULL;
+    sp-=8U;
     {
         uint64_t null_val=0ULL;
-        if (!process_user_memory_write(process_id,sp,&null_val,8U)) return false;
+        if (!process_user_memory_write(process_id,sp,&null_val,sizeof(null_val))) return false;
     }
     for (int i=envc-1;i>=0;i--) {
-        sp-=8ULL;
-        if (!process_user_memory_write(process_id,sp,&envp_ptrs[i],8U)) return false;
+        sp-=8U;
+        if (!process_user_memory_write(process_id,sp,&envp_ptrs[i],sizeof(uint64_t))) return false;
     }
     if (out_rdx!=NULL) *out_rdx=(envc>0) ? sp : 0ULL;
 
-    sp-=8ULL;
+    sp-=8U;
     {
         uint64_t null_val=0ULL;
-        if (!process_user_memory_write(process_id,sp,&null_val,8U)) return false;
+        if (!process_user_memory_write(process_id,sp,&null_val,sizeof(null_val))) return false;
     }
     for (int i=effective_argc-1;i>=0;i--) {
-        sp-=8ULL;
-        if (!process_user_memory_write(process_id,sp,&argv_ptrs[i],8U)) return false;
+        sp-=8U;
+        if (!process_user_memory_write(process_id,sp,&argv_ptrs[i],sizeof(uint64_t))) return false;
     }
     if (out_rsi!=NULL) *out_rsi=(effective_argc>0) ? sp : 0ULL;
 
-    sp-=8ULL;
+    sp-=8U;
     {
-        uint64_t argc_val=(uint64_t)effective_argc;
-        if (!process_user_memory_write(process_id,sp,&argc_val,8U)) return false;
+        uint64_t argc_val=(uint64_t)(uint32_t)effective_argc;
+        if (!process_user_memory_write(process_id,sp,&argc_val,sizeof(argc_val))) return false;
     }
-    if (out_rdi!=NULL) *out_rdi=(uint64_t)effective_argc;
+    if (out_rdi!=NULL) *out_rdi=(uint64_t)(uint32_t)effective_argc;
 
     *inout_stack_top=sp;
     return true;
