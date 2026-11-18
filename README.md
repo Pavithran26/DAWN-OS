@@ -2,6 +2,18 @@
 
 DAWN-OS is an experimental, freestanding x86_64 operating-system project with a server-first direction. Its long-term goals are reliable boot and recovery, low request latency, high sustained concurrency, and efficient CPU and memory use. These are goals, not measured results.
 
+## Visual direction — concept mockups
+
+The following visuals illustrate the intended emerald-green, glass/neomorphic desktop direction. **They are design concepts, not screenshots of a running desktop.** The terminal, file explorer, task manager, and partition manager shown here are planned interface concepts; they are not evidence that those applications are implemented.
+
+<p align="center">
+  <img src="docs/images/dawn-desktop-concept.svg" alt="DAWN OS desktop workspace concept" width="100%"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/dawn-system-tools-concept.svg" alt="DAWN OS terminal, task manager, file explorer, and partition manager concepts" width="100%"/>
+</p>
+
 ## Current status
 
 The repository contains the first Phase A kernel scaffold:
