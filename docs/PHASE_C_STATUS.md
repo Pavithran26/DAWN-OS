@@ -188,3 +188,13 @@
 - SYS_WAIT now validates the complete aligned writable status slot in the calling process address space before either immediate collection or blocking. Invalid destinations return -EFAULT without blocking the parent.
 - If deferred child collection fails after the child exits (for example, because the child still has unreaped descendants), the waiting parent is resumed with -ECHILD and its wait registration is cleared instead of receiving a stale syscall number as a false PID.
 - Source-only correction. Runtime WAIT scheduling and pointer-fault behavior remain unverified until Phase T.
+
+## Phase D — VFS correctness hardening (2026-11-18)
+
+- Mount records retain the original mount-point node. Unmount clears that exact node rather than resolving the mount path through itself, which previously left the mounted filesystem attached.
+- Duplicate mounts are rejected; nested mounts must be detached before their parent; mount paths must be absolute, bounded, and non-root.
+- Path resolution rejects overlong paths and components instead of silently splitting a truncated component, and rejects trailing slashes on non-directories.
+- File create, directory create, and unlink share bounded parent/basename validation and reject empty, oversized, dot, and dot-dot basenames.
+- RAMFS refuses to unlink mounted or non-empty directories. Deleted node slots become tombstones and are not reused, preventing stale node pointers from aliasing newly allocated objects in this fixed-size implementation.
+- VFS read/write enforce node permissions and regular-file node types.
+- Source review only. No compilation, VFS self-tests, filesystem image tests, or runtime mount tests were run.

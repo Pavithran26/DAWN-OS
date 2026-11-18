@@ -71,6 +71,7 @@ struct vfs_node {
 struct vfs_mount {
     char path[VFS_MAX_PATH];
     struct vfs_node *root_node;
+    struct vfs_node *mount_node;
     const char *fs_name;
     bool active;
 };
