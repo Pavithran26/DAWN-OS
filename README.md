@@ -23,7 +23,7 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - IDT exception/interrupt handling, ACPI MADT discovery, xAPIC/IOAPIC setup, PIT routing, and LAPIC timer support.
 - A single-CPU scheduler with guarded kernel stacks, cooperative switching, timer preemption, process-bound contexts, and a controlled CPL3 ELF launch path.
 - A bounded userspace ABI with ABI version, serial `WRITE`, `EXIT`, `GETPID`, and `YIELD`; exit status is retained in process metadata.
-- Process parent identifiers and child metadata lookup. Parent records cannot be reaped while child records remain.
+- Process parent identifiers and child metadata lookup. Parent records cannot be reaped while child records remain; a CPL0 child-collection primitive can reap an exited child and publish its status into its parent's writable user memory.
 - Emerald-green liquid-glass desktop concepts in `docs/images/`; these are design references, not screenshots of a running desktop.
 
 The terminal, VFS/filesystem, file explorer, partition manager, storage and USB drivers, full desktop compositor, task manager, networking, installer, and recovery environment remain planned implementation work. Process creation is currently kernel-controlled; user-facing `EXEC` and blocking `WAIT` are not implemented.

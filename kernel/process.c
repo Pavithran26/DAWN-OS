@@ -310,6 +310,58 @@ bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
     return true;
 }
 
+bool process_collect_child(uint64_t parent_id,uint64_t child_id,
+                           uint64_t status_address) {
+    const uint64_t flags=read_rflags();
+    struct process_record *parent=NULL;
+    struct process_record *child=NULL;
+    int64_t exit_status=0;
+    if (!initialized || parent_id==0ULL || child_id==0ULL ||
+        parent_id==child_id || (read_cs()&3U)!=0U ||
+        (status_address!=0ULL && (status_address&7ULL)!=0ULL))
+        return false;
+    disable_interrupts();
+    parent=find_process(parent_id);
+    child=find_process(child_id);
+    if (parent==NULL || child==NULL || parent->state!=PROCESS_STATE_READY ||
+        child->parent_id!=parent_id || child->state!=PROCESS_STATE_EXITED ||
+        active_process_identifier==child_id) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    exit_status=child->exit_status;
+    if (status_address!=0ULL) {
+        uint64_t first_physical=0ULL,last_physical=0ULL;
+        uint32_t first_flags=0U,last_flags=0U;
+        if (!vm_address_space_translate(&parent->address_space,status_address,
+                &first_physical,&first_flags) ||
+            (first_flags&((uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE))!=
+                ((uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE) ||
+            !vm_address_space_translate(&parent->address_space,
+                status_address+sizeof(exit_status)-1ULL,
+                &last_physical,&last_flags) ||
+            (last_flags&((uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE))!=
+                ((uint32_t)VM_PAGE_USER|(uint32_t)VM_PAGE_WRITE)) {
+            restore_interrupt_flag(flags);
+            return false;
+        }
+    }
+    /* Reap before publishing status: a child with unreaped descendants
+     * cannot be collected by this bounded process manager. */
+    if (!process_reap(child_id)) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    if (status_address!=0ULL &&
+        !vm_address_space_write(&parent->address_space,status_address,
+                                &exit_status,sizeof(exit_status))) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    restore_interrupt_flag(flags);
+    return true;
+}
+
 bool process_user_page_checkpoint(uint64_t process_id,size_t *checkpoint) {
     const uint64_t flags=read_rflags();
     struct process_record *record=NULL;
@@ -368,7 +420,9 @@ bool process_user_memory_write(uint64_t process_id,uint64_t destination,
     if (!initialized || (read_cs()&3U)!=0U) return false;
     disable_interrupts();
     record=find_process(process_id);
-    if (record!=NULL && record->state==PROCESS_STATE_CREATED &&
+    if (record!=NULL &&
+        (record->state==PROCESS_STATE_CREATED ||
+         record->state==PROCESS_STATE_READY) &&
         active_process_identifier!=process_id)
         result=vm_address_space_write(&record->address_space,destination,
                                       source,length);

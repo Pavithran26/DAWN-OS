@@ -141,3 +141,12 @@
 - This is lifecycle groundwork only. User-mode process creation, parent termination/orphan adoption policy, and blocking `WAIT` are not implemented yet.
 - Added source-level self-test coverage for parent capture, child lookup, exited-child visibility, and child-before-parent reaping.
 - No compilation, QEMU, BIOS/UEFI, or CI tests were run for this increment.
+
+
+## Parent-side child collection groundwork (2026-11-18)
+
+- Added a CPL0-only child collection primitive that accepts only an EXITED child owned by the specified READY parent.
+- Collection can copy the signed 64-bit exit status into an aligned, writable user-memory slot in the parent's own address space, without switching away from the currently active address space.
+- The child is reaped before its status is published. Collection is rejected if the child still owns unreaped child records or if the destination is not writable user memory.
+- This is the process-manager primitive for SYS_WAIT; it does not yet block a running parent or wake it when a child exits. The user syscall remains unimplemented.
+- Source-only update. No compilation, QEMU, BIOS/UEFI, or CI tests were run.
