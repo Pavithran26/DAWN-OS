@@ -19,6 +19,7 @@ struct process_record {
     struct process_user_page user_pages[DAWN_PROCESS_MAX_USER_PAGES];
     size_t user_page_count;
     uint64_t id;
+    uint64_t parent_id;
     uint64_t kernel_stack_top;
     int64_t exit_status;
     enum process_state state;
@@ -77,11 +78,19 @@ bool process_manager_initialize(void) {
 bool process_create(uint64_t *process_id) {
     const uint64_t flags=read_rflags();
     struct process_record *slot=NULL;
+    struct process_record *parent=NULL;
     struct vm_address_space space={0};
     uint64_t stack_top=0ULL;
     if (!initialized || process_id==NULL || *process_id!=0ULL ||
         (read_cs()&3U)!=0U) return false;
     disable_interrupts();
+    if (active_process_identifier!=0ULL) {
+        parent=find_process(active_process_identifier);
+        if (parent==NULL || parent->state!=PROCESS_STATE_READY) {
+            restore_interrupt_flag(flags);
+            return false;
+        }
+    }
     for (size_t i=0U;i<DAWN_PROCESS_MAX;i++) {
         if (processes[i].state==PROCESS_STATE_FREE) {
             slot=&processes[i];
@@ -100,6 +109,7 @@ bool process_create(uint64_t *process_id) {
         return false;
     }
     slot->address_space=space;
+    slot->parent_id=active_process_identifier;
     slot->kernel_stack_top=stack_top;
     slot->id=next_process_id++;
     slot->state=PROCESS_STATE_CREATED;
@@ -267,10 +277,35 @@ bool process_get_info(uint64_t process_id,struct process_info *info) {
         return false;
     }
     info->id=record->id;
+    info->parent_id=record->parent_id;
     info->state=record->state;
     info->address_space_root=record->address_space.root_physical;
     info->kernel_stack_top=record->kernel_stack_top;
     info->exit_status=record->exit_status;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
+                            struct process_info *info) {
+    const uint64_t flags=read_rflags();
+    struct process_record *parent=NULL;
+    struct process_record *child=NULL;
+    if (!initialized || parent_id==0ULL || child_id==0ULL || info==NULL ||
+        (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    parent=find_process(parent_id);
+    child=find_process(child_id);
+    if (parent==NULL || child==NULL || child->parent_id!=parent_id) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    info->id=child->id;
+    info->parent_id=child->parent_id;
+    info->state=child->state;
+    info->address_space_root=child->address_space.root_physical;
+    info->kernel_stack_top=child->kernel_stack_top;
+    info->exit_status=child->exit_status;
     restore_interrupt_flag(flags);
     return true;
 }
@@ -398,6 +433,14 @@ bool process_reap(uint64_t process_id) {
         restore_interrupt_flag(flags);
         return false;
     }
+    /* Keep the parent record alive until every child has itself been reaped. */
+    for (size_t child_index=0U;child_index<DAWN_PROCESS_MAX;child_index++) {
+        if (processes[child_index].state!=PROCESS_STATE_FREE &&
+            processes[child_index].parent_id==process_id) {
+            restore_interrupt_flag(flags);
+            return false;
+        }
+    }
     while (record->user_page_count>0U) {
         const size_t index=record->user_page_count-1U;
         const struct process_user_page page=record->user_pages[index];
@@ -474,6 +517,28 @@ static bool process_manager_self_test_locked(void) {
     }
     if (!process_create(&extra) || extra<=ids[DAWN_PROCESS_MAX-1U] ||
         !process_mark_exited(extra) || !process_reap(extra)) return false;
+
+    /* A child inherits the active process as its parent. Parent resources
+     * remain allocated until all child records have been reaped. */
+    {
+        uint64_t parent_id=0ULL,child_id=0ULL;
+        struct process_info child_info={0};
+        if (!process_create(&parent_id) || !process_mark_ready(parent_id) ||
+            !process_activate(parent_id) || process_active_id()!=parent_id ||
+            !process_create(&child_id) || child_id==0ULL ||
+            !process_get_child_info(parent_id,child_id,&child_info) ||
+            child_info.parent_id!=parent_id ||
+            child_info.state!=PROCESS_STATE_CREATED ||
+            !process_mark_ready(child_id) || !process_deactivate() ||
+            !process_mark_exited(child_id) ||
+            !process_mark_exited(parent_id) ||
+            process_reap(parent_id) ||
+            !process_get_child_info(parent_id,child_id,&child_info) ||
+            child_info.state!=PROCESS_STATE_EXITED ||
+            !process_reap(child_id) || !process_reap(parent_id) ||
+            process_get_child_info(parent_id,child_id,&child_info))
+            return false;
+    }
     return true;
 }
 

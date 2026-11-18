@@ -17,6 +17,7 @@ enum process_state {
 
 struct process_info {
     uint64_t id;
+    uint64_t parent_id;
     enum process_state state;
     uint64_t address_space_root;
     uint64_t kernel_stack_top;
@@ -26,6 +27,9 @@ struct process_info {
 /* Process metadata, isolated mappings, user-frame ownership, and lifecycle. */
 bool process_manager_initialize(void);
 bool process_create(uint64_t *process_id);
+/* Return metadata only when child_id belongs to parent_id. */
+bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
+                            struct process_info *info);
 bool process_mark_ready(uint64_t process_id);
 bool process_mark_exited(uint64_t process_id);
 /* Record the status supplied by the active process's SYS_EXIT call. */

@@ -14,25 +14,21 @@ The following visuals illustrate the intended emerald-green, glass/neomorphic de
   <img src="docs/images/dawn-system-tools-concept.svg" alt="DAWN OS terminal, task manager, file explorer, and partition manager concepts" width="100%"/>
 </p>
 
-## Current status
+## Current implementation snapshot (2026-11-18)
 
-The repository contains the first Phase A kernel scaffold:
+DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop operating system. The repository currently includes:
 
-- A 64-bit Limine entry path with a dedicated bootstrap stack.
-- Limine request delimiters, a base-revision 6 tag, and a framebuffer request.
-- Bounded COM1 serial diagnostics; serial output failure cannot trap the kernel in an infinite polling loop.
-- A deterministic kernel self-test mode that reports PASS/FAIL over serial and uses QEMU's `isa-debug-exit` device when available.
-- An ELF layout with separate executable, read-only, and writable load segments.
-- A GitHub Actions boot-validation workflow for ISO creation and QEMU BIOS/UEFI attempts.
-- A Limine boot-memory-map request, bounded structural validator, malformed-map self-tests, and serial summary of usable/reclaimable regions.
-- A Limine HHDM request with runtime-selected offset validation; no fixed direct-map address is assumed.
-- A bitmap physical page-frame allocator with usable-frame ownership tracking and invalid/double-free rejection; initial tracking is limited to physical addresses below 4 GiB and no bootloader/ACPI memory is reclaimed.
-- An x86_64 four-level page-table manager attached to Limine's active CR3, with checked 4 KiB mappings, software translation, unmapping, NX/write/user permission checks, and QEMU self-tests.
-- A 256-entry x86_64 IDT with CPU exception stubs, fatal exception diagnostics, ACPI RSDP/XSDT/RSDT/MADT discovery, a four-level-page-table uncached MMIO mapping for APIC registers, xAPIC + IOAPIC setup, and an IOAPIC-routed PIT IRQ0 test. The legacy PIC remains masked. See [ACPI/APIC implementation notes](docs/ACPI_APIC.md).
-- A single-CPU cooperative kernel-thread scheduler with guarded static stacks, x86_64 callee-saved context switching, round-robin voluntary yield, thread exit/reuse, and QEMU self-tests. Timer-driven preemption remains disabled.
-- An optional graphical administration shell is planned; terminal, file explorer, partition manager, task manager, and the green liquid-neomorphism interface are **not implemented yet**. See [the graphical shell design](docs/GUI_SHELL_PLAN.md) and [Phase D milestones](docs/PHASE_D_PLAN.md).
+- Limine BIOS/UEFI boot scaffolding, serial diagnostics, framebuffer request, and a kernel self-test target.
+- Physical page allocation, HHDM validation, four-level paging, isolated process address spaces, user-page ownership, and teardown.
+- IDT exception/interrupt handling, ACPI MADT discovery, xAPIC/IOAPIC setup, PIT routing, and LAPIC timer support.
+- A single-CPU scheduler with guarded kernel stacks, cooperative switching, timer preemption, process-bound contexts, and a controlled CPL3 ELF launch path.
+- A bounded userspace ABI with ABI version, serial `WRITE`, `EXIT`, `GETPID`, and `YIELD`; exit status is retained in process metadata.
+- Process parent identifiers and child metadata lookup. Parent records cannot be reaped while child records remain.
+- Emerald-green liquid-glass desktop concepts in `docs/images/`; these are design references, not screenshots of a running desktop.
 
-This is **not a complete operating system**. The current interrupt path is single-CPU xAPIC/IOAPIC with one ACPI-routed PIT source tested in QEMU. The kernel scheduler is cooperative; timer-driven preemption, SMP interrupt routing, separate process address spaces, filesystem, userspace, syscall ABI, service supervisor, storage/network drivers, network stack, and server applications are not implemented. The physical allocator returns physical frame addresses only and does not zero frames or provide a heap. The early page-table manager can map allocator-owned frames in the active root, but it does not create isolated process address spaces or support concurrent CPUs. Bootloader-reclaimable and ACPI memory remain reserved. An ELF build or ISO creation is not proof of a successful boot; check the CI run logs and artifacts for boot evidence.
+The terminal, VFS/filesystem, file explorer, partition manager, storage and USB drivers, full desktop compositor, task manager, networking, installer, and recovery environment remain planned implementation work. Process creation is currently kernel-controlled; user-facing `EXEC` and blocking `WAIT` are not implemented.
+
+**Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 
 ## Build the kernel ELF
 

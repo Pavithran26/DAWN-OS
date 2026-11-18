@@ -132,3 +132,12 @@
 - Process metadata exposes the recorded status after the scheduler switches away and marks the process EXITED; the status remains available until the process is reaped.
 - This is exit-status recording only. A blocking `WAIT` syscall, parent/child relationships, and wait-queue wakeups are not implemented by this increment.
 - Source implementation only; no compilation, emulator, BIOS/UEFI, or CI tests were run.
+
+## Parent/child process metadata (2026-11-18)
+
+- A process created while another process address space is active records that active process as its parent. Kernel-root process creation produces a root process with parent ID 0.
+- `process_get_child_info` returns child metadata only when the requested parent-child relationship matches.
+- Reaping a parent is rejected while any child record remains, including an EXITED child. Children must be reaped before the parent record can be released.
+- This is lifecycle groundwork only. User-mode process creation, parent termination/orphan adoption policy, and blocking `WAIT` are not implemented yet.
+- Added source-level self-test coverage for parent capture, child lookup, exited-child visibility, and child-before-parent reaping.
+- No compilation, QEMU, BIOS/UEFI, or CI tests were run for this increment.
