@@ -176,7 +176,7 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
                 reth->type = htons(ETHERTYPE_IPV4);
 
                 *rip = *ip;
-                rip->ihl_version = (4U << 4) | (uint8_t)(sizeof(struct ipv4_header) / 4U);
+                rip->ver_ihl = 0x45;
                 rip->total_length = htons((uint16_t)(sizeof(struct ipv4_header) + icmp_data_len));
                 rip->src_ip = ip->dest_ip;
                 rip->dest_ip = ip->src_ip;
