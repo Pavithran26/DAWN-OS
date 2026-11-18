@@ -37,6 +37,8 @@
 #include "shell.h"
 #include "terminal.h"
 #include "task_manager.h"
+#include "net.h"
+#include "audio.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -824,6 +826,24 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: task manager and resource monitor ready\n");
 
+    if (!net_initialize()) {
+        serial_write("DAWN-OS: FAIL: network subsystem initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: network stack, loopback, ARP, IPv4, UDP, TCP and sockets ready\n");
+
+    if (!audio_initialize()) {
+        serial_write("DAWN-OS: FAIL: audio subsystem initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: audio subsystem, PCI audio, mixer and tone generator ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1104,6 +1124,22 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: task manager process list, performance graphs and controls\n");
+
+    /* Phase J: Networking */
+    if (!net_self_test()) {
+        serial_write("DAWN-TEST: FAIL: network stack, loopback and socket self-test\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle\n");
+
+    /* Phase K: Audio */
+    if (!audio_self_test()) {
+        serial_write("DAWN-TEST: FAIL: audio mixer, volume control and stream mixing\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: audio mixer, master volume, stream mixing and tone generation\n");
 #endif
 
     if (framebuffer_response_valid()) {
