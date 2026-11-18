@@ -32,82 +32,76 @@ static inline bool exp_str_contains(const char *haystack, const char *needle) {
     return false;
 }
 
-bool explorer_list_directory(const char *path, struct explorer_listing *out_listing) {
-    if (path == NULL || out_listing == NULL) return false;
-    struct vfs_node *dir_node = NULL;
-    if (!vfs_resolve_path(path, &dir_node) || dir_node == NULL || dir_node->type != VFS_TYPE_DIRECTORY)
-        return false;
+static inline size_t exp_str_len(const char *s) {
+    size_t n=0U;
+    if (s==NULL) return 0U;
+    while (s[n]!='\0') ++n;
+    return n;
+}
 
-    *out_listing = (struct explorer_listing){0};
-    exp_str_copy(out_listing->current_path, path, VFS_MAX_PATH);
-
-    for (uint32_t i = 0; i < EXPLORER_MAX_ITEMS; i++) {
-        struct vfs_dirent entry = {0};
-        if (vfs_readdir(dir_node, i, &entry) != 0) break;
-        struct explorer_file_item *item = &out_listing->items[out_listing->count++];
-        exp_str_copy(item->name, entry.name, VFS_MAX_NAME);
-        item->size = entry.size;
-        item->type = (entry.type == VFS_TYPE_DIRECTORY) ? EXPLORER_ITEM_DIRECTORY : EXPLORER_ITEM_FILE;
-
-        /* Build full path */
-        size_t plen = 0;
-        while (path[plen] != '\0' && plen + 1 < VFS_MAX_PATH) {
-            item->path[plen] = path[plen];
-            plen++;
+static bool exp_join_path(const char *base,const char *name,char out[VFS_MAX_PATH]) {
+    if (base==NULL || name==NULL || out==NULL || name[0]=='\0') return false;
+    const size_t base_len=exp_str_len(base),name_len=exp_str_len(name);
+    const bool separator=base_len>0U && base[base_len-1U]!='/';
+    const size_t needed=base_len+(separator?1U:0U)+name_len;
+    if (base_len==0U || needed>=VFS_MAX_PATH) return false;
+    size_t at=0U;
+    for (size_t i=0U;i<base_len;i++) out[at++]=base[i];
+    if (separator) out[at++]='/';
+    for (size_t i=0U;i<name_len;i++) out[at++]=name[i];
+    out[at]='\0';
+    return true;
+}
+bool explorer_list_directory(const char *path,struct explorer_listing *out_listing) {
+    if (path==NULL || out_listing==NULL) return false;
+    struct vfs_node *dir=NULL;
+    if (!vfs_resolve_path(path,&dir) || dir==NULL || dir->type!=VFS_TYPE_DIRECTORY) return false;
+    *out_listing=(struct explorer_listing){0};
+    if (exp_str_len(path)>=VFS_MAX_PATH) return false;
+    exp_str_copy(out_listing->current_path,path,VFS_MAX_PATH);
+    for (uint32_t i=0U;i<EXPLORER_MAX_ITEMS;i++) {
+        struct vfs_dirent entry={0};
+        if (vfs_readdir(dir,i,&entry)!=0) break;
+        if (out_listing->count>=EXPLORER_MAX_ITEMS) break;
+        struct explorer_file_item *item=&out_listing->items[out_listing->count];
+        if (!exp_join_path(path,entry.name,item->path)) {
+            *out_listing=(struct explorer_listing){0};
+            return false;
         }
-        if (plen > 0 && item->path[plen - 1] != '/' && plen + 1 < VFS_MAX_PATH) {
-            item->path[plen++] = '/';
+        exp_str_copy(item->name,entry.name,VFS_MAX_NAME);
+        item->size=entry.size;
+        item->type=(entry.type==VFS_TYPE_DIRECTORY)?EXPLORER_ITEM_DIRECTORY:EXPLORER_ITEM_FILE;
+        if (UINT64_MAX-out_listing->total_size<entry.size) {
+            *out_listing=(struct explorer_listing){0};
+            return false;
         }
-        size_t nlen = 0;
-        while (entry.name[nlen] != '\0' && plen + 1 < VFS_MAX_PATH) {
-            item->path[plen++] = entry.name[nlen++];
-        }
-        item->path[plen] = '\0';
-        out_listing->total_size += entry.size;
+        out_listing->total_size+=entry.size;
+        ++out_listing->count;
     }
     return true;
 }
-
-static void search_recursive(struct vfs_node *node, const char *base_path,
-                             const char *query, struct explorer_listing *out_results,
-                             int depth) {
-    if (node == NULL || depth > 8 || out_results->count >= EXPLORER_MAX_ITEMS) return;
-    for (uint32_t i = 0; i < EXPLORER_MAX_ITEMS; i++) {
-        struct vfs_dirent entry = {0};
-        if (vfs_readdir(node, i, &entry) != 0) break;
-
-        char sub_path[VFS_MAX_PATH];
-        size_t plen = 0;
-        while (base_path[plen] != '\0' && plen + 1 < VFS_MAX_PATH) {
-            sub_path[plen] = base_path[plen];
-            plen++;
+static void search_recursive(struct vfs_node *node,const char *base_path,
+                             const char *query,struct explorer_listing *results,int depth) {
+    if (node==NULL || depth>8 || results==NULL || results->count>=EXPLORER_MAX_ITEMS) return;
+    for (uint32_t i=0U;i<EXPLORER_MAX_ITEMS;i++) {
+        struct vfs_dirent entry={0};
+        if (vfs_readdir(node,i,&entry)!=0) break;
+        char full_path[VFS_MAX_PATH];
+        if (!exp_join_path(base_path,entry.name,full_path)) continue;
+        if (exp_str_contains(entry.name,query) && results->count<EXPLORER_MAX_ITEMS) {
+            struct explorer_file_item *item=&results->items[results->count++];
+            exp_str_copy(item->name,entry.name,VFS_MAX_NAME);
+            exp_str_copy(item->path,full_path,VFS_MAX_PATH);
+            item->size=entry.size;
+            item->type=(entry.type==VFS_TYPE_DIRECTORY)?EXPLORER_ITEM_DIRECTORY:EXPLORER_ITEM_FILE;
         }
-        if (plen > 0 && sub_path[plen - 1] != '/' && plen + 1 < VFS_MAX_PATH) {
-            sub_path[plen++] = '/';
+        if (entry.type==VFS_TYPE_DIRECTORY) {
+            struct vfs_node *child=vfs_finddir(node,entry.name);
+            if (child!=NULL) search_recursive(child,full_path,query,results,depth+1);
         }
-        size_t nlen = 0;
-        while (entry.name[nlen] != '\0' && plen + 1 < VFS_MAX_PATH) {
-            sub_path[plen++] = entry.name[nlen++];
-        }
-        sub_path[plen] = '\0';
-
-        if (exp_str_contains(entry.name, query) && out_results->count < EXPLORER_MAX_ITEMS) {
-            struct explorer_file_item *item = &out_results->items[out_results->count++];
-            exp_str_copy(item->name, entry.name, VFS_MAX_NAME);
-            exp_str_copy(item->path, sub_path, VFS_MAX_PATH);
-            item->size = entry.size;
-            item->type = (entry.type == VFS_TYPE_DIRECTORY) ? EXPLORER_ITEM_DIRECTORY : EXPLORER_ITEM_FILE;
-        }
-
-        if (entry.type == VFS_TYPE_DIRECTORY) {
-            struct vfs_node *sub_node = vfs_finddir(node, entry.name);
-            if (sub_node != NULL) {
-                search_recursive(sub_node, sub_path, query, out_results, depth + 1);
-            }
-        }
+        if (results->count>=EXPLORER_MAX_ITEMS) break;
     }
 }
-
 bool explorer_search(const char *root_path, const char *query, struct explorer_listing *out_results) {
     if (root_path == NULL || query == NULL || out_results == NULL) return false;
     struct vfs_node *root = NULL;
@@ -119,39 +113,39 @@ bool explorer_search(const char *root_path, const char *query, struct explorer_l
     return true;
 }
 
-bool explorer_copy_file(const char *src_path, const char *dst_path) {
-    if (src_path == NULL || dst_path == NULL) return false;
-    struct vfs_node *src_node = NULL;
-    if (!vfs_resolve_path(src_path, &src_node) || src_node == NULL || src_node->type != VFS_TYPE_FILE)
-        return false;
-
-    struct vfs_node *dst_node = NULL;
-    if (vfs_create(dst_path, VFS_FLAG_READ | VFS_FLAG_WRITE, &dst_node) != 0 || dst_node == NULL)
-        return false;
-
+bool explorer_copy_file(const char *src_path,const char *dst_path) {
+    if (src_path==NULL || dst_path==NULL || exp_str_len(src_path)>=VFS_MAX_PATH ||
+        exp_str_len(dst_path)>=VFS_MAX_PATH) return false;
+    struct vfs_node *source=NULL;
+    if (!vfs_resolve_path(src_path,&source) || source==NULL || source->type!=VFS_TYPE_FILE) return false;
+    struct vfs_node *destination=NULL;
+    if (vfs_create(dst_path,VFS_FLAG_READ|VFS_FLAG_WRITE,&destination)!=0 || destination==NULL) return false;
     uint8_t buffer[512];
-    uint64_t offset = 0;
-    while (offset < src_node->size) {
-        size_t chunk = sizeof(buffer);
-        if (offset + chunk > src_node->size) chunk = (size_t)(src_node->size - offset);
-        int64_t bytes_read = vfs_read(src_node, offset, chunk, buffer);
-        if (bytes_read <= 0) return false;
-        int64_t bytes_written = vfs_write(dst_node, offset, (size_t)bytes_read, buffer);
-        if (bytes_written != bytes_read) return false;
-        offset += (uint64_t)bytes_read;
+    uint64_t offset=0ULL;
+    while (offset<source->size) {
+        size_t chunk=sizeof(buffer);
+        if ((uint64_t)chunk>source->size-offset) chunk=(size_t)(source->size-offset);
+        const int64_t got=vfs_read(source,offset,chunk,buffer);
+        if (got<=0 || (uint64_t)got>(uint64_t)chunk) { (void)vfs_unlink(dst_path); return false; }
+        const int64_t put=vfs_write(destination,offset,(size_t)got,buffer);
+        if (put!=got) { (void)vfs_unlink(dst_path); return false; }
+        offset+=(uint64_t)got;
     }
-    return offset == src_node->size;
+    if (offset!=source->size) { (void)vfs_unlink(dst_path); return false; }
+    return true;
 }
-
-bool explorer_move_file(const char *src_path, const char *dst_path) {
-    if (!explorer_copy_file(src_path, dst_path)) return false;
-    return explorer_delete_file(src_path);
+bool explorer_move_file(const char *src_path,const char *dst_path) {
+    if (!explorer_copy_file(src_path,dst_path)) return false;
+    if (explorer_delete_file(src_path)) return true;
+    (void)explorer_delete_file(dst_path);
+    return false;
 }
 
 bool explorer_delete_file(const char *path) {
-    return vfs_unlink(path) == 0;
+    struct vfs_node *node=NULL;
+    if (path==NULL || !vfs_resolve_path(path,&node) || node==NULL || node->type!=VFS_TYPE_FILE) return false;
+    return vfs_unlink(path)==0;
 }
-
 #ifdef DAWN_KERNEL_TEST
 bool explorer_self_test(void) {
     struct explorer_listing listing = {0};

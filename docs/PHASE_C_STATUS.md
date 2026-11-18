@@ -214,3 +214,10 @@
 - File reads use overflow-safe offset/length calculations and extent validation. Directory enumeration and lookup share the bounded record parser; directory nodes are checked before traversal and cached node slots are not recycled during a mount.
 - The ISO9660 synthetic image test now contains valid self/parent directory records and declared volume metadata, and includes an invalid root-extent rejection case.
 - Source-only change. ISO9660 self-tests and image mounting were not executed.
+
+## File Explorer backend safety corrections (2026-11-18)
+
+- Directory listing and recursive search now use one bounded path-join helper; overlong child paths are rejected or skipped rather than silently truncated.
+- Directory size aggregation checks 64-bit overflow. File copy validates short/oversized reads and removes a partially written destination on failure.
+- Move now removes the destination again if source deletion fails, avoiding a false successful copy-only move. Delete-file rejects directory targets.
+- Source-only update. File Explorer tests and VFS integration were not executed.
