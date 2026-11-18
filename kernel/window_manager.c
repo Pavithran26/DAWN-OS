@@ -1,0 +1,359 @@
+/* SPDX-License-Identifier: Unlicense */
+#include "window_manager.h"
+
+static struct window window_pool[WM_MAX_WINDOWS];
+static struct window *z_order[WM_MAX_WINDOWS];
+static size_t z_count = 0;
+static uint32_t next_win_id = 1;
+static bool wm_initialized = false;
+
+static inline void str_copy(char *dest, const char *src, size_t max_len) {
+    size_t i = 0;
+    while (src[i] != '\0' && i + 1 < max_len) {
+        dest[i] = src[i];
+        i++;
+    }
+    dest[i] = '\0';
+}
+
+static inline bool str_equal(const char *s1, const char *s2) {
+    size_t i = 0;
+    while (s1[i] != '\0' && s2[i] != '\0') {
+        if (s1[i] != s2[i]) return false;
+        i++;
+    }
+    return s1[i] == s2[i];
+}
+
+bool wm_initialize(void) {
+    if (wm_initialized) return true;
+    for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
+        window_pool[i] = (struct window){0};
+        z_order[i] = NULL;
+    }
+    z_count = 0;
+    next_win_id = 1;
+    wm_initialized = true;
+    return true;
+}
+
+struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_t w, uint32_t h, uint32_t flags) {
+    if (!wm_initialized) wm_initialize();
+    if (z_count >= WM_MAX_WINDOWS) return NULL;
+
+    for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
+        if (!window_pool[i].active) {
+            struct window *win = &window_pool[i];
+            *win = (struct window){0};
+            win->id = next_win_id++;
+            str_copy(win->title, title ? title : "Window", WM_TITLE_MAX_LEN);
+            win->x = x;
+            win->y = y;
+            win->width = (w >= 100) ? w : 100;
+            win->height = (h >= 60) ? h : 60;
+            win->min_width = 100;
+            win->min_height = 60;
+            win->flags = flags | WM_FLAG_TITLEBAR | WM_FLAG_MOVABLE;
+            win->visible = true;
+            win->active = true;
+
+            z_order[z_count++] = win;
+            wm_focus_window(win->id);
+            return win;
+        }
+    }
+    return NULL;
+}
+
+int wm_destroy_window(uint32_t id) {
+    for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
+        if (window_pool[i].active && window_pool[i].id == id) {
+            window_pool[i].active = false;
+
+            /* Remove from Z-order */
+            size_t found_idx = WM_MAX_WINDOWS;
+            for (size_t z = 0; z < z_count; z++) {
+                if (z_order[z] == &window_pool[i]) {
+                    found_idx = z;
+                    break;
+                }
+            }
+            if (found_idx < z_count) {
+                for (size_t z = found_idx; z + 1 < z_count; z++) {
+                    z_order[z] = z_order[z + 1];
+                }
+                z_order[z_count - 1] = NULL;
+                z_count--;
+            }
+
+            if (z_count > 0) {
+                wm_focus_window(z_order[z_count - 1]->id);
+            }
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int wm_focus_window(uint32_t id) {
+    struct window *target = NULL;
+    size_t z_idx = 0;
+
+    for (size_t i = 0; i < z_count; i++) {
+        if (z_order[i]->id == id) {
+            target = z_order[i];
+            z_idx = i;
+            break;
+        }
+    }
+    if (target == NULL) return -1;
+
+    /* Move target to top of Z-order */
+    for (size_t i = z_idx; i + 1 < z_count; i++) {
+        z_order[i] = z_order[i + 1];
+    }
+    z_order[z_count - 1] = target;
+
+    for (size_t i = 0; i < z_count; i++) {
+        z_order[i]->focused = (z_order[i] == target);
+    }
+    return 0;
+}
+
+int wm_move_window(uint32_t id, int32_t x, int32_t y) {
+    struct window *win = wm_get_window_by_id(id);
+    if (win == NULL) return -1;
+    win->x = x;
+    win->y = y;
+    return 0;
+}
+
+int wm_resize_window(uint32_t id, uint32_t w, uint32_t h) {
+    struct window *win = wm_get_window_by_id(id);
+    if (win == NULL) return -1;
+    win->width = (w >= win->min_width) ? w : win->min_width;
+    win->height = (h >= win->min_height) ? h : win->min_height;
+    return 0;
+}
+
+int wm_minimize_window(uint32_t id) {
+    struct window *win = wm_get_window_by_id(id);
+    if (win == NULL) return -1;
+    win->minimized = !win->minimized;
+    if (!win->minimized) {
+        wm_focus_window(id);
+    }
+    return 0;
+}
+
+int wm_maximize_window(uint32_t id) {
+    struct window *win = wm_get_window_by_id(id);
+    if (win == NULL) return -1;
+
+    if (!win->maximized) {
+        win->saved_x = win->x;
+        win->saved_y = win->y;
+        win->saved_width = win->width;
+        win->saved_height = win->height;
+
+        win->x = 0;
+        win->y = 0;
+        win->width = 1024;
+        win->height = 768 - 48; /* Save taskbar height */
+        win->maximized = true;
+    } else {
+        win->x = win->saved_x;
+        win->y = win->saved_y;
+        win->width = win->saved_width;
+        win->height = win->saved_height;
+        win->maximized = false;
+    }
+    return 0;
+}
+
+struct window *wm_get_window_by_id(uint32_t id) {
+    for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
+        if (window_pool[i].active && window_pool[i].id == id) {
+            return &window_pool[i];
+        }
+    }
+    return NULL;
+}
+
+struct window *wm_get_top_window(void) {
+    if (z_count == 0) return NULL;
+    return z_order[z_count - 1];
+}
+
+size_t wm_get_window_count(void) {
+    return z_count;
+}
+
+void wm_handle_mouse(const struct mouse_event *mevt) {
+    if (mevt == NULL || z_count == 0) return;
+
+    if (mevt->left_button) {
+        /* Check if dragging already */
+        struct window *top = wm_get_top_window();
+        if (top != NULL && top->dragging) {
+            top->x = mevt->x - top->drag_dx;
+            top->y = mevt->y - top->drag_dy;
+            return;
+        }
+
+        /* Hit test from top to bottom */
+        for (size_t i = z_count; i > 0; i--) {
+            struct window *win = z_order[i - 1];
+            if (!win->visible || win->minimized) continue;
+
+            if (mevt->x >= win->x && (uint32_t)mevt->x < (uint32_t)(win->x + (int32_t)win->width) &&
+                mevt->y >= win->y && (uint32_t)mevt->y < (uint32_t)(win->y + (int32_t)win->height)) {
+
+                wm_focus_window(win->id);
+
+                /* Titlebar check */
+                if (mevt->y < win->y + (int32_t)WM_TITLEBAR_HEIGHT) {
+                    int32_t rel_x = mevt->x - win->x;
+                    /* Close button: width - 24 to width - 10 */
+                    if (rel_x >= (int32_t)(win->width - 24) && rel_x <= (int32_t)(win->width - 10)) {
+                        wm_destroy_window(win->id);
+                        return;
+                    }
+                    /* Maximize button: width - 44 to width - 30 */
+                    if (rel_x >= (int32_t)(win->width - 44) && rel_x <= (int32_t)(win->width - 30)) {
+                        wm_maximize_window(win->id);
+                        return;
+                    }
+                    /* Minimize button: width - 64 to width - 50 */
+                    if (rel_x >= (int32_t)(win->width - 64) && rel_x <= (int32_t)(win->width - 50)) {
+                        wm_minimize_window(win->id);
+                        return;
+                    }
+                    /* Start dragging */
+                    win->dragging = true;
+                    win->drag_dx = mevt->x - win->x;
+                    win->drag_dy = mevt->y - win->y;
+                }
+                return;
+            }
+        }
+    } else {
+        /* Button released */
+        for (size_t i = 0; i < z_count; i++) {
+            z_order[i]->dragging = false;
+        }
+    }
+}
+
+void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) {
+    if (surf == NULL) return;
+
+    /* Render desktop background gradient (Emerald Forest to Deep Night) */
+    gfx_draw_gradient_v(surf, 0, 0, surf->width, surf->height, GFX_COLOR_EMERALD_BASE, GFX_COLOR_EMERALD_DEEP);
+
+    /* Render windows from back to front */
+    for (size_t z = 0; z < z_count; z++) {
+        struct window *win = z_order[z];
+        if (!win->visible || win->minimized) continue;
+
+        /* Ambient drop shadow */
+        gfx_draw_rect_filled(surf, (uint32_t)(win->x + 4), (uint32_t)(win->y + 4), win->width, win->height, 0x50000000U);
+
+        /* Window frame (frosted glass) */
+        gfx_draw_glass_panel(surf, (uint32_t)win->x, (uint32_t)win->y, win->width, win->height, GFX_COLOR_GLASS_PANEL);
+
+        /* Titlebar */
+        uint32_t tb_color = win->focused ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
+        gfx_draw_gradient_v(surf, (uint32_t)win->x + WM_BORDER_WIDTH, (uint32_t)win->y + WM_BORDER_WIDTH,
+                            win->width - (2 * WM_BORDER_WIDTH), WM_TITLEBAR_HEIGHT - WM_BORDER_WIDTH,
+                            tb_color, GFX_COLOR_EMERALD_DEEP);
+
+        /* Title text */
+        gfx_draw_string(surf, (uint32_t)(win->x + 12), (uint32_t)(win->y + 6), win->title,
+                        win->focused ? GFX_COLOR_TEXT_PRIMARY : GFX_COLOR_TEXT_SECONDARY);
+
+        /* Window Controls (Ruby, Amber, Emerald pills) */
+        uint32_t btn_y = (uint32_t)(win->y + 8);
+        /* Close Button */
+        gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 22), btn_y, 12, 12, GFX_COLOR_BTN_CLOSE);
+        /* Maximize Button */
+        gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 42), btn_y, 12, 12, GFX_COLOR_BTN_MAXIMIZE);
+        /* Minimize Button */
+        gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 62), btn_y, 12, 12, GFX_COLOR_BTN_MINIMIZE);
+
+        /* Client Area */
+        uint32_t cx = (uint32_t)(win->x + (int32_t)WM_BORDER_WIDTH);
+        uint32_t cy = (uint32_t)(win->y + (int32_t)WM_TITLEBAR_HEIGHT);
+        uint32_t cw = win->width - (2 * WM_BORDER_WIDTH);
+        uint32_t ch = win->height - WM_TITLEBAR_HEIGHT - WM_BORDER_WIDTH;
+
+        if (win->client_buffer != NULL) {
+            for (uint32_t r = 0; r < ch; r++) {
+                uint32_t *src_row = win->client_buffer + (r * (win->client_pitch / 4U));
+                for (uint32_t c = 0; c < cw; c++) {
+                    gfx_put_pixel(surf, cx + c, cy + r, src_row[c]);
+                }
+            }
+        } else {
+            gfx_draw_rect_filled(surf, cx, cy, cw, ch, GFX_COLOR_EMERALD_SURFACE);
+        }
+    }
+
+    /* Render Mouse Cursor */
+    if (cursor_x >= 0 && (uint32_t)cursor_x < surf->width && cursor_y >= 0 && (uint32_t)cursor_y < surf->height) {
+        uint32_t cx = (uint32_t)cursor_x;
+        uint32_t cy = (uint32_t)cursor_y;
+        /* Arrow cursor outline and fill */
+        for (int32_t row = 0; row < 12; row++) {
+            for (int32_t col = 0; col <= row; col++) {
+                if (cx + (uint32_t)col < surf->width && cy + (uint32_t)row < surf->height) {
+                    uint32_t color = (col == 0 || col == row || row == 11) ? GFX_COLOR_WHITE : GFX_COLOR_EMERALD_ACCENT;
+                    gfx_put_pixel(surf, cx + (uint32_t)col, cy + (uint32_t)row, color);
+                }
+            }
+        }
+    }
+}
+
+/* Self-test */
+bool wm_self_test(void) {
+    if (!wm_initialize()) return false;
+
+    struct window *w1 = wm_create_window("Terminal", 50, 50, 400, 300, WM_FLAG_NONE);
+    if (w1 == NULL) return false;
+    if (!str_equal(w1->title, "Terminal") || w1->width != 400 || w1->height != 300) return false;
+
+    struct window *w2 = wm_create_window("Files", 100, 100, 500, 350, WM_FLAG_NONE);
+    if (w2 == NULL) return false;
+
+    /* Top window should be w2 */
+    if (wm_get_top_window() != w2) return false;
+    if (!w2->focused || w1->focused) return false;
+
+    /* Focus w1 */
+    if (wm_focus_window(w1->id) != 0) return false;
+    if (wm_get_top_window() != w1) return false;
+    if (!w1->focused || w2->focused) return false;
+
+    /* Move window */
+    if (wm_move_window(w1->id, 75, 80) != 0) return false;
+    if (w1->x != 75 || w1->y != 80) return false;
+
+    /* Maximize window */
+    if (wm_maximize_window(w1->id) != 0) return false;
+    if (!w1->maximized || w1->x != 0 || w1->y != 0) return false;
+    /* Unmaximize */
+    if (wm_maximize_window(w1->id) != 0) return false;
+    if (w1->maximized || w1->x != 75 || w1->y != 80) return false;
+
+    /* Minimize window */
+    if (wm_minimize_window(w1->id) != 0) return false;
+    if (!w1->minimized) return false;
+
+    /* Destroy windows */
+    if (wm_destroy_window(w1->id) != 0) return false;
+    if (wm_destroy_window(w2->id) != 0) return false;
+    if (wm_get_window_count() != 0) return false;
+
+    return true;
+}

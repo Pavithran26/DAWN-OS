@@ -42,9 +42,12 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - USB 3.0 / 3.1 xHCI controller driver with Capability/Operational registers, TRB ring formats, and Root Hub port discovery.
 - USB HID boot keyboard and boot mouse class drivers translating HID usage reports to normalized input events.
 - Unified input event queue and non-blocking event polling subsystem for keyboard and mouse events.
-- Emerald-green liquid-glass desktop concepts in `docs/images/`; these are design references, not screenshots of a running desktop.
+- Graphics Abstraction Layer (GAL) with software double buffering, integer alpha blending, gradients, glass panels, and 8x16 monospace typography.
+- Built-in 16x16 vector/bitmap icon engine for system applications (Terminal, Files, Task Manager, Settings, Computer, Power, DAWN-OS Logo).
+- Window Manager and Compositor with Z-order stack management, click-to-focus, titlebar drag-and-drop, and Ruby/Emerald/Amber window control buttons.
+- Emerald Green Neo-Liquid Glass Desktop Environment featuring translucent frosted glass panels, bottom Taskbar, Start Menu / App Launcher, desktop icons, and top-right toast notifications.
 
-The terminal, full desktop compositor, task manager, networking, installer, and recovery environment are scheduled in subsequent phases. Phase C (process and system calls), Phase D (virtual filesystem and filesystem drivers), Phase E (storage and partition management), and Phase F (hardware and device management) are implemented.
+The native terminal, task manager application, networking, installer, and recovery environment are scheduled in subsequent phases. Phase C (process and system calls), Phase D (virtual filesystem and filesystem drivers), Phase E (storage and partition management), Phase F (hardware and device management), and Phase G (graphics and desktop environment) are implemented.
 
 **Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 

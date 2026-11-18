@@ -31,6 +31,9 @@
 #include "xhci.h"
 #include "usb_hid.h"
 #include "input.h"
+#include "gfx.h"
+#include "window_manager.h"
+#include "desktop.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -773,6 +776,33 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: input subsystem, PS/2 fallback, xHCI and USB HID initialized\n");
 
+    if (!gfx_initialize()) {
+        serial_write("DAWN-OS: FAIL: graphics engine initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: graphics abstraction layer and 2D drawing engine ready\n");
+
+    if (!wm_initialize()) {
+        serial_write("DAWN-OS: FAIL: window manager initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: window manager and compositor ready\n");
+
+    if (!desktop_initialize()) {
+        serial_write("DAWN-OS: FAIL: desktop environment initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: Emerald Green Neo-Liquid Glass desktop environment initialized\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1011,6 +1041,26 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: unified input event queue and dispatch\n");
+
+    /* Phase G: Graphics and Desktop Environment */
+    if (!gfx_self_test()) {
+        serial_write("DAWN-TEST: FAIL: graphics primitives and font rendering\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: graphics primitives, alpha blending and font rendering\n");
+    if (!wm_self_test()) {
+        serial_write("DAWN-TEST: FAIL: window manager lifecycle and controls\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: window manager lifecycle, Z-order and controls\n");
+    if (!desktop_self_test()) {
+        serial_write("DAWN-TEST: FAIL: desktop taskbar, launcher and composition\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: desktop taskbar, launcher and composition\n");
 #endif
 
     if (framebuffer_response_valid()) {
