@@ -51,7 +51,7 @@ static uint32_t fat32_get_fat_entry(struct fat32_fs *fs, uint32_t cluster) {
     return val & 0x0fffffffU;
 }
 
-static void fat32_set_fat_entry(struct fat32_fs *fs, uint32_t cluster, uint32_t next) {
+static inline void fat32_set_fat_entry(struct fat32_fs *fs, uint32_t cluster, uint32_t next) {
     uint32_t fat_offset = cluster * 4U;
     uint32_t fat_sector = fs->reserved_sectors + (fat_offset / fs->bytes_per_sector);
     uint32_t ent_offset = fat_offset % fs->bytes_per_sector;
