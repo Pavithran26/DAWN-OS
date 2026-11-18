@@ -44,6 +44,7 @@
 #include "security.h"
 #include "app_runtime.h"
 #include "service_manager.h"
+#include "power.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -894,6 +895,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: service manager, background daemons, IPC bus and event dispatch ready\n");
 
+    if (!power_initialize()) {
+        serial_write("DAWN-OS: FAIL: power management initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: ACPI power management, reboot/shutdown and panic diagnostics ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1230,6 +1240,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: service manager dependencies, daemon lifecycle, IPC queue and event pub/sub\n");
+
+    /* Phase Q: Power, Reliability and Hardware Compatibility */
+    if (!power_self_test()) {
+        serial_write("DAWN-TEST: FAIL: power management crash report and reliability\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: ACPI power states, reboot vectors and kernel panic diagnostics\n");
 #endif
 
     if (framebuffer_response_valid()) {
