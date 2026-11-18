@@ -187,14 +187,16 @@ bool ps2_has_keyboard(void) { return has_kbd; }
 bool ps2_has_mouse(void) { return has_mouse; }
 
 bool ps2_poll_key(struct key_event *out_event) {
-    if ((inb(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) == 0) return false;
+    uint8_t status = inb(PS2_STATUS_PORT);
+    if ((status & PS2_STATUS_OUTPUT_FULL) == 0 || (status & PS2_STATUS_AUX_DATA) != 0) return false;
     uint8_t scancode = inb(PS2_DATA_PORT);
     ps2_handle_keyboard_scancode(scancode, out_event);
     return true;
 }
 
 bool ps2_poll_mouse(struct mouse_event *out_event) {
-    if ((inb(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) == 0) return false;
+    uint8_t status = inb(PS2_STATUS_PORT);
+    if ((status & PS2_STATUS_OUTPUT_FULL) == 0 || (status & PS2_STATUS_AUX_DATA) == 0) return false;
     uint8_t byte = inb(PS2_DATA_PORT);
 
     if (mouse_cycle == 0) {

@@ -12,6 +12,7 @@
 
 #define PS2_STATUS_OUTPUT_FULL 0x01U
 #define PS2_STATUS_INPUT_FULL  0x02U
+#define PS2_STATUS_AUX_DATA    0x20U
 
 /* Key Codes */
 #define KEY_UNKNOWN    0x00U

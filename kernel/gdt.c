@@ -141,7 +141,6 @@ bool gdt_tss_initialize(void) {
     return true;
 }
 
-#ifdef DAWN_KERNEL_TEST
 bool gdt_tss_self_test(void) {
     const uint64_t original=tss.rsp0;
     const uint64_t temporary=original-16ULL;
@@ -176,4 +175,3 @@ bool gdt_tss_self_test(void) {
     }
     return true;
 }
-#endif

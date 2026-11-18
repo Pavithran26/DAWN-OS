@@ -72,6 +72,7 @@ bool process_allocate_user_page(uint64_t process_id,uint64_t virtual_address,uin
 bool process_user_memory_write(uint64_t process_id,uint64_t destination,const void *source,size_t length);
 bool process_user_memory_zero(uint64_t process_id,uint64_t destination,size_t length);
 bool process_user_memory_rollback(uint64_t process_id,size_t checkpoint);
+bool process_reset_for_exec(uint64_t process_id);
 bool process_reap(uint64_t process_id);
 /* File descriptor table operations */
 bool process_fd_get(uint64_t process_id,int fd,struct dawn_fd_entry *entry);

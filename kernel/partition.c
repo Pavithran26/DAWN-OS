@@ -60,14 +60,14 @@ static void make_slice_name(char *dest, const char *parent_name, uint32_t index)
 static int slice_read_blocks(struct block_device *dev, uint64_t lba, uint32_t count, void *buffer) {
     if (dev == NULL || dev->driver_data == NULL) return -1;
     struct partition_info *part = (struct partition_info *)dev->driver_data;
-    if (lba + count > part->sector_count) return -1;
+    if (lba >= part->sector_count || (uint64_t)count > part->sector_count - lba) return -1;
     return block_dev_read(part->parent_disk, part->start_lba + lba, count, buffer);
 }
 
 static int slice_write_blocks(struct block_device *dev, uint64_t lba, uint32_t count, const void *buffer) {
     if (dev == NULL || dev->driver_data == NULL) return -1;
     struct partition_info *part = (struct partition_info *)dev->driver_data;
-    if (lba + count > part->sector_count) return -1;
+    if (lba >= part->sector_count || (uint64_t)count > part->sector_count - lba) return -1;
     return block_dev_write(part->parent_disk, part->start_lba + lba, count, buffer);
 }
 
@@ -225,7 +225,7 @@ bool partition_validate_safe_operation(struct block_device *disk, uint64_t start
     if (disk == NULL || count == 0) return false;
     /* Reserve first 2048 sectors (1MB) for partition table and boot code */
     if (start_lba < 2048U) return false;
-    if (start_lba + count > disk->total_blocks) return false;
+    if (start_lba >= disk->total_blocks || count > disk->total_blocks - start_lba) return false;
 
     /* Check overlap against registered slices */
     for (size_t i = 0; i < active_slice_count; i++) {

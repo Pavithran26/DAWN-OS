@@ -511,6 +511,31 @@ bool process_user_memory_rollback(uint64_t process_id,size_t checkpoint) {
     return result;
 }
 
+bool process_reset_for_exec(uint64_t process_id) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    if (!initialized || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record==NULL || record->state!=PROCESS_STATE_READY) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    while (record->user_page_count > 0) {
+        const size_t index=record->user_page_count-1U;
+        const struct process_user_page page=record->user_pages[index];
+        if (physical_allocator_is_allocated(page.physical_address)) {
+            (void)vm_address_space_unmap_user(&record->address_space, page.virtual_address);
+            (void)physical_allocator_free(page.physical_address);
+        }
+        record->user_pages[index]=(struct process_user_page){0};
+        --record->user_page_count;
+    }
+    record->state = PROCESS_STATE_CREATED;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
 bool process_reap(uint64_t process_id) {
     const uint64_t flags=read_rflags();
     struct process_record *record=NULL;

@@ -11,6 +11,7 @@
 #include "elf_loader.h"
 #include "syscall.h"
 #include "scheduler.h"
+#include "app_runtime.h"
 
 #define KERNEL_THREAD_MAX 8U
 #define KERNEL_THREAD_STACK_SIZE (16U * 1024U)
@@ -612,9 +613,17 @@ struct interrupt_frame *scheduler_user_exec(struct interrupt_frame *frame) {
         return frame;
     }
 
-    (void)process_user_memory_rollback(self->process_id,0U);
-    if (!elf64_load_process(self->process_id,(const void *)(uintptr_t)image_ptr,
-                            (size_t)image_size,&loaded)) {
+    static uint8_t exec_image_buf[256 * 4096];
+    memcpy(exec_image_buf, (const void *)(uintptr_t)image_ptr, (size_t)image_size);
+
+    if (!process_reset_for_exec(self->process_id)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EINVAL;
+        return frame;
+    }
+
+    if (!elf64_load_process(self->process_id, exec_image_buf,
+                            (size_t)image_size, &loaded) ||
+        !process_mark_ready(self->process_id)) {
         return scheduler_user_exit(frame);
     }
 
