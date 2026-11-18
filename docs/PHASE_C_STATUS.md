@@ -173,3 +173,12 @@
 - Implemented the native DAWN-OS Init process (`user/init.c`) and embedded executable generator `elf64_build_init_image`, launching PID 1 under the scheduler.
 - Phase C source implementation items are complete. All additions include source-level self-tests.
 - Source-only increment. No compilation, QEMU, BIOS/UEFI, or CI tests were run.
+
+## SYS_SPAWN and SYS_EXEC source audit corrections (2026-11-18)
+
+- User argv and envp vectors are copied into bounded kernel-owned snapshots before spawning or replacing an image. Up to 16 entries per vector and 255-byte strings plus NUL are accepted; malformed, inaccessible, or unterminated vectors return -EFAULT.
+- SYS_SPAWN now passes captured arguments and environment to process_spawn instead of discarding the user-provided pointers.
+- SYS_EXEC snapshots arguments before tearing down the old image, passes them to the new initial stack, and no longer attempts a second CREATED-to-READY transition after elf64_load_process has already performed it.
+- Process address-space population helpers use explicit page-table/HHDM access and can operate on the active process from CPL0, allowing EXEC to replace its mappings and populate its new stack.
+- process_reset_for_exec now fails closed if an owned page cannot be unmapped and released.
+- Source review only. Compilation, kernel self-tests, BIOS/UEFI QEMU, and runtime SYS_SPAWN/SYS_EXEC behavior remain unverified and are deferred to Phase T.

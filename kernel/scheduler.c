@@ -43,7 +43,65 @@ static uint16_t kernel_code_selector;
 static bool initialized;
 static bool scheduler_running;
 static struct scheduler_stats counters;
+static struct scheduler_user_arguments spawn_arguments;
+static struct scheduler_user_arguments exec_arguments;
 
+#define SCHEDULER_USER_ARG_MAX 16U
+#define SCHEDULER_USER_ARG_LENGTH 256U
+
+struct scheduler_user_arguments {
+    char argv_storage[SCHEDULER_USER_ARG_MAX][SCHEDULER_USER_ARG_LENGTH];
+    char envp_storage[SCHEDULER_USER_ARG_MAX][SCHEDULER_USER_ARG_LENGTH];
+    const char *argv[SCHEDULER_USER_ARG_MAX+1U];
+    const char *envp[SCHEDULER_USER_ARG_MAX+1U];
+    int argc;
+    int envc;
+};
+
+/* Snapshot user strings before EXEC tears down the caller's old address space. */
+static bool scheduler_copy_user_string_vector(
+    uint64_t user_vector,
+    char storage[SCHEDULER_USER_ARG_MAX][SCHEDULER_USER_ARG_LENGTH],
+    const char *output[SCHEDULER_USER_ARG_MAX+1U],
+    int *out_count
+) {
+    if (out_count==NULL) return false;
+    *out_count=0; output[0]=NULL;
+    if (user_vector==0ULL) return true;
+    for (uint32_t index=0U;index<SCHEDULER_USER_ARG_MAX;index++) {
+        uint64_t user_string=0ULL;
+        const uint64_t offset=(uint64_t)index*sizeof(uint64_t);
+        if (user_vector>UINT64_MAX-offset ||
+            !vm_copy_from_user(&user_string,user_vector+offset,sizeof(user_string))) return false;
+        if (user_string==0ULL) { output[index]=NULL; *out_count=(int)index; return true; }
+        output[index]=storage[index];
+        for (uint32_t byte=0U;byte<SCHEDULER_USER_ARG_LENGTH;byte++) {
+            if (user_string>UINT64_MAX-(uint64_t)byte ||
+                !vm_copy_from_user(&storage[index][byte],user_string+(uint64_t)byte,1U)) return false;
+            if (storage[index][byte]=='\0') break;
+            if (byte==SCHEDULER_USER_ARG_LENGTH-1U) return false;
+        }
+    }
+    {
+        uint64_t terminator=1ULL;
+        const uint64_t offset=(uint64_t)SCHEDULER_USER_ARG_MAX*sizeof(uint64_t);
+        if (user_vector>UINT64_MAX-offset ||
+            !vm_copy_from_user(&terminator,user_vector+offset,sizeof(terminator)) || terminator!=0ULL) return false;
+    }
+    output[SCHEDULER_USER_ARG_MAX]=NULL;
+    *out_count=(int)SCHEDULER_USER_ARG_MAX;
+    return true;
+}
+
+static bool scheduler_snapshot_user_arguments(uint64_t user_argv,uint64_t user_envp,
+                                               struct scheduler_user_arguments *snapshot) {
+    if (snapshot==NULL) return false;
+    snapshot->argc=0; snapshot->envc=0;
+    return scheduler_copy_user_string_vector(user_argv,snapshot->argv_storage,
+               snapshot->argv,&snapshot->argc) &&
+           scheduler_copy_user_string_vector(user_envp,snapshot->envp_storage,
+               snapshot->envp,&snapshot->envc);
+}
 static inline uint64_t read_rflags(void) {
     uint64_t flags=0ULL;
     __asm__ volatile ("pushfq; popq %0" : "=r"(flags));
@@ -577,8 +635,13 @@ struct interrupt_frame *scheduler_user_spawn(struct interrupt_frame *frame) {
         return frame;
     }
 
+    if (!scheduler_snapshot_user_arguments(frame->rdx,frame->r10,&spawn_arguments)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EFAULT;
+        return frame;
+    }
     if (!process_spawn((const void *)(uintptr_t)image_ptr,(size_t)image_size,
-                       0,NULL,NULL,&child_pid)) {
+                       spawn_arguments.argc,spawn_arguments.argv,
+                       spawn_arguments.envp,&child_pid)) {
         frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EAGAIN;
         return frame;
     }
@@ -613,22 +676,29 @@ struct interrupt_frame *scheduler_user_exec(struct interrupt_frame *frame) {
         return frame;
     }
 
-    static uint8_t exec_image_buf[256 * 4096];
-    memcpy(exec_image_buf, (const void *)(uintptr_t)image_ptr, (size_t)image_size);
-
-    if (!process_reset_for_exec(self->process_id)) {
-        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EINVAL;
+    if (!scheduler_snapshot_user_arguments(frame->rdx,frame->r10,&exec_arguments)) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EFAULT;
         return frame;
     }
 
-    if (!elf64_load_process(self->process_id, exec_image_buf,
-                            (size_t)image_size, &loaded) ||
-        !process_mark_ready(self->process_id)) {
+    static uint8_t exec_image_buf[256 * 4096];
+    memcpy(exec_image_buf, (const void *)(uintptr_t)image_ptr, (size_t)image_size);
+
+    /* Once teardown starts, never return to the old user instruction stream. */
+    if (!process_reset_for_exec(self->process_id))
+        return scheduler_user_exit(frame);
+
+    /* elf64_load_process performs the CREATED -> READY transition. If loading
+     * fails, restore READY before scheduling away from this process context. */
+    if (!elf64_load_process(self->process_id,exec_image_buf,
+                            (size_t)image_size,&loaded)) {
+        if (!process_mark_ready(self->process_id)) cpu_halt_forever();
         return scheduler_user_exit(frame);
     }
-
-    (void)elf64_setup_user_stack(self->process_id,&loaded.user_stack_top,
-                                 0,NULL,NULL,&rdi,&rsi,&rdx);
+    if (!elf64_setup_user_stack(self->process_id,&loaded.user_stack_top,
+            exec_arguments.argc,exec_arguments.argv,exec_arguments.envp,
+            &rdi,&rsi,&rdx))
+        return scheduler_user_exit(frame);
 
     frame->rip=loaded.entry;
     frame->user_rsp=loaded.user_stack_top;
