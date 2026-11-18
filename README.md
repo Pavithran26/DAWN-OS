@@ -46,8 +46,11 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - Built-in 16x16 vector/bitmap icon engine for system applications (Terminal, Files, Task Manager, Settings, Computer, Power, DAWN-OS Logo).
 - Window Manager and Compositor with Z-order stack management, click-to-focus, titlebar drag-and-drop, and Ruby/Emerald/Amber window control buttons.
 - Emerald Green Neo-Liquid Glass Desktop Environment featuring translucent frosted glass panels, bottom Taskbar, Start Menu / App Launcher, desktop icons, and top-right toast notifications.
+- Command shell (`dsh`) with quote-aware tokenizer, command history recall, environment variable table, and built-in filesystem, memory, disk, and process commands.
+- Graphical Terminal Emulator with 80x25 character grid, ANSI color formatting, line scrolling, blinking cursor, and Window Manager integration.
+- Graphical Task Manager with real-time CPU utilization graph, physical RAM gauge, process list with state/memory/CPU metrics, and process termination.
 
-The native terminal, task manager application, networking, installer, and recovery environment are scheduled in subsequent phases. Phase C (process and system calls), Phase D (virtual filesystem and filesystem drivers), Phase E (storage and partition management), Phase F (hardware and device management), and Phase G (graphics and desktop environment) are implemented.
+The networking stack, audio system, settings application, installer, and recovery environment are scheduled in subsequent phases. Phases C through I (process, syscalls, VFS, storage, hardware, graphics desktop, terminal, shell, and task manager) are implemented.
 
 **Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
 

@@ -34,6 +34,9 @@
 #include "gfx.h"
 #include "window_manager.h"
 #include "desktop.h"
+#include "shell.h"
+#include "terminal.h"
+#include "task_manager.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -803,6 +806,24 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: Emerald Green Neo-Liquid Glass desktop environment initialized\n");
 
+    if (!terminal_initialize()) {
+        serial_write("DAWN-OS: FAIL: terminal emulator initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: terminal emulator and shell engine ready\n");
+
+    if (!task_manager_initialize()) {
+        serial_write("DAWN-OS: FAIL: task manager initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: task manager and resource monitor ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1061,6 +1082,28 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: desktop taskbar, launcher and composition\n");
+
+    /* Phase H: Terminal and Shell */
+    if (!shell_self_test()) {
+        serial_write("DAWN-TEST: FAIL: shell command parser and built-ins\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: shell command parser, built-in commands and history\n");
+    if (!terminal_self_test()) {
+        serial_write("DAWN-TEST: FAIL: terminal emulator text grid and scrolling\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: terminal emulator text grid, scrolling and render buffer\n");
+
+    /* Phase I: Task Manager */
+    if (!task_manager_self_test()) {
+        serial_write("DAWN-TEST: FAIL: task manager process list and performance monitoring\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: task manager process list, performance graphs and controls\n");
 #endif
 
     if (framebuffer_response_valid()) {
