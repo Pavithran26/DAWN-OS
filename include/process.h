@@ -30,6 +30,9 @@ bool process_create(uint64_t *process_id);
 /* Return metadata only when child_id belongs to parent_id. */
 bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
                             struct process_info *info);
+/* Check if parent_id owns matching children; sets out_exited_child_id if one has EXITED. */
+bool process_has_children(uint64_t parent_id,int64_t target_child_id,
+                          uint64_t *out_exited_child_id);
 /* Collect an EXITED child, optionally copying its status to parent user memory.
  * The parent must be READY; status_address==0 discards the status. */
 bool process_collect_child(uint64_t parent_id,uint64_t child_id,

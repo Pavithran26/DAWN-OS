@@ -150,3 +150,14 @@
 - The child is reaped before its status is published. Collection is rejected if the child still owns unreaped child records or if the destination is not writable user memory.
 - This is the process-manager primitive for SYS_WAIT; it does not yet block a running parent or wake it when a child exits. The user syscall remains unimplemented.
 - Source-only update. No compilation, QEMU, BIOS/UEFI, or CI tests were run.
+
+## Full blocking SYS_WAIT and scheduler wakeup semantics (2026-11-18)
+
+- Extended syscall ABI v1 with `SYS_WAIT` (number 5). Accepts target child PID in RDI (or <= 0 for any child) and user status address in RSI.
+- Added `process_has_children` to inspect whether a parent owns matching child records and whether any has already transitioned to `PROCESS_STATE_EXITED`.
+- Extended the scheduler with a `THREAD_BLOCKED` state. If a matching child exists but has not exited, the calling parent thread is placed in `THREAD_BLOCKED` with its target child filter and user status destination recorded.
+- When an exiting child process calls `SYS_EXIT` or faults, the scheduler identifies any thread blocked waiting for that child (or any child of that parent) and transitions it to `THREAD_READY`.
+- During context switch away from the dying child, the child is marked `PROCESS_STATE_EXITED`, the parent collects the child, its status is written into the parent's user address space, the child is reaped, and the child PID is returned in RAX when the parent resumes.
+- If a child has already exited at the time `SYS_WAIT` is called, it is collected immediately without blocking. If no matching children exist, `SYS_WAIT` immediately returns `-ECHILD`.
+- Added `scheduler_wait_self_test` verifying parent child creation, yield, child exit, collection, and parent notification.
+- Source-only increment. No compilation, QEMU, BIOS/UEFI, or CI test execution was run.

@@ -310,6 +310,30 @@ bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
     return true;
 }
 
+bool process_has_children(uint64_t parent_id,int64_t target_child_id,
+                          uint64_t *out_exited_child_id) {
+    const uint64_t flags=read_rflags();
+    bool has_child=false;
+    if (!initialized || parent_id==0ULL || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    if (out_exited_child_id!=NULL) *out_exited_child_id=0ULL;
+    for (size_t i=0U;i<DAWN_PROCESS_MAX;i++) {
+        if (processes[i].state!=PROCESS_STATE_FREE && processes[i].parent_id==parent_id) {
+            if (target_child_id<=0 || processes[i].id==(uint64_t)target_child_id) {
+                has_child=true;
+                if (processes[i].state==PROCESS_STATE_EXITED) {
+                    if (out_exited_child_id!=NULL) {
+                        *out_exited_child_id=processes[i].id;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    restore_interrupt_flag(flags);
+    return has_child;
+}
+
 bool process_collect_child(uint64_t parent_id,uint64_t child_id,
                            uint64_t status_address) {
     const uint64_t flags=read_rflags();
@@ -575,21 +599,28 @@ static bool process_manager_self_test_locked(void) {
     /* A child inherits the active process as its parent. Parent resources
      * remain allocated until all child records have been reaped. */
     {
-        uint64_t parent_id=0ULL,child_id=0ULL;
+        uint64_t parent_id=0ULL,child_id=0ULL,exited_found=0ULL;
         struct process_info child_info={0};
         if (!process_create(&parent_id) || !process_mark_ready(parent_id) ||
+            process_has_children(parent_id,0,&exited_found) ||
             !process_activate(parent_id) || process_active_id()!=parent_id ||
             !process_create(&child_id) || child_id==0ULL ||
+            !process_has_children(parent_id,0,&exited_found) || exited_found!=0ULL ||
+            !process_has_children(parent_id,(int64_t)child_id,&exited_found) ||
+            process_has_children(parent_id,99999,&exited_found) ||
             !process_get_child_info(parent_id,child_id,&child_info) ||
             child_info.parent_id!=parent_id ||
             child_info.state!=PROCESS_STATE_CREATED ||
             !process_mark_ready(child_id) || !process_deactivate() ||
             !process_mark_exited(child_id) ||
+            !process_has_children(parent_id,0,&exited_found) || exited_found!=child_id ||
             !process_mark_exited(parent_id) ||
             process_reap(parent_id) ||
             !process_get_child_info(parent_id,child_id,&child_info) ||
             child_info.state!=PROCESS_STATE_EXITED ||
-            !process_reap(child_id) || !process_reap(parent_id) ||
+            !process_reap(child_id) ||
+            process_has_children(parent_id,0,&exited_found) ||
+            !process_reap(parent_id) ||
             process_get_child_info(parent_id,child_id,&child_info))
             return false;
     }

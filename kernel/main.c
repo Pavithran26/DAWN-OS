@@ -839,6 +839,12 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: controlled CPL3 ELF64 launch, syscall exit, scheduler return and process reaping\n");
+    if (!scheduler_wait_self_test()) {
+        serial_write("DAWN-TEST: FAIL: parent child wait and collection\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: parent child wait, blocking and collection\n");
     if (!apic_local_timer_periodic_self_test()) {
         serial_write("DAWN-TEST: FAIL: Local APIC periodic stop/restart checks\n");
         qemu_debug_exit(QEMU_TEST_FAIL);

@@ -19,7 +19,7 @@
 #define CPU_RFLAGS_INTERRUPT_ENABLE (1ULL << 9)
 #define INITIAL_THREAD_RFLAGS 0x202ULL
 
-enum thread_state { THREAD_FREE=0, THREAD_READY, THREAD_RUNNING, THREAD_DEAD };
+enum thread_state { THREAD_FREE=0, THREAD_READY, THREAD_RUNNING, THREAD_BLOCKED, THREAD_DEAD };
 
 struct kernel_thread {
     struct interrupt_frame *saved_frame;
@@ -28,6 +28,8 @@ struct kernel_thread {
     uint64_t id;
     uint64_t process_id;
     enum thread_state state;
+    int64_t wait_child_id;
+    uint64_t wait_status_address;
     uint8_t stack[KERNEL_THREAD_STACK_SIZE] __attribute__((aligned(16)));
 };
 
@@ -177,12 +179,16 @@ bool scheduler_initialize(void) {
         thread_pool[i].id=0ULL;
         thread_pool[i].process_id=0ULL;
         thread_pool[i].state=THREAD_FREE;
+        thread_pool[i].wait_child_id=0;
+        thread_pool[i].wait_status_address=0ULL;
     }
     bootstrap_thread.saved_frame=NULL;
     bootstrap_thread.entry=NULL;
     bootstrap_thread.argument=NULL;
     bootstrap_thread.id=0ULL;
     bootstrap_thread.state=THREAD_RUNNING;
+    bootstrap_thread.wait_child_id=0;
+    bootstrap_thread.wait_status_address=0ULL;
     ready_cursor=0ULL;
     next_thread_id=1ULL;
     scheduler_running=false;
@@ -222,6 +228,8 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
     thread->argument=argument;
     thread->id=next_thread_id++;
     thread->process_id=0ULL;
+    thread->wait_child_id=0;
+    thread->wait_status_address=0ULL;
     thread->state=THREAD_READY;
     thread_frame_initialize(thread);
     increment_saturated(&counters.threads_created);
@@ -339,9 +347,27 @@ static void scheduler_switch_process_context(
     if (outgoing_id!=incoming_id) {
         if (!process_switch_to(incoming_id)) cpu_halt_forever();
         if (outgoing!=&bootstrap_thread &&
-            outgoing->state==THREAD_DEAD && outgoing_id!=0ULL &&
-            !process_mark_exited(outgoing_id))
-            cpu_halt_forever();
+            outgoing->state==THREAD_DEAD && outgoing_id!=0ULL) {
+            if (!process_mark_exited(outgoing_id))
+                cpu_halt_forever();
+            for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+                struct kernel_thread *t=&thread_pool[i];
+                if (t->state!=THREAD_FREE && t->state!=THREAD_DEAD && t->process_id!=0ULL) {
+                    if (t->wait_child_id<=0 || (uint64_t)t->wait_child_id==outgoing_id) {
+                        struct process_info child_info={0};
+                        if (process_get_info(outgoing_id,&child_info) && child_info.parent_id==t->process_id) {
+                            if (process_collect_child(t->process_id,outgoing_id,t->wait_status_address)) {
+                                if (t->saved_frame!=NULL)
+                                    t->saved_frame->rax=outgoing_id;
+                                t->wait_child_id=0;
+                                t->wait_status_address=0ULL;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -362,7 +388,7 @@ struct interrupt_frame *scheduler_handle_interrupt(
             cpu_halt_forever();
     } else if ((self==&bootstrap_thread && self->state!=THREAD_READY) ||
                (self!=&bootstrap_thread && self->state!=THREAD_READY &&
-                self->state!=THREAD_DEAD)) {
+                self->state!=THREAD_DEAD && self->state!=THREAD_BLOCKED)) {
         cpu_halt_forever();
     }
 
@@ -376,7 +402,7 @@ struct interrupt_frame *scheduler_handle_interrupt(
 
     next=find_ready_thread(self);
     if (next==NULL) {
-        if (self->state==THREAD_DEAD) {
+        if (self->state==THREAD_DEAD || self->state==THREAD_BLOCKED) {
             /* The bootstrap frame is the completion return path after the
              * final worker exits. It is intentionally not in the worker pool. */
             if (self==&bootstrap_thread ||
@@ -426,6 +452,20 @@ struct interrupt_frame *scheduler_user_exit(
             cpu_halt_forever();
         increment_saturated(&counters.user_exit_syscalls);
     }
+    {
+        struct process_info child_info={0};
+        if (process_get_info(self->process_id,&child_info) && child_info.parent_id!=0ULL) {
+            for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+                struct kernel_thread *waiter=&thread_pool[i];
+                if (waiter->state==THREAD_BLOCKED && waiter->process_id==child_info.parent_id) {
+                    if (waiter->wait_child_id<=0 || (uint64_t)waiter->wait_child_id==self->process_id) {
+                        waiter->state=THREAD_READY;
+                        break;
+                    }
+                }
+            }
+        }
+    }
     self->state=THREAD_DEAD;
     increment_saturated(&counters.threads_exited);
     if (counters.active_threads>0ULL) --counters.active_threads;
@@ -451,6 +491,55 @@ struct interrupt_frame *scheduler_user_yield(
     self->state=THREAD_READY;
     increment_saturated(&counters.voluntary_yields);
     increment_saturated(&counters.user_yield_syscalls);
+    return scheduler_handle_interrupt(frame,false);
+}
+
+struct interrupt_frame *scheduler_user_wait(
+    struct interrupt_frame *frame
+) {
+    struct kernel_thread *self=current_thread;
+    int64_t target_child=0;
+    uint64_t status_address=0ULL;
+    uint64_t exited_child_id=0ULL;
+    bool has_children=false;
+    if (!initialized || !scheduler_running || frame==NULL ||
+        self==NULL || self==&bootstrap_thread ||
+        self->state!=THREAD_RUNNING || self->process_id==0ULL ||
+        process_active_id()!=self->process_id ||
+        frame->vector!=(uint64_t)DAWN_SYSCALL_VECTOR ||
+        frame->rax!=(uint64_t)DAWN_SYS_WAIT ||
+        !interrupt_frame_user_context_valid(frame) ||
+        !thread_frame_valid(self,frame))
+        cpu_halt_forever();
+
+    target_child=(int64_t)frame->rdi;
+    status_address=frame->rsi;
+    increment_saturated(&counters.user_wait_syscalls);
+
+    if (status_address!=0ULL && (status_address&7ULL)!=0ULL) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EINVAL;
+        return frame;
+    }
+
+    has_children=process_has_children(self->process_id,target_child,&exited_child_id);
+    if (!has_children) {
+        frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_ECHILD;
+        return frame;
+    }
+
+    if (exited_child_id!=0ULL) {
+        if (!process_collect_child(self->process_id,exited_child_id,status_address)) {
+            frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_EFAULT;
+            return frame;
+        }
+        frame->rax=exited_child_id;
+        return frame;
+    }
+
+    self->wait_child_id=target_child;
+    self->wait_status_address=status_address;
+    self->state=THREAD_BLOCKED;
+    increment_saturated(&counters.user_wait_blocks);
     return scheduler_handle_interrupt(frame,false);
 }
 
@@ -926,5 +1015,89 @@ bool scheduler_preemption_self_test(void) {
             return false;
     }
     return true;
+}
+
+static volatile uint64_t wait_test_parent_observed_child;
+static volatile uint64_t wait_test_child_ran;
+
+static void scheduler_wait_test_child_worker(void *argument) {
+    (void)argument;
+    wait_test_child_ran=1ULL;
+}
+
+static void scheduler_wait_test_parent_worker(void *argument) {
+    const uint64_t child_id=(uint64_t)(uintptr_t)argument;
+    uint64_t exited_child=0ULL;
+    while (!process_has_children(process_active_id(),(int64_t)child_id,&exited_child) || exited_child==0ULL) {
+        kernel_thread_yield();
+    }
+    if (process_collect_child(process_active_id(),child_id,0ULL)) {
+        wait_test_parent_observed_child=child_id;
+    }
+}
+
+bool scheduler_wait_self_test(void) {
+    uint64_t parent_pid=0ULL,child_pid=0ULL;
+    uint64_t parent_tid=0ULL,child_tid=0ULL;
+    struct scheduler_stats before={0},after={0};
+    bool ok=false;
+    if (!initialized || scheduler_running || current_thread!=&bootstrap_thread || process_active_id()!=0ULL)
+        return false;
+    wait_test_parent_observed_child=0ULL;
+    wait_test_child_ran=0ULL;
+    scheduler_get_stats(&before);
+    if (!process_create(&parent_pid) || !process_mark_ready(parent_pid))
+        return false;
+    if (!process_activate(parent_pid)) {
+        process_mark_exited(parent_pid);
+        process_reap(parent_pid);
+        return false;
+    }
+    if (!process_create(&child_pid) || !process_mark_ready(child_pid)) {
+        process_deactivate();
+        process_mark_exited(parent_pid);
+        process_reap(parent_pid);
+        return false;
+    }
+    if (!process_deactivate()) {
+        process_mark_exited(child_pid);
+        process_reap(child_pid);
+        process_mark_exited(parent_pid);
+        process_reap(parent_pid);
+        return false;
+    }
+    if (!kernel_thread_create(scheduler_wait_test_parent_worker,(void *)(uintptr_t)child_pid,&parent_tid) ||
+        !kernel_thread_bind_process(parent_tid,parent_pid)) {
+        scheduler_test_discard_ready_thread(parent_tid);
+        process_mark_exited(child_pid);
+        process_reap(child_pid);
+        process_mark_exited(parent_pid);
+        process_reap(parent_pid);
+        return false;
+    }
+    if (!kernel_thread_create(scheduler_wait_test_child_worker,NULL,&child_tid) ||
+        !kernel_thread_bind_process(child_tid,child_pid)) {
+        scheduler_test_discard_ready_thread(child_tid);
+        scheduler_test_discard_ready_thread(parent_tid);
+        process_mark_exited(child_pid);
+        process_reap(child_pid);
+        process_mark_exited(parent_pid);
+        process_reap(parent_pid);
+        return false;
+    }
+    if (!scheduler_run_until_idle()) {
+        process_mark_exited(child_pid);
+        process_reap(child_pid);
+        process_mark_exited(parent_pid);
+        process_reap(parent_pid);
+        return false;
+    }
+    scheduler_get_stats(&after);
+    ok=(wait_test_child_ran==1ULL &&
+        wait_test_parent_observed_child==child_pid &&
+        after.threads_exited>=before.threads_exited+2ULL &&
+        after.active_threads==0ULL);
+    (void)process_reap(parent_pid);
+    return ok;
 }
 #endif

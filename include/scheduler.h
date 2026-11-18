@@ -15,6 +15,8 @@ struct scheduler_stats {
     uint64_t active_threads;
     uint64_t user_exit_syscalls;
     uint64_t user_yield_syscalls;
+    uint64_t user_wait_syscalls;
+    uint64_t user_wait_blocks;
 };
 bool scheduler_initialize(void);
 bool kernel_thread_create(kernel_thread_entry entry, void *argument,
@@ -34,11 +36,14 @@ struct interrupt_frame *scheduler_handle_interrupt(
 struct interrupt_frame *scheduler_user_exit(struct interrupt_frame *frame);
 /* Cooperatively yield a validated CPL3 syscall frame to another ready task. */
 struct interrupt_frame *scheduler_user_yield(struct interrupt_frame *frame);
+/* Wait for a child process to exit; blocks until child exits if none has exited. */
+struct interrupt_frame *scheduler_user_wait(struct interrupt_frame *frame);
 #ifdef DAWN_KERNEL_TEST
 bool scheduler_self_test(void);
 bool scheduler_preemption_self_test(void);
 bool scheduler_process_context_self_test(void);
 bool scheduler_user_context_self_test(void);
 bool scheduler_elf_launch_self_test(void);
+bool scheduler_wait_self_test(void);
 #endif
 #endif
