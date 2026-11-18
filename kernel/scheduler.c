@@ -429,6 +429,28 @@ struct interrupt_frame *scheduler_user_exit(
     return scheduler_handle_interrupt(frame,false);
 }
 
+struct interrupt_frame *scheduler_user_yield(
+    struct interrupt_frame *frame
+) {
+    struct kernel_thread *self=current_thread;
+    if (!initialized || !scheduler_running || frame==NULL ||
+        self==NULL || self==&bootstrap_thread ||
+        self->state!=THREAD_RUNNING || self->process_id==0ULL ||
+        process_active_id()!=self->process_id ||
+        frame->vector!=(uint64_t)DAWN_SYSCALL_VECTOR ||
+        frame->rax!=(uint64_t)DAWN_SYS_YIELD ||
+        !interrupt_frame_user_context_valid(frame) ||
+        !thread_frame_valid(self,frame))
+        cpu_halt_forever();
+
+    /* Preserve the user IRETQ frame and return zero when this task resumes. */
+    frame->rax=0ULL;
+    self->state=THREAD_READY;
+    increment_saturated(&counters.voluntary_yields);
+    increment_saturated(&counters.user_yield_syscalls);
+    return scheduler_handle_interrupt(frame,false);
+}
+
 bool scheduler_run_until_idle(void) {
     const uint64_t saved_flags=read_rflags();
     if (!initialized || scheduler_running ||
@@ -504,6 +526,9 @@ static void scheduler_test_noop_worker(void *argument) {
 static void scheduler_user_timer_peer(void *argument) {
     (void)argument;
     user_timer_peer_ran=1ULL;
+    /* Stay READY once so both explicit user yield and timer preemption can
+     * hand control to this task before it finally exits. */
+    kernel_thread_yield();
 }
 static void scheduler_test_discard_ready_thread(uint64_t thread_id) {
     if (thread_id==0ULL) return;
@@ -795,14 +820,16 @@ bool scheduler_elf_launch_self_test(void) {
     {
         const bool exited_by_syscall=
             after.user_exit_syscalls==before.user_exit_syscalls+1ULL;
+        const bool yielded_by_syscall=
+            after.user_yield_syscalls==before.user_yield_syscalls+1ULL;
         const bool scheduler_accounting=
             after.threads_exited==before.threads_exited+2ULL &&
             before.active_threads==after.active_threads+2ULL;
         const bool timer_preempted=
             after.timer_preemptions>before.timer_preemptions;
         const bool process_exited=process.state==PROCESS_STATE_EXITED;
-        if (!exited_by_syscall || !scheduler_accounting ||
-            !timer_preempted || !process_exited)
+        if (!exited_by_syscall || !yielded_by_syscall ||
+            !scheduler_accounting || !timer_preempted || !process_exited)
             goto cleanup;
     }
     {

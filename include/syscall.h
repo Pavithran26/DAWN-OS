@@ -10,8 +10,9 @@
  *   RDI, RSI, RDX, R10, R8, R9 = arguments 0..5
  *   RAX = non-negative result or negative DAWN_ERRNO_* value
  *
- * SYS_EXIT is handled by the CPL3 interrupt/scheduler path; the kernel-callable
- * dispatcher returns ENOSYS for it because it has no user thread to terminate.
+ * SYS_EXIT and SYS_YIELD are handled by the CPL3 scheduler path; the
+ * kernel-callable dispatcher returns ENOSYS for them because it has no user
+ * thread to terminate or yield. SYS_GETPID returns the active process ID.
  */
 #define DAWN_SYSCALL_ABI_VERSION 1ULL
 #define DAWN_SYSCALL_VECTOR 0x80U
@@ -20,7 +21,9 @@
 enum dawn_syscall_number {
     DAWN_SYS_ABI_VERSION = 0,
     DAWN_SYS_WRITE = 1,
-    DAWN_SYS_EXIT = 2
+    DAWN_SYS_EXIT = 2,
+    DAWN_SYS_GETPID = 3,
+    DAWN_SYS_YIELD = 4
 };
 
 enum dawn_syscall_errno {

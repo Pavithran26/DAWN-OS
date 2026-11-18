@@ -57,7 +57,7 @@ build/apic.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h |
 build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h include/apic.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h | build
+build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h | build
@@ -105,7 +105,7 @@ build/apic-test.o: kernel/apic.c include/apic.h include/acpi.h include/page_tabl
 build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h include/apic.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h | build
+build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h | build

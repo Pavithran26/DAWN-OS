@@ -116,3 +116,11 @@
 - scheduler_elf_launch_self_test runs with the calibrated periodic LAPIC timer and a READY kernel peer. It requires the timer to preempt the user thread, the peer to execute, and the user thread to resume and exit through the syscall path.
 - Assertions cover timer-preemption counters, peer progress, user-exit accounting, process exit and reaping. Timer cleanup is included on failure paths.
 - This remains uncompiled/unexecuted source until the BIOS and OVMF test matrix is run.
+
+
+## Userspace identity and cooperative yield (2026-11-18)
+
+- Extended ABI v1 with `SYS_GETPID` and `SYS_YIELD` without renumbering existing calls. `SYS_GETPID` reports the active process identifier; `SYS_YIELD` is handled only from a validated CPL3 syscall frame and returns zero when the task resumes.
+- The scheduler preserves the interrupted user frame, marks the process-bound thread READY, and dispatches another READY task. User-yield syscalls have separate accounting from timer preemptions and kernel-thread yields.
+- The synthetic CPL3 dispatch test checks process identity. The test ELF checks that GETPID is non-zero, requires a zero YIELD result, then writes its success marker and exits. Its kernel peer yields once so it remains available for timer-driven preemption as well.
+- This is source-level coverage only. The new syscall path, user-mode cooperative yield, timer interaction, and BIOS/UEFI boot matrix have not been compiled or executed in this increment.

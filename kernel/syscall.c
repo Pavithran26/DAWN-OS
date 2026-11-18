@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "syscall.h"
 #include "page_table.h"
+#include "process.h"
 
 #define SERIAL_COM1 0x3f8U
 #define SERIAL_POLL_LIMIT 100000U
@@ -69,7 +70,10 @@ int64_t syscall_dispatch(uint64_t number,
             return (int64_t)DAWN_SYSCALL_ABI_VERSION;
         case DAWN_SYS_WRITE:
             return syscall_write(argument0,argument1,argument2);
+        case DAWN_SYS_GETPID:
+            return (int64_t)process_active_id();
         case DAWN_SYS_EXIT:
+        case DAWN_SYS_YIELD:
         default:
             return -(int64_t)DAWN_ERRNO_ENOSYS;
     }
@@ -79,6 +83,12 @@ int64_t syscall_dispatch(uint64_t number,
 bool syscall_self_test(void) {
     if (syscall_dispatch(DAWN_SYS_ABI_VERSION,0ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=(int64_t)DAWN_SYSCALL_ABI_VERSION)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_GETPID,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=0)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_YIELD,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_ENOSYS)
         return false;
     if (syscall_dispatch(DAWN_SYS_WRITE,DAWN_STDOUT_FD,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=0) return false;

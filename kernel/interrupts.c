@@ -330,9 +330,12 @@ struct interrupt_frame *interrupt_dispatch(struct interrupt_frame *frame) {
         if (frame->vector==(uint64_t)DAWN_SYSCALL_VECTOR) {
             if (!interrupt_frame_user_structure_valid(frame))
                 interrupt_fatal(frame);
-            if (frame->rax==(uint64_t)DAWN_SYS_EXIT ||
-                !interrupt_frame_user_context_valid(frame))
+            if (frame->rax==(uint64_t)DAWN_SYS_EXIT)
                 return scheduler_user_exit(frame);
+            if (!interrupt_frame_user_context_valid(frame))
+                return scheduler_user_exit(frame);
+            if (frame->rax==(uint64_t)DAWN_SYS_YIELD)
+                return scheduler_user_yield(frame);
             frame->rax=(uint64_t)syscall_dispatch(
                 frame->rax,frame->rdi,frame->rsi,frame->rdx,
                 frame->r10,frame->r8,frame->r9);
@@ -542,6 +545,11 @@ bool interrupts_self_test(void) {
         frame.rax=DAWN_SYS_ABI_VERSION;
         result=interrupt_dispatch(&frame)==&frame &&
                frame.rax==(uint64_t)DAWN_SYSCALL_ABI_VERSION;
+        if (result) {
+            frame.rax=(uint64_t)DAWN_SYS_GETPID;
+            result=interrupt_dispatch(&frame)==&frame &&
+                   frame.rax==process_id;
+        }
 syscall_user_cleanup:
         if (active) {
             if (process_deactivate()) active=false;
