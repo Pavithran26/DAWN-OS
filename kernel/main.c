@@ -42,6 +42,7 @@
 #include "settings.h"
 #include "installer.h"
 #include "security.h"
+#include "app_runtime.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -874,6 +875,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: security subsystem, user accounts, authentication and audit logging ready\n");
 
+    if (!app_runtime_initialize()) {
+        serial_write("DAWN-OS: FAIL: application runtime initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: application runtime, dlibc heap pool and package manager ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1194,6 +1204,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: security password hashing, user authentication, permissions and address boundaries\n");
+
+    /* Phase O: Application Runtime and Software Ecosystem */
+    if (!app_runtime_self_test()) {
+        serial_write("DAWN-TEST: FAIL: application runtime dlibc, heap pool and package manager\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: dlibc strings, memory ops, heap allocator, package registry and app lifecycle\n");
 #endif
 
     if (framebuffer_response_valid()) {
