@@ -239,10 +239,14 @@ void gfx_draw_gradient_v(struct gfx_surface *surf, uint32_t x, uint32_t y, uint3
     uint32_t r0 = (top_col >> 16) & 0xFFU, g0 = (top_col >> 8) & 0xFFU, b0 = top_col & 0xFFU;
     uint32_t r1 = (bot_col >> 16) & 0xFFU, g1 = (bot_col >> 8) & 0xFFU, b1 = bot_col & 0xFFU;
 
+    int32_t dr = (int32_t)r1 - (int32_t)r0;
+    int32_t dg = (int32_t)g1 - (int32_t)g0;
+    int32_t db = (int32_t)b1 - (int32_t)b0;
+
     for (uint32_t r = 0; r < h; r++) {
-        uint32_t cr = r0 + ((r1 - r0) * r) / h;
-        uint32_t cg = g0 + ((g1 - g0) * r) / h;
-        uint32_t cb = b0 + ((b1 - b0) * r) / h;
+        uint32_t cr = (uint32_t)((int32_t)r0 + (dr * (int32_t)r) / (int32_t)h) & 0xFFU;
+        uint32_t cg = (uint32_t)((int32_t)g0 + (dg * (int32_t)r) / (int32_t)h) & 0xFFU;
+        uint32_t cb = (uint32_t)((int32_t)b0 + (db * (int32_t)r) / (int32_t)h) & 0xFFU;
         uint32_t col = 0xFF000000U | (cr << 16) | (cg << 8) | cb;
         gfx_draw_rect_filled(surf, x, y + r, w, 1, col);
     }

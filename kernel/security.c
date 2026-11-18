@@ -73,7 +73,7 @@ bool security_verify_password(const char *password, uint32_t salt, const uint8_t
     /* Constant-time memory comparison to mitigate timing attacks */
     uint8_t diff = 0;
     for (size_t i = 0; i < SECURITY_HASH_SIZE; i++) {
-        diff |= (computed[i] ^ digest[i]);
+        diff = (uint8_t)(diff | (computed[i] ^ digest[i]));
     }
 
     return diff == 0;

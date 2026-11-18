@@ -76,7 +76,7 @@ static int64_t ramfs_write(struct vfs_node *node, uint64_t offset, size_t size, 
     if (node == NULL || buffer == NULL || node->type != VFS_TYPE_FILE) return -1;
     struct ramfs_node_data *data = (struct ramfs_node_data *)node->device_or_fs_data;
     if (data == NULL) return -1;
-    if (offset + size > RAMFS_MAX_FILE_SIZE) return -1;
+    if (offset > RAMFS_MAX_FILE_SIZE || size > RAMFS_MAX_FILE_SIZE - (size_t)offset) return -1;
     const uint8_t *src = (const uint8_t *)buffer;
     for (size_t i = 0; i < size; i++) {
         data->buffer[offset + i] = src[i];

@@ -268,7 +268,7 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
             return 1;
         }
         struct vfs_node *file = NULL;
-        if (!vfs_open(args[1], VFS_FLAG_READ, &file)) {
+        if (!vfs_resolve_path(args[1], &file) || file == NULL) {
             shell_output_write(ctx, "cat: cannot open file\n");
             return 1;
         }
@@ -279,7 +279,6 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
             shell_output_write(ctx, read_buf);
             shell_output_write(ctx, "\n");
         }
-        vfs_close(file);
         ctx->last_exit_code = 0;
         return 0;
     }
@@ -291,7 +290,7 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
             return 1;
         }
         struct vfs_node *f = NULL;
-        if (!vfs_create(args[1], 0644, &f)) {
+        if (vfs_create(args[1], 0644, &f) != 0) {
             shell_output_write(ctx, "touch: failed to create file\n");
             return 1;
         }
@@ -305,7 +304,7 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
             shell_output_write(ctx, "usage: mkdir <directory>\n");
             return 1;
         }
-        if (!vfs_mkdir(args[1], 0755)) {
+        if (vfs_mkdir(args[1], 0755, NULL) != 0) {
             shell_output_write(ctx, "mkdir: failed to create directory\n");
             return 1;
         }
@@ -319,7 +318,7 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
             shell_output_write(ctx, "usage: rm <file>\n");
             return 1;
         }
-        if (!vfs_unlink(args[1])) {
+        if (vfs_unlink(args[1]) != 0) {
             shell_output_write(ctx, "rm: failed to unlink\n");
             return 1;
         }

@@ -145,10 +145,10 @@ void kernel_panic(const char *reason, const struct cpu_crash_context *ctx) {
     serial_write("========================================\nSystem halted.\n");
 
     /* Render Emerald Screen of Death if framebuffer active */
-    gfx_surface_t *fb = gfx_get_framebuffer();
-    if (fb != NULL && fb->pixels != NULL) {
-        gfx_fill_rect(fb, 0, 0, (int32_t)fb->width, (int32_t)fb->height, 0xFF05150AU);
-        gfx_fill_rect(fb, 0, 0, (int32_t)fb->width, 48, 0xFF00C853U);
+    struct gfx_surface *fb = gfx_get_framebuffer();
+    if (fb != NULL && fb->buffer != NULL) {
+        gfx_draw_rect_filled(fb, 0, 0, fb->width, fb->height, 0xFF05150AU);
+        gfx_draw_rect_filled(fb, 0, 0, fb->width, 48, 0xFF00C853U);
         gfx_draw_string(fb, 32, 16, "DAWN-OS SYSTEM CRASH — EMERALD DIAGNOSTIC SCREEN", 0xFF05150AU);
 
         int32_t y = 80;

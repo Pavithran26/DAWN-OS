@@ -231,13 +231,15 @@ int storage_automount_filesystems(void) {
                 str_copy(&mnt_path[5], part->slice_name, 58);
 
                 /* Create mount point in VFS and mount */
-                (void)vfs_mkdir(mnt_path, 0755);
-                struct vfs_node *fat_root = NULL;
-                if (fat32_mount(bdev, &fat_root)) {
-                    if (vfs_mount(mnt_path, fat_root, "fat32")) {
-                        part->mounted = true;
-                        str_copy(part->mount_point, mnt_path, sizeof(part->mount_point));
-                        mounted_count++;
+                (void)vfs_mkdir(mnt_path, 0755, NULL);
+                if (bdev->driver_data != NULL) {
+                    struct vfs_node *fat_root = fat32_mount_image(bdev->driver_data, (size_t)bdev->capacity_bytes);
+                    if (fat_root != NULL) {
+                        if (vfs_mount(mnt_path, fat_root, "fat32")) {
+                            part->mounted = true;
+                            str_copy(part->mount_point, mnt_path, sizeof(part->mount_point));
+                            mounted_count++;
+                        }
                     }
                 }
             }

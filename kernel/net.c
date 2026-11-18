@@ -199,8 +199,12 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
         /* UDP Protocol */
         if (ip->protocol == IPPROTO_UDP && len >= sizeof(struct eth_header) + ip_hdr_len + sizeof(struct udp_header)) {
             const struct udp_header *udp = (const struct udp_header *)(packet + sizeof(struct eth_header) + ip_hdr_len);
+            uint16_t ulen = ntohs(udp->length);
+            if (ulen < sizeof(struct udp_header)) return -1;
             uint16_t dport = ntohs(udp->dst_port);
-            size_t payload_len = (size_t)ntohs(udp->length) - sizeof(struct udp_header);
+            size_t avail = len - (sizeof(struct eth_header) + ip_hdr_len + sizeof(struct udp_header));
+            size_t payload_len = (size_t)(ulen - sizeof(struct udp_header));
+            if (payload_len > avail) payload_len = avail;
             const uint8_t *payload = packet + sizeof(struct eth_header) + ip_hdr_len + sizeof(struct udp_header);
 
             for (size_t s = 0; s < MAX_NET_SOCKETS; s++) {

@@ -67,8 +67,8 @@ bool installer_start(const struct install_config *cfg) {
     if (!installer_initialized) installer_initialize();
 
     /* Validate disk */
-    struct storage_disk_info disk;
-    if (!storage_get_disk(cfg->target_disk_id, &disk)) {
+    const struct storage_disk_desc *disk = storage_get_disk_info(cfg->target_disk_id);
+    if (disk == NULL) {
         current_status.failed = true;
         current_status.current_stage = INSTALL_STAGE_FAILED;
         str_copy(current_status.error_message, "Target disk not found in storage inventory", sizeof(current_status.error_message));
@@ -76,7 +76,7 @@ bool installer_start(const struct install_config *cfg) {
     }
 
     uint64_t total_req = cfg->esp_size_bytes + cfg->system_size_bytes + cfg->data_size_bytes;
-    if (total_req > disk.capacity_bytes) {
+    if (total_req > disk->capacity_bytes) {
         current_status.failed = true;
         current_status.current_stage = INSTALL_STAGE_FAILED;
         str_copy(current_status.error_message, "Insufficient disk capacity for installation", sizeof(current_status.error_message));
@@ -108,23 +108,23 @@ bool installer_step(void) {
 
         case INSTALL_STAGE_PARTITIONING: {
             installer_log("Creating partitions (ESP, System Root, Data)");
-            enum partition_table_type ptype = (current_config.target_type == INSTALL_TARGET_GPT_UEFI)
-                                            ? PARTITION_TABLE_GPT
-                                            : PARTITION_TABLE_MBR;
+            const struct storage_disk_desc *disk = storage_get_disk_info(current_config.target_disk_id);
+            if (disk == NULL) {
+                current_status.failed = true;
+                return false;
+            }
 
-            uint32_t disk_id = current_config.target_disk_id;
-            uint64_t start_lba = 2048; /* 1 MiB alignment */
             uint64_t esp_lba_count = current_config.esp_size_bytes / 512;
             uint64_t sys_lba_count = current_config.system_size_bytes / 512;
+            char slice_name[BLOCK_DEV_NAME_MAX];
 
             if (current_config.target_type == INSTALL_TARGET_GPT_UEFI) {
                 /* Create ESP partition */
-                (void)storage_create_partition(disk_id, ptype, start_lba, esp_lba_count, PART_TYPE_EFI_SYSTEM);
-                start_lba += esp_lba_count;
+                (void)storage_create_partition(disk->name, esp_lba_count, MBR_TYPE_FAT32_LBA, slice_name);
             }
 
             /* Create Root System partition */
-            (void)storage_create_partition(disk_id, ptype, start_lba, sys_lba_count, PART_TYPE_BASIC_DATA);
+            (void)storage_create_partition(disk->name, sys_lba_count, MBR_TYPE_FAT32_LBA, slice_name);
 
             current_status.current_stage = INSTALL_STAGE_FORMATTING;
             current_status.progress_percent = 35;
@@ -134,10 +134,11 @@ bool installer_step(void) {
 
         case INSTALL_STAGE_FORMATTING: {
             installer_log("Formatting partitions with FAT32 filesystem");
-            uint32_t disk_id = current_config.target_disk_id;
-
-            /* Format partition 0 (or 1) with FAT32 */
-            (void)storage_format_partition(disk_id, 0, "DAWN-ROOT");
+            const struct storage_disk_desc *disk = storage_get_disk_info(current_config.target_disk_id);
+            if (disk != NULL && disk->partition_count > 0) {
+                const char *slice = disk->partitions[0].slice_name;
+                (void)storage_format_partition(slice, "fat32", "DAWN-ROOT");
+            }
 
             current_status.current_stage = INSTALL_STAGE_COPYING_FILES;
             current_status.progress_percent = 55;
@@ -150,12 +151,12 @@ bool installer_step(void) {
             str_copy(current_status.current_file, "/boot/dawnos.elf", sizeof(current_status.current_file));
 
             /* Ensure required system directory structure in VFS */
-            (void)vfs_create("/boot", VFS_MODE_DIR);
-            (void)vfs_create("/bin", VFS_MODE_DIR);
-            (void)vfs_create("/sys", VFS_MODE_DIR);
-            (void)vfs_create("/dev", VFS_MODE_DIR);
-            (void)vfs_create("/var", VFS_MODE_DIR);
-            (void)vfs_create("/var/log", VFS_MODE_DIR);
+            (void)vfs_mkdir("/boot", 0755, NULL);
+            (void)vfs_mkdir("/bin", 0755, NULL);
+            (void)vfs_mkdir("/sys", 0755, NULL);
+            (void)vfs_mkdir("/dev", 0755, NULL);
+            (void)vfs_mkdir("/var", 0755, NULL);
+            (void)vfs_mkdir("/var/log", 0755, NULL);
 
             /* Generate limine.conf bootloader configuration */
             const char *limine_cfg =
@@ -164,16 +165,16 @@ bool installer_step(void) {
                 "    protocol: limine\n"
                 "    kernel_path: boot():/boot/dawnos.elf\n";
 
-            struct vfs_node *cfg_node = vfs_lookup("/boot/limine.conf");
-            if (cfg_node == NULL) {
-                if (vfs_create("/boot/limine.conf", VFS_MODE_FILE) == 0) {
-                    cfg_node = vfs_lookup("/boot/limine.conf");
+            struct vfs_node *cfg_node = NULL;
+            if (!vfs_resolve_path("/boot/limine.conf", &cfg_node) || cfg_node == NULL) {
+                if (vfs_create("/boot/limine.conf", 0644, &cfg_node) != 0) {
+                    cfg_node = NULL;
                 }
             }
             if (cfg_node != NULL) {
                 size_t clen = 0;
                 while (limine_cfg[clen] != '\0') clen++;
-                (void)vfs_write(cfg_node, 0, limine_cfg, clen);
+                (void)vfs_write(cfg_node, 0, clen, limine_cfg);
             }
 
             current_status.current_stage = INSTALL_STAGE_BOOTLOADER_INSTALL;
@@ -186,9 +187,10 @@ bool installer_step(void) {
             installer_log("Deploying Limine BIOS and UEFI boot stages");
             if (current_config.target_type == INSTALL_TARGET_GPT_UEFI ||
                 current_config.target_type == INSTALL_TARGET_HYBRID) {
-                (void)vfs_create("/EFI", VFS_MODE_DIR);
-                (void)vfs_create("/EFI/BOOT", VFS_MODE_DIR);
-                (void)vfs_create("/EFI/BOOT/BOOTX64.EFI", VFS_MODE_FILE);
+                (void)vfs_mkdir("/EFI", 0755, NULL);
+                (void)vfs_mkdir("/EFI/BOOT", 0755, NULL);
+                struct vfs_node *bootx64 = NULL;
+                (void)vfs_create("/EFI/BOOT/BOOTX64.EFI", 0644, &bootx64);
             }
 
             current_status.current_stage = INSTALL_STAGE_VERIFYING;
@@ -236,17 +238,17 @@ bool recovery_verify_filesystem(uint32_t disk_id, uint32_t partition_id, struct 
     out->issues_repaired = 0;
 
     /* Verify VFS root and boot partitions */
-    struct vfs_node *boot = vfs_lookup("/boot");
-    if (boot == NULL) {
+    struct vfs_node *boot = NULL;
+    if (!vfs_resolve_path("/boot", &boot) || boot == NULL) {
         out->issues_found++;
-        (void)vfs_create("/boot", VFS_MODE_DIR);
+        (void)vfs_mkdir("/boot", 0755, NULL);
         out->issues_repaired++;
     }
 
-    struct vfs_node *cfg = vfs_lookup("/boot/limine.conf");
-    if (cfg == NULL) {
+    struct vfs_node *cfg = NULL;
+    if (!vfs_resolve_path("/boot/limine.conf", &cfg) || cfg == NULL) {
         out->issues_found++;
-        if (vfs_create("/boot/limine.conf", VFS_MODE_FILE) == 0) {
+        if (vfs_create("/boot/limine.conf", 0644, &cfg) == 0) {
             out->issues_repaired++;
         }
     }
@@ -264,9 +266,10 @@ bool recovery_reinstall_bootloader(uint32_t disk_id, enum install_target_type ty
     out->issues_repaired = 1;
 
     if (type == INSTALL_TARGET_GPT_UEFI || type == INSTALL_TARGET_HYBRID) {
-        (void)vfs_create("/EFI", VFS_MODE_DIR);
-        (void)vfs_create("/EFI/BOOT", VFS_MODE_DIR);
-        (void)vfs_create("/EFI/BOOT/BOOTX64.EFI", VFS_MODE_FILE);
+        (void)vfs_mkdir("/EFI", 0755, NULL);
+        (void)vfs_mkdir("/EFI/BOOT", 0755, NULL);
+        struct vfs_node *bootx64 = NULL;
+        (void)vfs_create("/EFI/BOOT/BOOTX64.EFI", 0644, &bootx64);
     }
 
     out->success = true;
@@ -321,8 +324,8 @@ bool installer_self_test(void) {
 
     /* Valid disk test using RAM disk (disk ID 0) */
     cfg.target_disk_id = 0;
-    cfg.esp_size_bytes = 2ULL * 1024 * 1024;    /* 2 MiB within RAM disk */
-    cfg.system_size_bytes = 10ULL * 1024 * 1024; /* 10 MiB */
+    cfg.esp_size_bytes = 512 * 1024;    /* 512 KiB within RAM disk */
+    cfg.system_size_bytes = 1024 * 1024; /* 1 MiB */
     cfg.data_size_bytes = 0;
 
     if (!installer_run_full(&cfg)) return false;

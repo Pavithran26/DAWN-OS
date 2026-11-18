@@ -36,7 +36,8 @@ static inline bool iso_str_equal(const char *s1, const char *s2) {
     return s1[i] == s2[i];
 }
 
-static void iso_format_name(const char *raw, uint8_t raw_len, char *out) {
+static void iso_format_name(const char *raw, uint8_t raw_len, char *out, size_t max_out) {
+    if (out == NULL || max_out == 0) return;
     uint8_t len = raw_len;
     for (uint8_t i = 0; i < raw_len; i++) {
         if (raw[i] == ';') {
@@ -45,10 +46,12 @@ static void iso_format_name(const char *raw, uint8_t raw_len, char *out) {
         }
     }
     if (len > 0 && raw[len - 1] == '.') len--;
-    for (uint8_t i = 0; i < len; i++) {
+    size_t copy_len = len;
+    if (copy_len >= max_out) copy_len = max_out - 1U;
+    for (size_t i = 0; i < copy_len; i++) {
         out[i] = raw[i];
     }
-    out[len] = '\0';
+    out[copy_len] = '\0';
 }
 
 struct iso9660_file_info {
@@ -93,7 +96,7 @@ static int iso9660_readdir(struct vfs_node *node, uint32_t index, struct vfs_dir
         /* Skip root and parent entries (name_len == 1 and name[0] == 0 or 1) */
         if (d->name_len > 1 || (d->name[0] != 0 && d->name[0] != 1)) {
             if (curr_idx == index) {
-                iso_format_name(d->name, d->name_len, out_dirent->name);
+                iso_format_name(d->name, d->name_len, out_dirent->name, sizeof(out_dirent->name));
                 out_dirent->inode = d->extent_lba_le;
                 out_dirent->type = (d->file_flags & ISO9660_FLAG_DIRECTORY) ? VFS_TYPE_DIRECTORY : VFS_TYPE_FILE;
                 out_dirent->size = d->data_length_le;
@@ -122,7 +125,7 @@ static struct vfs_node *iso9660_finddir(struct vfs_node *node, const char *name)
 
         if (d->name_len > 1 || (d->name[0] != 0 && d->name[0] != 1)) {
             char formatted[VFS_MAX_NAME];
-            iso_format_name(d->name, d->name_len, formatted);
+            iso_format_name(d->name, d->name_len, formatted, sizeof(formatted));
             if (iso_str_equal(formatted, name)) {
                 if (iso_node_count >= 16) return NULL;
                 struct vfs_node *n = &iso_file_nodes[iso_node_count++];

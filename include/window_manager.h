@@ -57,6 +57,7 @@ int wm_maximize_window(uint32_t id);
 
 struct window *wm_get_window_by_id(uint32_t id);
 struct window *wm_get_top_window(void);
+struct window *wm_get_window_at_z(size_t index);
 size_t wm_get_window_count(void);
 
 void wm_handle_mouse(const struct mouse_event *mevt);

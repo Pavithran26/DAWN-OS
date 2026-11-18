@@ -67,6 +67,8 @@ bool service_start(const char *name) {
     for (size_t i = 0; i < SERVICE_MAX_UNITS; i++) {
         if (service_registry[i].active && str_equal(service_registry[i].name, name)) {
             if (service_registry[i].state == SERVICE_RUNNING) return true;
+            if (service_registry[i].state == SERVICE_STARTING) return false; /* cycle */
+            service_registry[i].state = SERVICE_STARTING;
 
             /* Check and resolve dependency if specified */
             if (service_registry[i].requires[0] != '\0') {
@@ -79,7 +81,6 @@ bool service_start(const char *name) {
                 }
             }
 
-            service_registry[i].state = SERVICE_STARTING;
             service_registry[i].pid = 200ULL + (uint64_t)i;
             service_registry[i].state = SERVICE_RUNNING;
             return true;

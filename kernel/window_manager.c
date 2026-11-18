@@ -185,6 +185,11 @@ struct window *wm_get_top_window(void) {
     return z_order[z_count - 1];
 }
 
+struct window *wm_get_window_at_z(size_t index) {
+    if (index >= z_count) return NULL;
+    return z_order[index];
+}
+
 size_t wm_get_window_count(void) {
     return z_count;
 }
@@ -285,7 +290,7 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
         uint32_t cx = (uint32_t)(win->x + (int32_t)WM_BORDER_WIDTH);
         uint32_t cy = (uint32_t)(win->y + (int32_t)WM_TITLEBAR_HEIGHT);
         uint32_t cw = win->width - (2 * WM_BORDER_WIDTH);
-        uint32_t ch = win->height - WM_TITLEBAR_HEIGHT - WM_BORDER_WIDTH;
+        uint32_t ch = win->height - WM_TITLEBAR_HEIGHT - (2 * WM_BORDER_WIDTH);
 
         if (win->client_buffer != NULL) {
             for (uint32_t r = 0; r < ch; r++) {

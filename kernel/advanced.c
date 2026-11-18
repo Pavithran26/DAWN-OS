@@ -222,7 +222,7 @@ void *mmap_file(struct vfs_node *node, uint64_t offset, size_t length, int prot,
             r->active = true;
 
             /* Load file contents */
-            (void)vfs_read(node, offset, (void *)r->vaddr, length);
+            (void)vfs_read(node, offset, length, (void *)r->vaddr);
             return (void *)r->vaddr;
         }
     }

@@ -282,11 +282,11 @@ bool settings_deserialize(struct system_settings *s, const char *buf, size_t len
 bool settings_load_file(const char *path) {
     if (path == NULL) return false;
 
-    struct vfs_node *node = vfs_lookup(path);
-    if (node == NULL) return false;
+    struct vfs_node *node = NULL;
+    if (!vfs_resolve_path(path, &node) || node == NULL) return false;
 
     char file_buf[1024];
-    int bytes_read = vfs_read(node, 0, file_buf, sizeof(file_buf) - 1);
+    int64_t bytes_read = vfs_read(node, 0, sizeof(file_buf) - 1, file_buf);
     if (bytes_read <= 0) return false;
 
     file_buf[bytes_read] = '\0';
@@ -300,15 +300,13 @@ bool settings_save_file(const char *path) {
     size_t len = settings_serialize(&active_settings, file_buf, sizeof(file_buf));
     if (len == 0) return false;
 
-    struct vfs_node *node = vfs_lookup(path);
-    if (node == NULL) {
-        if (vfs_create(path, VFS_MODE_FILE) != 0) return false;
-        node = vfs_lookup(path);
-        if (node == NULL) return false;
+    struct vfs_node *node = NULL;
+    if (!vfs_resolve_path(path, &node) || node == NULL) {
+        if (vfs_create(path, VFS_FLAG_READ | VFS_FLAG_WRITE, &node) != 0 || node == NULL) return false;
     }
 
-    int written = vfs_write(node, 0, file_buf, len);
-    return written == (int)len;
+    int64_t written = vfs_write(node, 0, len, file_buf);
+    return written == (int64_t)len;
 }
 
 /* GUI Window Implementation */
@@ -327,11 +325,11 @@ void settings_window_render(void) {
     if (settings_window_id < 0) return;
 
     /* Fill background */
-    gfx_surface_t surf = {
-        .pixels = settings_win_buffer,
+    struct gfx_surface surf = {
+        .buffer = settings_win_buffer,
         .width = 560,
         .height = 380,
-        .pitch = 560
+        .pitch = 560 * sizeof(uint32_t)
     };
     gfx_fill_rect(&surf, 0, 0, 560, 380, GFX_COLOR_WINDOW_BG);
 
@@ -460,12 +458,16 @@ void settings_window_handle_click(int32_t local_x, int32_t local_y) {
 
 bool settings_window_open(void) {
     if (settings_window_id >= 0) {
-        wm_focus_window(settings_window_id);
+        wm_focus_window((uint32_t)settings_window_id);
         return true;
     }
 
-    settings_window_id = wm_create_window(120, 80, 560, 380, "Settings", settings_win_buffer);
-    if (settings_window_id < 0) return false;
+    struct window *win = wm_create_window("Settings", 120, 80, 560, 380, WM_FLAG_MOVABLE | WM_FLAG_TITLEBAR);
+    if (win == NULL) return false;
+
+    win->client_buffer = settings_win_buffer;
+    win->client_pitch = 560 * sizeof(uint32_t);
+    settings_window_id = (int)win->id;
 
     current_tab = TAB_DISPLAY;
     settings_window_render();
@@ -474,7 +476,7 @@ bool settings_window_open(void) {
 
 void settings_window_close(void) {
     if (settings_window_id >= 0) {
-        wm_destroy_window(settings_window_id);
+        wm_destroy_window((uint32_t)settings_window_id);
         settings_window_id = -1;
     }
 }

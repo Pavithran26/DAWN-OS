@@ -117,7 +117,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                 size_t wcount = wm_get_window_count();
                 for (size_t i = 0; i < wcount; i++) {
                     if (mevt->x >= (int32_t)tab_x && mevt->x <= (int32_t)(tab_x + 120)) {
-                        struct window *win = wm_get_top_window();
+                        struct window *win = wm_get_window_at_z(i);
                         if (win != NULL) {
                             if (win->focused) {
                                 wm_minimize_window(win->id);
@@ -169,7 +169,7 @@ void desktop_render(struct gfx_surface *surf) {
     uint32_t tab_x = 56;
     size_t wcount = wm_get_window_count();
     for (size_t i = 0; i < wcount; i++) {
-        struct window *win = wm_get_top_window();
+        struct window *win = wm_get_window_at_z(i);
         if (win != NULL) {
             uint32_t tab_color = win->focused ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
             gfx_draw_glass_panel(surf, tab_x, tb_y + 8, 120, 32, tab_color);

@@ -37,12 +37,20 @@
 #define GFX_COLOR_BTN_MINIMIZE      0xFFF59E0BU /* Amber */
 #define GFX_COLOR_BTN_MAXIMIZE      0xFF10B981U /* Emerald */
 
+/* Compatibility Color Aliases */
+#define GFX_COLOR_WINDOW_BG         GFX_COLOR_EMERALD_SURFACE
+#define GFX_COLOR_PANEL_DARK        GFX_COLOR_EMERALD_BASE
+#define GFX_COLOR_EMERALD_MUTED     GFX_COLOR_TEXT_MUTED
+#define GFX_COLOR_EMERALD_NEON      GFX_COLOR_EMERALD_ACCENT
+
 struct gfx_surface {
     uint32_t *buffer;
     uint32_t width;
     uint32_t height;
     uint32_t pitch; /* in bytes */
 };
+
+typedef struct gfx_surface gfx_surface_t;
 
 bool gfx_initialize(void);
 struct gfx_surface *gfx_get_framebuffer(void);
@@ -54,6 +62,14 @@ void gfx_put_pixel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t co
 void gfx_blend_pixel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t color);
 void gfx_draw_rect_filled(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
 void gfx_draw_rect_outline(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
+
+static inline void gfx_fill_rect(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
+    gfx_draw_rect_filled(surf, x, y, w, h, color);
+}
+
+static inline void gfx_draw_rect(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
+    gfx_draw_rect_outline(surf, x, y, w, h, color);
+}
 void gfx_draw_line(struct gfx_surface *surf, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t color);
 void gfx_draw_gradient_v(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t top_col, uint32_t bot_col);
 void gfx_draw_glass_panel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t base_color);

@@ -46,7 +46,7 @@ void task_manager_refresh(struct task_manager *tm) {
     it0->pid = 0;
     it0->ppid = 0;
     str_copy(it0->name, "kernel_idle", sizeof(it0->name));
-    it0->state = PROCESS_RUNNING;
+    it0->state = PROCESS_STATE_READY;
     it0->cpu_percent = 85;
     it0->mem_bytes = 1048576;
     it0->is_user = false;
@@ -56,7 +56,7 @@ void task_manager_refresh(struct task_manager *tm) {
     it1->pid = 1;
     it1->ppid = 0;
     str_copy(it1->name, "init", sizeof(it1->name));
-    it1->state = PROCESS_READY;
+    it1->state = PROCESS_STATE_READY;
     it1->cpu_percent = 5;
     it1->mem_bytes = 65536;
     it1->is_user = true;
@@ -66,7 +66,7 @@ void task_manager_refresh(struct task_manager *tm) {
     it2->pid = 2;
     it2->ppid = 1;
     str_copy(it2->name, "desktop_wm", sizeof(it2->name));
-    it2->state = PROCESS_RUNNING;
+    it2->state = PROCESS_STATE_READY;
     it2->cpu_percent = 10;
     it2->mem_bytes = 4194304;
     it2->is_user = false;
@@ -81,7 +81,7 @@ int task_manager_kill_selected(struct task_manager *tm) {
     if (tm == NULL || tm->selected_pid == 0) return -1; /* Cannot kill idle */
     for (size_t i = 0; i < tm->item_count; i++) {
         if (tm->items[i].pid == tm->selected_pid) {
-            tm->items[i].state = PROCESS_EXITED;
+            tm->items[i].state = PROCESS_STATE_EXITED;
             process_mark_exited(tm->selected_pid);
             return 0;
         }
@@ -138,10 +138,10 @@ void task_manager_render(struct task_manager *tm) {
             gfx_draw_string(&surf, 14, row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
             gfx_draw_string(&surf, 70, row_y, it->name, GFX_COLOR_TEXT_PRIMARY);
 
-            const char *st_str = (it->state == PROCESS_RUNNING) ? "RUNNING" :
-                                 (it->state == PROCESS_READY)   ? "READY" :
-                                 (it->state == PROCESS_BLOCKED) ? "BLOCKED" : "EXITED";
-            gfx_draw_string(&surf, 220, row_y, st_str, (it->state == PROCESS_RUNNING) ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_TEXT_SECONDARY);
+            const char *st_str = (it->state == PROCESS_STATE_READY)   ? "READY" :
+                                 (it->state == PROCESS_STATE_CREATED) ? "CREATED" :
+                                 (it->state == PROCESS_STATE_EXITED)  ? "EXITED" : "FREE";
+            gfx_draw_string(&surf, 220, row_y, st_str, (it->state == PROCESS_STATE_READY) ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_TEXT_SECONDARY);
 
             u64_to_str(it->mem_bytes / 1024U, num_buf);
             gfx_draw_string(&surf, 320, row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);

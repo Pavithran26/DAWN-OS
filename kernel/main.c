@@ -1322,6 +1322,7 @@ void kernel_main(void) {
     qemu_debug_exit(QEMU_TEST_PASS);
 #endif
 
+#ifndef DAWN_KERNEL_TEST
     {
         uint8_t init_image[8192]={0U};
         size_t init_size=0U;
@@ -1336,5 +1337,6 @@ void kernel_main(void) {
     }
 
     serial_write("DAWN-OS: Phase C process management, file descriptors, wait/exec and init process complete\n");
+#endif
     cpu_halt_forever();
 }

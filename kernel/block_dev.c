@@ -109,7 +109,7 @@ size_t block_dev_count(void) {
 
 int block_dev_read(struct block_device *dev, uint64_t lba, uint32_t count, void *buffer) {
     if (dev == NULL || !dev->active || buffer == NULL || count == 0) return -1;
-    if (lba + count > dev->total_blocks) return -1;
+    if (lba >= dev->total_blocks || (uint64_t)count > dev->total_blocks - lba) return -1;
     if (dev->ops.read_blocks == NULL) return -1;
     return dev->ops.read_blocks(dev, lba, count, buffer);
 }
@@ -117,7 +117,7 @@ int block_dev_read(struct block_device *dev, uint64_t lba, uint32_t count, void 
 int block_dev_write(struct block_device *dev, uint64_t lba, uint32_t count, const void *buffer) {
     if (dev == NULL || !dev->active || buffer == NULL || count == 0) return -1;
     if (dev->read_only) return -1;
-    if (lba + count > dev->total_blocks) return -1;
+    if (lba >= dev->total_blocks || (uint64_t)count > dev->total_blocks - lba) return -1;
     if (dev->ops.write_blocks == NULL) return -1;
     return dev->ops.write_blocks(dev, lba, count, buffer);
 }

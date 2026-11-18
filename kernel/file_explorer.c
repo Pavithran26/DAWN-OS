@@ -135,12 +135,12 @@ bool explorer_copy_file(const char *src_path, const char *dst_path) {
         size_t chunk = sizeof(buffer);
         if (offset + chunk > src_node->size) chunk = (size_t)(src_node->size - offset);
         int64_t bytes_read = vfs_read(src_node, offset, chunk, buffer);
-        if (bytes_read <= 0) break;
+        if (bytes_read <= 0) return false;
         int64_t bytes_written = vfs_write(dst_node, offset, (size_t)bytes_read, buffer);
         if (bytes_written != bytes_read) return false;
         offset += (uint64_t)bytes_read;
     }
-    return true;
+    return offset == src_node->size;
 }
 
 bool explorer_move_file(const char *src_path, const char *dst_path) {
