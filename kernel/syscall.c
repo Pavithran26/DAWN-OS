@@ -192,7 +192,7 @@ bool syscall_self_test(void) {
                          0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EFAULT)
         return false;
     if (syscall_dispatch(DAWN_SYS_WRITE,DAWN_STDOUT_FD,0ULL,
-                         DAWN_SYSCALL_MAX_WRITE+1ULL,0ULL,0ULL)!=
+                         DAWN_SYSCALL_MAX_WRITE+1ULL,0ULL,0ULL,0ULL)!=
                          -(int64_t)DAWN_ERRNO_EINVAL) return false;
     if (syscall_dispatch(DAWN_SYS_EXIT,7ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_ENOSYS)

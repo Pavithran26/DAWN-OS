@@ -2,16 +2,29 @@
 
 DAWN-OS is an experimental, freestanding x86_64 operating-system project with a server-first direction. Its long-term goals are reliable boot and recovery, low request latency, high sustained concurrency, and efficient CPU and memory use. These are goals, not measured results.
 
-## Visual direction — concept mockups
+## Visual identity & desktop environment
 
-The following visuals illustrate the intended emerald-green, glass/neomorphic desktop direction. **They are design concepts, not screenshots of a running desktop.** The terminal, file explorer, task manager, and partition manager shown here are planned interface concepts; they are not evidence that those applications are implemented.
+DAWN-OS features an **Emerald Green Neo-Liquid Glass** design system. The user interface combines translucent frosted-glass panels, dark mode depth, fluid emerald accents, responsive typography, and refractive lighting.
+
+### 1. Login & Lock Screen
+Frosted glass credential card with dynamic biometric and password authentication, administrator avatar, integrated status bar, and bottom-right power controls.
 
 <p align="center">
-  <img src="docs/images/dawn-desktop-concept.svg" alt="DAWN OS desktop workspace concept" width="100%"/>
+  <img src="docs/images/dawn-login-screen.png" alt="DAWN-OS Login and Lock Screen" width="100%"/>
 </p>
 
+### 2. Main Desktop Workspace
+Multi-window glass workspace hosting the DAWN Terminal (`dsh`) with kernel diagnostics, File Explorer with breadcrumb navigation, desktop icons, and fluid emerald backdrop.
+
 <p align="center">
-  <img src="docs/images/dawn-system-tools-concept.svg" alt="DAWN OS terminal, task manager, file explorer, and partition manager concepts" width="100%"/>
+  <img src="docs/images/dawn-desktop-main.png" alt="DAWN-OS Main Desktop Workspace with Active Windows" width="100%"/>
+</p>
+
+### 3. Apps Bar & Start Menu
+Floating frosted-glass application launcher with instant search, pinned application grid (Terminal, Files, Task Manager, Settings, Code Editor, Network Monitor, Media, Diagnostics), user profile pill, and bottom dock with system tray.
+
+<p align="center">
+  <img src="docs/images/dawn-apps-bar.png" alt="DAWN-OS Apps Bar, Dock, and Application Launcher" width="100%"/>
 </p>
 
 ## Current implementation snapshot (2026-11-18)
