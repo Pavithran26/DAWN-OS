@@ -5,6 +5,9 @@
 #include "net.h"
 #include "window_manager.h"
 #include "gfx.h"
+#include "desktop.h"
+#include "os_metadata.h"
+#include "system_info.h"
 
 static struct system_settings active_settings;
 static bool settings_initialized = false;
@@ -311,8 +314,71 @@ bool settings_save_file(const char *path) {
 
 /* GUI Window Implementation */
 static const char *tab_names[TAB_COUNT] = {
-    "Display", "Input", "Audio", "Network", "Time", "Appearance", "About"
+    "Display", "Input", "Audio", "Network", "Time", "Appearance", "About",
+    "Credits", "Help", "Sys Info"
 };
+
+#define SETTINGS_TAB_STRIDE 28U
+#define SETTINGS_TAB_HEIGHT 24U
+#define SETTINGS_TAB_TOP 8U
+#define SETTINGS_MAX_LINKS 8U
+
+struct settings_link {
+    int32_t x;
+    int32_t y;
+    int32_t width;
+    const char *url;
+};
+
+static struct settings_link settings_links[SETTINGS_MAX_LINKS];
+static size_t settings_link_count;
+static uint32_t help_page;
+
+static size_t settings_str_len(const char *text) {
+    size_t length = 0U;
+    while (text != NULL && text[length] != '\0') ++length;
+    return length;
+}
+
+static void settings_draw_limited(struct gfx_surface *surf, uint32_t x, uint32_t y,
+                                  const char *text, size_t max_chars, uint32_t color) {
+    if (text == NULL) return;
+    size_t length = settings_str_len(text);
+    if (length > max_chars) length = max_chars;
+    for (size_t index = 0U; index < length; ++index) {
+        gfx_draw_char(surf, x + (uint32_t)(index * 8U), y, text[index], color);
+    }
+}
+
+static size_t settings_format_labelled(char *dst, size_t capacity,
+                                       const char *label, const char *value) {
+    size_t position = 0U;
+    if (dst == NULL || capacity == 0U) return 0U;
+    label = (label != NULL) ? label : "";
+    value = (value != NULL) ? value : "Not available";
+    for (size_t i = 0U; label[i] != '\0' && position + 1U < capacity; ++i) {
+        dst[position++] = label[i];
+    }
+    for (size_t i = 0U; value[i] != '\0' && position + 1U < capacity; ++i) {
+        dst[position++] = value[i];
+    }
+    dst[position] = '\0';
+    return position;
+}
+
+static void settings_add_link(struct gfx_surface *surf, uint32_t x, uint32_t y,
+                              const char *label, const char *url) {
+    gfx_draw_string(surf, x, y, label, GFX_COLOR_EMERALD_ACCENT);
+    if (!dawn_url_is_valid(url) || settings_link_count >= SETTINGS_MAX_LINKS) return;
+    uint32_t width = (uint32_t)(settings_str_len(label) * 8U);
+    gfx_draw_line(surf, (int32_t)x, (int32_t)(y + 14U), (int32_t)(x + width),
+                  (int32_t)(y + 14U), GFX_COLOR_EMERALD_PRIMARY);
+    settings_links[settings_link_count].x = (int32_t)x;
+    settings_links[settings_link_count].y = (int32_t)y;
+    settings_links[settings_link_count].width = (int32_t)width;
+    settings_links[settings_link_count].url = url;
+    ++settings_link_count;
+}
 
 void settings_window_switch_tab(enum settings_tab tab) {
     if (tab < TAB_COUNT) {
@@ -337,15 +403,17 @@ void settings_window_render(void) {
     gfx_fill_rect(&surf, 0, 0, 140, 380, GFX_COLOR_PANEL_DARK);
     gfx_draw_line(&surf, 140, 0, 140, 380, GFX_COLOR_GLASS_BORDER);
 
-    /* Render Tab Buttons */
+    settings_link_count = 0U;
+
+    /* Render Tab Buttons (compact stride so all ten tabs fit the client area) */
     for (uint32_t t = 0; t < TAB_COUNT; t++) {
-        uint32_t y = 12U + t * 44U;
+        uint32_t y = SETTINGS_TAB_TOP + (t * SETTINGS_TAB_STRIDE);
         if ((enum settings_tab)t == current_tab) {
-            gfx_fill_rect(&surf, 6U, y, 128U, 36U, GFX_COLOR_EMERALD_MUTED);
-            gfx_draw_rect(&surf, 6U, y, 128U, 36U, GFX_COLOR_EMERALD_PRIMARY);
-            gfx_draw_string(&surf, 20U, y + 10U, tab_names[t], GFX_COLOR_TEXT_PRIMARY);
+            gfx_fill_rect(&surf, 6U, y, 128U, SETTINGS_TAB_HEIGHT, GFX_COLOR_EMERALD_MUTED);
+            gfx_draw_rect(&surf, 6U, y, 128U, SETTINGS_TAB_HEIGHT, GFX_COLOR_EMERALD_PRIMARY);
+            gfx_draw_string(&surf, 20U, y + 4U, tab_names[t], GFX_COLOR_TEXT_PRIMARY);
         } else {
-            gfx_draw_string(&surf, 20U, y + 10U, tab_names[t], GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, 20U, y + 4U, tab_names[t], GFX_COLOR_TEXT_MUTED);
         }
     }
 
@@ -424,16 +492,144 @@ void settings_window_render(void) {
             gfx_draw_string(&surf, cx, cy + 90, "Surface: Frosted Acrylic & Specular Sheen", GFX_COLOR_TEXT_MUTED);
             break;
 
-        case TAB_ABOUT:
-            gfx_draw_string(&surf, cx, cy, "About DAWN-OS", GFX_COLOR_EMERALD_NEON);
-            gfx_draw_string(&surf, cx, cy + 30, "DAWN-OS 1.0 (Emerald Edition)", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 55, "Architecture: x86_64 Bare-Metal", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 80, "Identity: Pure Custom Operating System", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 105, "Kernel: Non-Linux, Non-Windows Native", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 130, "Bootloader: Limine BIOS / UEFI Hybrid", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx, cy + 155, "Storage: NVMe + AHCI + FAT32 + ISO9660", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx, cy + 180, "Desktop: Neo-Liquid Glass Window Manager", GFX_COLOR_TEXT_MUTED);
+        case TAB_ABOUT: {
+            const struct dawn_metadata_view *meta = dawn_metadata_get();
+            char line[64];
+            gfx_draw_icon(&surf, cx, cy, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+            gfx_draw_string(&surf, cx + 24U, cy, "About DAWN-OS", GFX_COLOR_EMERALD_NEON);
+            if (meta == NULL) {
+                gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
+                break;
+            }
+            settings_format_labelled(line, sizeof(line), "Version: ", meta->version);
+            gfx_draw_string(&surf, cx, cy + 25, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Channel: ", meta->channel);
+            gfx_draw_string(&surf, cx, cy + 50, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Developer: ", meta->developer_display_name);
+            gfx_draw_string(&surf, cx, cy + 75, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Role: ", meta->developer_role);
+            gfx_draw_string(&surf, cx, cy + 100, line, GFX_COLOR_TEXT_MUTED);
+            settings_add_link(&surf, cx, cy + 125, "Website: pavithran26.net", meta->developer_website);
+            settings_add_link(&surf, cx, cy + 150, "GitHub: Pavithran26", meta->developer_github);
+            settings_add_link(&surf, cx, cy + 175, "Repository: DAWN-OS", meta->repository_url);
+            settings_format_labelled(line, sizeof(line), "Build: ", meta->build_id);
+            settings_draw_limited(&surf, cx, cy + 200, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Date: ", meta->build_date);
+            gfx_draw_string(&surf, cx, cy + 225, line, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Kernel: ", meta->kernel_version);
+            settings_draw_limited(&surf, cx, cy + 250, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Arch: ", meta->architecture);
+            gfx_draw_string(&surf, cx, cy + 275, line, GFX_COLOR_TEXT_MUTED);
+            settings_draw_limited(&surf, cx, cy + 300, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
             break;
+        }
+
+        case TAB_CREDITS: {
+            const struct dawn_metadata_view *meta = dawn_metadata_get();
+            char line[64];
+            gfx_draw_string(&surf, cx, cy, "Developer Credits", GFX_COLOR_EMERALD_NEON);
+            if (meta == NULL) {
+                gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
+                break;
+            }
+            gfx_draw_string(&surf, cx, cy + 30, "Developed and maintained by", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, cy + 55, meta->developer_display_name, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Role: ", meta->developer_role);
+            gfx_draw_string(&surf, cx, cy + 85, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Owner: ", meta->developer_username);
+            gfx_draw_string(&surf, cx, cy + 110, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_add_link(&surf, cx, cy + 140, "Website: pavithran26.net", meta->developer_website);
+            settings_add_link(&surf, cx, cy + 165, "GitHub: github.com/Pavithran26", meta->developer_github);
+            settings_draw_limited(&surf, cx, cy + 200, meta->footer_text, 50U, GFX_COLOR_TEXT_SECONDARY);
+            settings_draw_limited(&surf, cx, cy + 230, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
+            break;
+        }
+
+        case TAB_HELP_SUPPORT: {
+            const struct dawn_metadata_view *meta = dawn_metadata_get();
+            if (help_page > 2U) help_page = 0U;
+            if (meta == NULL) {
+                gfx_draw_string(&surf, cx, cy, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
+                break;
+            }
+            if (help_page == 0U) {
+                gfx_draw_string(&surf, cx, cy, "Help & Support - Getting Started", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 30, "Open Terminal from the launcher", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 55, "Type 'help' for shell commands", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 80, "Settings configures the desktop", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 105, "Files browses the virtual filesystem", GFX_COLOR_TEXT_PRIMARY);
+                settings_add_link(&surf, cx, cy + 140, "Official website", meta->support_website);
+                settings_add_link(&surf, cx, cy + 165, "GitHub repository", meta->repository_url);
+            } else if (help_page == 1U) {
+                gfx_draw_string(&surf, cx, cy, "Help & Support - Install & Boot", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 30, "Installer: available in Settings", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 55, "Boot: Limine BIOS and UEFI", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 80, "Input: PS/2 and USB HID", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 105, "Storage: AHCI, NVMe, MBR/GPT", GFX_COLOR_TEXT_MUTED);
+                settings_add_link(&surf, cx, cy + 140, "Bug reports", meta->bug_report_url);
+                settings_add_link(&surf, cx, cy + 165, "Feature requests", meta->feature_request_url);
+            } else {
+                gfx_draw_string(&surf, cx, cy, "Help & Support - Reference", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 30, "Terminal: command documentation", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 55, "File Explorer: copy, move, search", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 80, "Task Manager: process monitoring", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 105, "Bug reports: use the tracker below", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 130, "Feature requests: same tracker", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 155, "Dynamic modules: Coming Soon", GFX_COLOR_TEXT_MUTED);
+                settings_add_link(&surf, cx, cy + 165, "Issue tracker", meta->issues_url);
+            }
+            gfx_draw_rect(&surf, cx, cy + 195, 70U, 24U, GFX_COLOR_GLASS_BORDER);
+            gfx_draw_string(&surf, cx + 16U, cy + 201, "Prev", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_rect(&surf, cx + 90U, cy + 195, 70U, 24U, GFX_COLOR_GLASS_BORDER);
+            gfx_draw_string(&surf, cx + 106U, cy + 201, "Next", GFX_COLOR_TEXT_PRIMARY);
+            break;
+        }
+
+        case TAB_SYSTEM_INFO: {
+            const struct dawn_metadata_view *meta = dawn_metadata_get();
+            struct dawn_system_info info;
+            char line[64];
+            gfx_draw_string(&surf, cx, cy, "System Information", GFX_COLOR_EMERALD_NEON);
+            if (meta == NULL) {
+                gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
+                break;
+            }
+            settings_format_labelled(line, sizeof(line), "OS: ", meta->os_display_name);
+            gfx_draw_string(&surf, cx, cy + 25, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Version: ", meta->version);
+            gfx_draw_string(&surf, cx, cy + 50, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Kernel: ", meta->kernel_version);
+            settings_draw_limited(&surf, cx, cy + 75, line, 50U, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Build: ", meta->build_id);
+            settings_draw_limited(&surf, cx, cy + 100, line, 50U, GFX_COLOR_TEXT_MUTED);
+            if (dawn_system_info_refresh(&info)) {
+                char memory[24];
+                char uptime[24];
+                settings_draw_limited(&surf, cx, cy + 125, info.cpu_model, 50U, GFX_COLOR_TEXT_PRIMARY);
+                if (dawn_human_bytes(info.physical_memory_bytes, memory, sizeof(memory)) != 0U) {
+                    settings_format_labelled(line, sizeof(line), "Memory: ", memory);
+                    gfx_draw_string(&surf, cx, cy + 150, line, GFX_COLOR_TEXT_MUTED);
+                }
+                if (dawn_human_bytes(info.free_memory_bytes, memory, sizeof(memory)) != 0U) {
+                    settings_format_labelled(line, sizeof(line), "Free: ", memory);
+                    gfx_draw_string(&surf, cx, cy + 175, line, GFX_COLOR_TEXT_MUTED);
+                }
+                settings_format_labelled(line, sizeof(line), "Boot mode: ", info.boot_mode);
+                gfx_draw_string(&surf, cx, cy + 200, line, GFX_COLOR_TEXT_MUTED);
+                if (dawn_decimal_string(info.uptime_seconds, uptime, sizeof(uptime)) != 0U) {
+                    settings_format_labelled(line, sizeof(line), "Uptime: ", uptime);
+                    gfx_draw_string(&surf, cx, cy + 225, line, GFX_COLOR_TEXT_MUTED);
+                }
+                settings_format_labelled(line, sizeof(line), "Storage: ", info.storage_summary);
+                settings_draw_limited(&surf, cx, cy + 250, line, 50U, GFX_COLOR_TEXT_MUTED);
+                settings_format_labelled(line, sizeof(line), "Filesystem: ", info.filesystem_summary);
+                gfx_draw_string(&surf, cx, cy + 275, line, GFX_COLOR_TEXT_MUTED);
+            } else {
+                gfx_draw_string(&surf, cx, cy + 125, "System information unavailable", GFX_COLOR_TEXT_MUTED);
+            }
+            settings_add_link(&surf, cx, cy + 305, "Report a problem", meta->bug_report_url);
+            break;
+        }
 
         default:
             break;
@@ -441,16 +637,42 @@ void settings_window_render(void) {
 }
 
 void settings_window_handle_click(int32_t local_x, int32_t local_y) {
-    if (local_x >= 0 && local_x < 140 && local_y >= 12) {
-        int tab_index = (local_y - 12) / 44;
-        if (tab_index < (int)TAB_COUNT) {
+    if (local_x >= 0 && local_x < 140 &&
+        local_y >= (int32_t)SETTINGS_TAB_TOP &&
+        local_y < (int32_t)(SETTINGS_TAB_TOP + ((uint32_t)TAB_COUNT * SETTINGS_TAB_STRIDE))) {
+        int tab_index = (local_y - (int32_t)SETTINGS_TAB_TOP) / (int32_t)SETTINGS_TAB_STRIDE;
+        if (tab_index >= 0 && tab_index < (int32_t)TAB_COUNT) {
             settings_window_switch_tab((enum settings_tab)tab_index);
         }
-    } else {
-        if (current_tab == TAB_AUDIO) {
-            /* Check "Play Chime" button */
-            if (local_x >= 160 && local_x <= 280 && local_y >= 170 && local_y <= 202) {
-                audio_play_tone(880, 50); /* High chime */
+        return;
+    }
+
+    for (size_t index = 0U; index < settings_link_count; ++index) {
+        const struct settings_link *link = &settings_links[index];
+        if (local_x >= link->x && local_x <= link->x + link->width &&
+            local_y >= link->y && local_y <= link->y + 14) {
+            (void)desktop_open_url(link->url);
+            return;
+        }
+    }
+
+    if (current_tab == TAB_AUDIO) {
+        /* Check "Play Chime" button */
+        if (local_x >= 160 && local_x <= 280 && local_y >= 170 && local_y <= 202) {
+            audio_play_tone(880, 50); /* High chime */
+        }
+    } else if (current_tab == TAB_HELP_SUPPORT) {
+        /* Help navigation buttons are at content y + 180. */
+        if (local_y >= 215 && local_y <= 239) {
+            if (local_x >= 160 && local_x <= 230) {
+                help_page = (help_page == 0U) ? 2U : (help_page - 1U);
+                settings_window_render();
+                return;
+            }
+            if (local_x >= 250 && local_x <= 320) {
+                help_page = (help_page + 1U) % 3U;
+                settings_window_render();
+                return;
             }
         }
     }
@@ -518,6 +740,16 @@ bool settings_self_test(void) {
     if (current_tab != TAB_AUDIO) return false;
     settings_window_handle_click(30, 20); /* Click Display tab */
     if (current_tab != TAB_DISPLAY) return false;
+
+    settings_window_switch_tab(TAB_ABOUT);
+    if (current_tab != TAB_ABOUT || settings_link_count == 0U) return false;
+    settings_window_switch_tab(TAB_CREDITS);
+    if (current_tab != TAB_CREDITS || settings_link_count == 0U) return false;
+    settings_window_switch_tab(TAB_HELP_SUPPORT);
+    settings_window_handle_click(270, 220); /* Next help page */
+    if (current_tab != TAB_HELP_SUPPORT) return false;
+    settings_window_switch_tab(TAB_SYSTEM_INFO);
+    if (current_tab != TAB_SYSTEM_INFO) return false;
     settings_window_close();
 
     return true;

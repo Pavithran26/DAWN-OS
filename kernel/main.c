@@ -47,6 +47,8 @@
 #include "power.h"
 #include "localization.h"
 #include "advanced.h"
+#include "os_metadata.h"
+#include "system_info.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -916,6 +918,27 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: advanced features, spinlocks, ticketlocks, semaphores, shm, mmap and modules ready\n");
 
+    if (!dawn_metadata_initialize()) {
+        serial_write("DAWN-OS: FAIL: centralized OS metadata validation\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: centralized OS metadata validated\n");
+
+    {
+        struct dawn_system_info system_info;
+        if (!dawn_system_info_refresh(&system_info)) {
+            serial_write("DAWN-OS: FAIL: system information provider\n");
+#ifdef DAWN_KERNEL_TEST
+            qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+            cpu_halt_forever();
+        }
+    }
+    serial_write("DAWN-OS: system information provider ready\n");
+
 #ifdef DAWN_KERNEL_TEST
     if (!interrupts_self_test()) {
         serial_write("DAWN-TEST: FAIL: exception/IDT/PIT timer tests\n");
@@ -1220,6 +1243,20 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: settings serialization, defaults, clamping and window navigation\n");
+
+    if (!os_metadata_self_test()) {
+        serial_write("DAWN-TEST: FAIL: metadata validation, URL handling and safe text\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: metadata validation, URL handling and safe text\n");
+
+    if (!system_info_self_test()) {
+        serial_write("DAWN-TEST: FAIL: system information from kernel APIs\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: system information from kernel APIs\n");
 
     /* Phase M: Installer, Recovery and Distribution */
     if (!installer_self_test()) {

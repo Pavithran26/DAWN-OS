@@ -24,7 +24,10 @@ enum settings_tab {
     TAB_TIME = 4,
     TAB_APPEARANCE = 5,
     TAB_ABOUT = 6,
-    TAB_COUNT = 7
+    TAB_CREDITS = 7,
+    TAB_HELP_SUPPORT = 8,
+    TAB_SYSTEM_INFO = 9,
+    TAB_COUNT = 10
 };
 
 struct system_settings {

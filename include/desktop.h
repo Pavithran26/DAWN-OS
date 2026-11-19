@@ -32,6 +32,9 @@ bool desktop_initialize(void);
 void desktop_handle_input_event(const struct input_event *event);
 void desktop_render(struct gfx_surface *surf);
 void desktop_show_notification(const char *title, const char *msg);
+/* Validates a URL and opens it with the system browser when one is available.
+ * When no browser exists, shows a notification containing the validated URL. */
+bool desktop_open_url(const char *url);
 void desktop_toggle_launcher(void);
 
 bool desktop_self_test(void);

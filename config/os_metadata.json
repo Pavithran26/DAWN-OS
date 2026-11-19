@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "os": {
+    "name": "DAWN-OS",
+    "display_name": "DAWN-OS",
+    "description": "An independent x86_64 operating system.",
+    "architecture": "x86_64",
+    "version": "1.0.0",
+    "channel": "development",
+    "build_id": null,
+    "build_date": null,
+    "kernel_version": null
+  },
+  "developer": {
+    "name": "Pavithran",
+    "display_name": "Pavithran",
+    "username": "Pavithran26",
+    "role": "Creator and Maintainer",
+    "website": "https://pavithran26.net",
+    "github_profile": "https://github.com/Pavithran26"
+  },
+  "project": {
+    "name": "DAWN-OS",
+    "repository": "https://github.com/Pavithran26/DAWN-OS",
+    "documentation_url": null,
+    "issues_url": "https://github.com/Pavithran26/DAWN-OS/issues",
+    "license": null
+  },
+  "support": {
+    "website": "https://pavithran26.net",
+    "documentation_url": null,
+    "community_url": null,
+    "email": null,
+    "bug_report_url": "https://github.com/Pavithran26/DAWN-OS/issues",
+    "feature_request_url": "https://github.com/Pavithran26/DAWN-OS/issues"
+  },
+  "branding": {
+    "logo_asset": "assets/branding/dawn-os-logo.png",
+    "primary_color": "emerald",
+    "design_language": "neo-liquid-glass"
+  },
+  "copyright": {
+    "holder": "Pavithran",
+    "year": null,
+    "notice": "Copyright (c) Pavithran. See repository license for terms."
+  }
+}

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "desktop.h"
+#include "os_metadata.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -20,6 +21,27 @@ static inline bool str_equal(const char *s1, const char *s2) {
         i++;
     }
     return s1[i] == s2[i];
+}
+
+static size_t str_length(const char *text) {
+    size_t length = 0U;
+    while (text != NULL && text[length] != '\0') ++length;
+    return length;
+}
+
+static uint32_t footer_x(uint32_t screen_width) {
+    return (screen_width > 500U) ? (screen_width - 460U) : 56U;
+}
+
+bool desktop_open_url(const char *url) {
+    char checked[DAWN_META_URL_MAX];
+    const struct dawn_metadata_view *meta = dawn_metadata_get();
+    if (meta == NULL) return false;
+    if (!dawn_url_copy(url, checked, sizeof(checked))) return false;
+    /* No system browser exists in this build yet; report the validated target
+     * instead of claiming that a page was opened. */
+    desktop_show_notification("No browser available", checked);
+    return true;
 }
 
 bool desktop_initialize(void) {
@@ -111,6 +133,25 @@ void desktop_handle_input_event(const struct input_event *event) {
                 }
             }
 
+            /* Clickable developer domain in the taskbar footer */
+            {
+                const struct dawn_metadata_view *meta = dawn_metadata_get();
+                if (meta != NULL && mevt->y >= (int32_t)(tb_y + 30U) &&
+                    mevt->y <= (int32_t)(tb_y + 46U)) {
+                    size_t total = str_length(meta->footer_text);
+                    size_t domain = str_length(meta->footer_domain);
+                    if (total > domain) {
+                        uint32_t domain_x = footer_x(state.screen_width) +
+                                            (uint32_t)((total - domain) * 8U);
+                        if (mevt->x >= (int32_t)domain_x &&
+                            mevt->x <= (int32_t)(domain_x + (domain * 8U))) {
+                            (void)desktop_open_url(meta->developer_website);
+                            return;
+                        }
+                    }
+                }
+            }
+
             /* Check Taskbar Window Tabs */
             if (mevt->y >= (int32_t)tb_y) {
                 uint32_t tab_x = 60;
@@ -185,6 +226,25 @@ void desktop_render(struct gfx_surface *surf) {
     /* System Tray */
     uint32_t tray_x = surf->width - 180;
     gfx_draw_string(surf, tray_x, tb_y + 16, "[NET] [VOL] 12:00", GFX_COLOR_TEXT_SECONDARY);
+
+    /* Developer footer from the central metadata source. The domain is
+     * underlined and click-handled above. */
+    {
+        const struct dawn_metadata_view *meta = dawn_metadata_get();
+        if (meta != NULL) {
+            uint32_t fx = footer_x(surf->width);
+            uint32_t fy = tb_y + 30U;
+            size_t total = str_length(meta->footer_text);
+            size_t domain = str_length(meta->footer_domain);
+            gfx_draw_string(surf, fx, fy, meta->footer_text, GFX_COLOR_TEXT_MUTED);
+            if (total > domain) {
+                uint32_t domain_x = fx + (uint32_t)((total - domain) * 8U);
+                gfx_draw_line(surf, (int32_t)domain_x, (int32_t)(fy + 16U),
+                              (int32_t)(domain_x + (uint32_t)(domain * 8U)),
+                              (int32_t)(fy + 16U), GFX_COLOR_EMERALD_ACCENT);
+            }
+        }
+    }
 
     /* Render Start Menu / App Launcher if open */
     if (state.launcher_open) {

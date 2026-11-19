@@ -156,3 +156,14 @@ No performance or security superiority over Linux is claimed. A small kernel ELF
 ## Licensing
 
 The project retains the repository's Unlicense dedication. The minimal Limine protocol declarations in `include/limine_requests.h` are derived from the official Limine protocol header and carry its 0BSD license notice.
+
+## Developer identity and OS metadata
+
+DAWN-OS is developed and maintained by **Pavithran** (project owner: **Pavithran26**). The authoritative identity is `config/os_metadata.json`; it is the single source for the website (`https://pavithran26.net`), GitHub profile (`https://github.com/Pavithran26`), repository and issue tracker.
+
+- `tools/generate_metadata.py` validates the JSON and generates `include/dawn_metadata_generated.h`. Dynamic build fields (Git commit, reproducible build date, kernel version) come from the build environment, not from hand-edited UI strings.
+- `include/os_metadata.h` / `kernel/os_metadata.c` expose a read-only runtime API with URL validation, optional-field handling, and safe text escaping. Invalid metadata is rejected rather than replaced with invented values.
+- Settings now includes **About DAWN-OS**, **Developer Credits**, **Help & Support**, and **System Information** tabs, all powered by that API. The desktop taskbar shows a clickable developer footer.
+- System Information reads CPU brand via CPUID, memory from the physical allocator, uptime from the LAPIC timer, and storage/filesystem data from the block and storage managers. Values that cannot be detected display "Not available".
+
+There is no system browser in the current build. Clicking a link validates the URL and shows a notification containing it; opening a real browser is future work. See `docs/OS_METADATA.md` for the schema, validation rules, and update instructions.

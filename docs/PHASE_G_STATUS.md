@@ -69,6 +69,7 @@ Phase G implements the Graphics Abstraction Layer (GAL), 2D software drawing eng
   - Start button (`36x32` pill) featuring the DAWN-OS Emerald Logo icon.
   - Running application switcher tabs with focused glowing underline indicators.
   - Integrated System Tray with network status, volume pill, and real-time clock display.
+  - Developer footer (`DAWN-OS | Developed by Pavithran | pavithran26.net`) built from `config/os_metadata.json`; the domain is underlined and click-handled through the validated `desktop_open_url()` path.
 - Start Menu / App Launcher:
   - Floats above Start button with frosted glass panel and specular highlight.
   - Header branding ("DAWN-OS" with emerald diamond).
