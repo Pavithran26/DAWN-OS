@@ -752,53 +752,124 @@ bool process_spawn(const void *image,size_t image_size,
 }
 
 #ifdef DAWN_KERNEL_TEST
+#define PROCESS_TEST_COM1 0x3f8U
+
+static inline void process_test_outb(uint16_t port, uint8_t value) {
+    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static inline uint8_t process_test_inb(uint16_t port) {
+    uint8_t value = 0U;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
+
+static void process_test_log(const char *message) {
+    if (message == NULL) return;
+    while (*message != '\0') {
+        uint32_t spins = 0U;
+        while ((process_test_inb(PROCESS_TEST_COM1 + 5U) & 0x20U) == 0U) {
+            if (++spins > 1000000U) return;
+        }
+        if (*message == '\n') {
+            process_test_outb(PROCESS_TEST_COM1, (uint8_t)'\r');
+            spins = 0U;
+            while ((process_test_inb(PROCESS_TEST_COM1 + 5U) & 0x20U) == 0U) {
+                if (++spins > 1000000U) return;
+            }
+        }
+        process_test_outb(PROCESS_TEST_COM1, (uint8_t)*message);
+        ++message;
+    }
+}
+
 static bool process_manager_self_test_locked(void) {
     uint64_t ids[DAWN_PROCESS_MAX]={0ULL};
     struct process_info info={0};
     uint64_t extra=0ULL;
-    if (!initialized || process_create(NULL) ||
-        process_mark_ready(0ULL) || process_mark_exited(0ULL)) return false;
+    if (!initialized) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: not initialized\n");
+        return false;
+    }
+    if (process_create(NULL)) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_create(NULL) did not fail\n");
+        return false;
+    }
+    if (process_mark_ready(0ULL) || process_mark_exited(0ULL)) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: PID 0 state transitions did not fail\n");
+        return false;
+    }
     for (size_t i=0U;i<DAWN_PROCESS_MAX;i++) {
-        if (!process_create(&ids[i]) || ids[i]==0ULL) return false;
+        if (!process_create(&ids[i]) || ids[i]==0ULL) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_create failed during capacity fill\n");
+            return false;
+        }
         if (!process_get_info(ids[i],&info) ||
             info.id!=ids[i] || info.state!=PROCESS_STATE_CREATED ||
-            info.address_space_root==0ULL || info.kernel_stack_top==0ULL)
+            info.address_space_root==0ULL || info.kernel_stack_top==0ULL) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: invalid process_info for new process\n");
             return false;
-        for (size_t j=0U;j<i;j++)
-            if (ids[i]==ids[j]) return false;
+        }
+        for (size_t j=0U;j<i;j++) {
+            if (ids[i]==ids[j]) {
+                process_test_log("DAWN-TEST: FAIL: process resource lifecycle: duplicate PID allocated\n");
+                return false;
+            }
+        }
     }
-    if (process_create(&extra) || extra!=0ULL ||
-        !process_mark_ready(ids[0]) ||
-        process_mark_ready(ids[0]) ||
-        process_reap(ids[0]) ||
-        !process_activate(ids[0]) ||
-        process_active_id()!=ids[0] ||
+    if (process_create(&extra) || extra!=0ULL) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process table overflow allowed\n");
+        return false;
+    }
+    if (!process_mark_ready(ids[0]) || process_mark_ready(ids[0]) || process_reap(ids[0])) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: ready state transition or un-exited reap validation failed\n");
+        return false;
+    }
+    if (!process_activate(ids[0]) || process_active_id()!=ids[0] ||
         !process_get_info(ids[0],&info) ||
         !vm_address_space_is_active(&processes[0].address_space) ||
-        gdt_tss_kernel_stack_top()!=info.kernel_stack_top ||
-        !process_mark_ready(ids[1]) ||
-        !process_switch_to(ids[1]) ||
+        gdt_tss_kernel_stack_top()!=info.kernel_stack_top) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_activate or TSS stack check failed\n");
+        return false;
+    }
+    if (!process_mark_ready(ids[1]) || !process_switch_to(ids[1]) ||
         process_active_id()!=ids[1] ||
         !vm_address_space_is_active(&processes[1].address_space) ||
-        gdt_tss_kernel_stack_top()!=processes[1].kernel_stack_top ||
-        !process_switch_to(ids[0]) ||
-        process_active_id()!=ids[0] ||
-        process_mark_exited(ids[0]) ||
-        process_reap(ids[0]) ||
-        !process_deactivate() ||
-        process_active_id()!=0ULL ||
+        gdt_tss_kernel_stack_top()!=processes[1].kernel_stack_top) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_switch_to second process failed\n");
+        return false;
+    }
+    if (!process_switch_to(ids[0]) || process_active_id()!=ids[0]) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_switch_to first process failed\n");
+        return false;
+    }
+    if (process_mark_exited(ids[0]) || process_reap(ids[0])) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: active process allowed to exit or reap\n");
+        return false;
+    }
+    if (!process_deactivate() || process_active_id()!=0ULL ||
         vm_address_space_is_active(&processes[0].address_space) ||
-        gdt_tss_kernel_stack_top()!=bootstrap_kernel_stack_top ||
-        !process_mark_exited(ids[0]) ||
-        process_mark_exited(ids[0]) ||
-        !process_reap(ids[0]) ||
-        process_get_info(ids[0],&info)) return false;
+        gdt_tss_kernel_stack_top()!=bootstrap_kernel_stack_top) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_deactivate failed\n");
+        return false;
+    }
+    if (!process_mark_exited(ids[0]) || process_mark_exited(ids[0]) ||
+        !process_reap(ids[0]) || process_get_info(ids[0],&info)) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: exited state or reap failed for ids[0]\n");
+        return false;
+    }
     for (size_t i=1U;i<DAWN_PROCESS_MAX;i++) {
         if (!process_mark_exited(ids[i]) || !process_reap(ids[i]) ||
-            process_get_info(ids[i],&info)) return false;
+            process_get_info(ids[i],&info)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: cleanup reap failed for table\n");
+            return false;
+        }
     }
     if (!process_create(&extra) || extra<=ids[DAWN_PROCESS_MAX-1U] ||
-        !process_mark_exited(extra) || !process_reap(extra)) return false;
+        !process_mark_exited(extra) || !process_reap(extra)) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: slot reuse after full table reap failed\n");
+        return false;
+    }
 
     /* A child inherits the active process as its parent. Parent resources
      * remain allocated until all child records have been reaped. */
@@ -825,8 +896,10 @@ static bool process_manager_self_test_locked(void) {
             !process_reap(child_id) ||
             process_has_children(parent_id,0,&exited_found) ||
             !process_reap(parent_id) ||
-            process_get_child_info(parent_id,child_id,&child_info))
+            process_get_child_info(parent_id,child_id,&child_info)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: parent-child hierarchy and cascade reap protection failed\n");
             return false;
+        }
     }
 
     /* File descriptor table validation */
@@ -834,21 +907,53 @@ static bool process_manager_self_test_locked(void) {
         uint64_t pid=0ULL;
         struct dawn_fd_entry fd_entry={0};
         int new_fd=-1,dup_fd=-1;
-        if (!process_create(&pid) || !process_mark_ready(pid)) return false;
-        if (!process_fd_get(pid,0,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
-            (fd_entry.flags&DAWN_O_RDONLY)==0U) return false;
-        if (!process_fd_get(pid,1,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
-            (fd_entry.flags&DAWN_O_WRONLY)==0U) return false;
-        if (!process_fd_get(pid,2,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
-            (fd_entry.flags&DAWN_O_WRONLY)==0U) return false;
-        if (process_fd_get(pid,3,&fd_entry)) return false;
-        if (!process_fd_allocate(pid,DAWN_FD_TYPE_NULL,DAWN_O_RDWR,NULL,&new_fd) || new_fd!=3)
+        if (!process_create(&pid) || !process_mark_ready(pid)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD test process creation failed\n");
             return false;
-        if (!process_fd_dup(pid,new_fd,&dup_fd) || dup_fd!=4) return false;
-        if (!process_fd_dup2(pid,new_fd,10)) return false;
-        if (!process_fd_get(pid,10,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_NULL) return false;
-        if (!process_fd_close(pid,new_fd) || process_fd_get(pid,new_fd,&fd_entry)) return false;
-        if (!process_mark_exited(pid) || !process_reap(pid)) return false;
+        }
+        if (!process_fd_get(pid,0,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
+            (fd_entry.flags&DAWN_O_RDONLY)==0U) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: stdin FD 0 not configured\n");
+            return false;
+        }
+        if (!process_fd_get(pid,1,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
+            (fd_entry.flags&DAWN_O_WRONLY)==0U) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: stdout FD 1 not configured\n");
+            return false;
+        }
+        if (!process_fd_get(pid,2,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_SERIAL ||
+            (fd_entry.flags&DAWN_O_WRONLY)==0U) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: stderr FD 2 not configured\n");
+            return false;
+        }
+        if (process_fd_get(pid,3,&fd_entry)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: unallocated FD 3 exists\n");
+            return false;
+        }
+        if (!process_fd_allocate(pid,DAWN_FD_TYPE_NULL,DAWN_O_RDWR,NULL,&new_fd) || new_fd!=3) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD allocation failed to return FD 3\n");
+            return false;
+        }
+        if (!process_fd_dup(pid,new_fd,&dup_fd) || dup_fd!=4) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD dup failed to return FD 4\n");
+            return false;
+        }
+        if (!process_fd_dup2(pid,new_fd,10)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD dup2 to FD 10 failed\n");
+            return false;
+        }
+        if (!process_fd_get(pid,10,&fd_entry) || fd_entry.type!=DAWN_FD_TYPE_NULL) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD 10 entry invalid after dup2\n");
+            return false;
+        }
+        if (!process_fd_close(pid,new_fd) || process_fd_get(pid,new_fd,&fd_entry)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD close failed\n");
+            return false;
+        }
+        if (!process_mark_exited(pid) || !process_reap(pid)) {
+            process_test_log("DAWN-TEST: FAIL: process resource lifecycle: FD test process cleanup failed\n");
+            return false;
+        }
     }
     return true;
 }
@@ -856,7 +961,10 @@ static bool process_manager_self_test_locked(void) {
 bool process_manager_self_test(void) {
     const uint64_t flags=read_rflags();
     bool result=false;
-    if (!initialized || (read_cs()&3U)!=0U) return false;
+    if (!initialized || (read_cs()&3U)!=0U) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: manager uninitialized or ring 3\n");
+        return false;
+    }
     disable_interrupts();
     result=process_manager_self_test_locked();
     restore_interrupt_flag(flags);
@@ -866,19 +974,24 @@ bool process_manager_self_test(void) {
 bool process_spawn_self_test(void) {
     const uint64_t flags=read_rflags();
     bool result=false;
-    if (!initialized || !scheduler_is_initialized() || (read_cs()&3U)!=0U) return false;
+    if (!initialized || !scheduler_is_initialized() || (read_cs()&3U)!=0U) {
+        process_test_log("DAWN-TEST: FAIL: process spawn self-test: scheduler uninitialized or ring 3\n");
+        return false;
+    }
     disable_interrupts();
     {
         uint8_t image[8192]={0U};
         size_t image_size=0U;
         uint64_t spawned_pid=0ULL;
         const char *test_args[]={"spawned",NULL};
-        if (elf64_build_test_exit_image(image,sizeof(image),&image_size)) {
-            if (process_spawn(image,image_size,1,test_args,NULL,&spawned_pid) && spawned_pid!=0ULL) {
-                if (process_mark_exited(spawned_pid) && process_reap(spawned_pid)) {
-                    result=true;
-                }
-            }
+        if (!elf64_build_test_exit_image(image,sizeof(image),&image_size)) {
+            process_test_log("DAWN-TEST: FAIL: process spawn self-test: elf64_build_test_exit_image failed\n");
+        } else if (!process_spawn(image,image_size,1,test_args,NULL,&spawned_pid) || spawned_pid==0ULL) {
+            process_test_log("DAWN-TEST: FAIL: process spawn self-test: process_spawn failed\n");
+        } else if (!process_mark_exited(spawned_pid) || !process_reap(spawned_pid)) {
+            process_test_log("DAWN-TEST: FAIL: process spawn self-test: cleanup reap failed\n");
+        } else {
+            result=true;
         }
     }
     restore_interrupt_flag(flags);
