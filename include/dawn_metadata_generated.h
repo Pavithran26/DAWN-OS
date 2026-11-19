@@ -10,9 +10,9 @@
 #define DAWN_META_OS_ARCHITECTURE "x86_64"
 #define DAWN_META_OS_VERSION "1.0.0"
 #define DAWN_META_OS_CHANNEL "development"
-#define DAWN_META_BUILD_ID "7cdf94567f2ca80596fe83cb3f12af4deba1e894"
+#define DAWN_META_BUILD_ID "cf98ba87c44fed0b6732f14b3ff97a3c90370a16"
 #define DAWN_META_BUILD_DATE "2026-11-19"
-#define DAWN_META_KERNEL_VERSION "dawn-7cdf945-dirty"
+#define DAWN_META_KERNEL_VERSION "dawn-cf98ba8-dirty"
 
 #define DAWN_META_DEVELOPER_NAME "Pavithran"
 #define DAWN_META_DEVELOPER_DISPLAY_NAME "Pavithran"

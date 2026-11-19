@@ -16,18 +16,18 @@ struct fat32_fs {
     uint32_t cluster_count;
 };
 
+struct fat32_file_info {
+    uint32_t first_cluster;
+    uint32_t dir_cluster;
+    uint32_t dir_offset;
+};
+
 #define FAT32_MAX_NODES 32U
 static struct fat32_fs global_fat32_state;
 static struct vfs_node fat32_root_node;
 static struct vfs_node fat32_file_nodes[FAT32_MAX_NODES];
 static struct fat32_file_info fat32_fi_pool[FAT32_MAX_NODES];
 static uint32_t fat32_node_count;
-
-struct fat32_file_info {
-    uint32_t first_cluster;
-    uint32_t dir_cluster;
-    uint32_t dir_offset;
-};
 
 static inline void fat_str_copy(char *dest, const char *src, size_t max_len) {
     size_t i = 0;

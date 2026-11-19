@@ -19,6 +19,8 @@ struct scheduler_stats {
     uint64_t user_wait_blocks;
 };
 bool scheduler_initialize(void);
+bool scheduler_is_initialized(void);
+bool scheduler_discard_process_threads(uint64_t process_id);
 bool kernel_thread_create(kernel_thread_entry entry, void *argument,
                           uint64_t *thread_id);
 /* Bind one READY process to a not-yet-running kernel thread. */

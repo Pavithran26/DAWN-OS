@@ -1076,6 +1076,12 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: parent child wait, blocking and collection\n");
+    if (!process_spawn_self_test()) {
+        serial_write("DAWN-TEST: FAIL: process spawning from in-memory ELF image\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: process spawning from in-memory ELF image and thread binding\n");
     if (!apic_local_timer_periodic_self_test()) {
         serial_write("DAWN-TEST: FAIL: Local APIC periodic stop/restart checks\n");
         qemu_debug_exit(QEMU_TEST_FAIL);

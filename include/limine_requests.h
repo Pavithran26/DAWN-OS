@@ -131,6 +131,8 @@ struct limine_memmap_request {
     struct limine_memmap_response *response;
 };
 
+extern volatile struct limine_memmap_request limine_memmap_request;
+
 struct limine_hhdm_response {
     uint64_t revision;
     uint64_t offset;
@@ -141,6 +143,8 @@ struct limine_hhdm_request {
     uint64_t revision;
     struct limine_hhdm_response *response;
 };
+
+extern volatile struct limine_hhdm_request limine_hhdm_request;
 
 struct limine_paging_mode_response {
     uint64_t revision;
@@ -156,6 +160,8 @@ struct limine_paging_mode_request {
     uint64_t min_mode;
 };
 
+extern volatile struct limine_paging_mode_request limine_paging_mode_request;
+
 struct limine_rsdp_response {
     uint64_t revision;
     void *address;
@@ -166,6 +172,8 @@ struct limine_rsdp_request {
     uint64_t revision;
     struct limine_rsdp_response *response;
 };
+
+extern volatile struct limine_rsdp_request limine_rsdp_request;
 
 struct limine_efi_system_table_response {
     uint64_t revision;

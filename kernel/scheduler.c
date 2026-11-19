@@ -258,6 +258,30 @@ bool scheduler_initialize(void) {
     return true;
 }
 
+bool scheduler_is_initialized(void) {
+    return initialized;
+}
+
+bool scheduler_discard_process_threads(uint64_t process_id) {
+    if (!initialized || process_id==0ULL || (read_cs()&3U)!=0U)
+        return false;
+    const uint64_t saved_flags=read_rflags();
+    disable_interrupts();
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        struct kernel_thread *thread=&thread_pool[i];
+        if (thread->process_id==process_id &&
+            thread->state!=THREAD_FREE &&
+            thread->state!=THREAD_DEAD) {
+            thread->state=THREAD_DEAD;
+            thread->process_id=0ULL;
+            if (counters.active_threads>0ULL) --counters.active_threads;
+            increment_saturated(&counters.threads_exited);
+        }
+    }
+    restore_interrupt_flag(saved_flags);
+    return true;
+}
+
 bool kernel_thread_create(kernel_thread_entry entry,void *argument,
                           uint64_t *thread_id) {
     uint64_t saved_flags=0ULL;
@@ -355,7 +379,7 @@ bool kernel_thread_configure_user_args(uint64_t thread_id,
     }
     if (target==NULL || target->process_id!=0ULL ||
         !process_get_info(process_id,&info) ||
-        info.state!=PROCESS_STATE_READY ||
+        (info.state!=PROCESS_STATE_READY && info.state!=PROCESS_STATE_CREATED) ||
         info.kernel_stack_top<(uint64_t)DAWN_PROCESS_KERNEL_STACK_SIZE+
                               (uint64_t)KERNEL_THREAD_GUARD_SIZE) {
         restore_interrupt_flag(saved_flags);

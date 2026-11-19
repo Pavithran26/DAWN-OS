@@ -89,5 +89,6 @@ bool process_spawn(const void *image,size_t image_size,
 
 #ifdef DAWN_KERNEL_TEST
 bool process_manager_self_test(void);
+bool process_spawn_self_test(void);
 #endif
 #endif

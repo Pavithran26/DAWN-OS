@@ -552,6 +552,9 @@ bool process_reap(uint64_t process_id) {
             return false;
         }
     }
+    if (scheduler_is_initialized()) {
+        (void)scheduler_discard_process_threads(process_id);
+    }
     while (record->user_page_count>0U) {
         const size_t index=record->user_page_count-1U;
         const struct process_user_page page=record->user_pages[index];
@@ -724,6 +727,12 @@ bool process_spawn(const void *image,size_t image_size,
         }
     }
 
+    if (!process_mark_ready(child_pid)) {
+        (void)process_mark_exited(child_pid);
+        (void)process_reap(child_pid);
+        return false;
+    }
+
     if (!kernel_thread_create(NULL,NULL,&thread_id)) {
         (void)process_mark_exited(child_pid);
         (void)process_reap(child_pid);
@@ -841,20 +850,6 @@ static bool process_manager_self_test_locked(void) {
         if (!process_fd_close(pid,new_fd) || process_fd_get(pid,new_fd,&fd_entry)) return false;
         if (!process_mark_exited(pid) || !process_reap(pid)) return false;
     }
-
-    /* Process spawning from memory image validation */
-    {
-        uint8_t image[8192]={0U};
-        size_t image_size=0U;
-        uint64_t spawned_pid=0ULL;
-        const char *test_args[]={"spawned",NULL};
-        if (elf64_build_test_exit_image(image,sizeof(image),&image_size)) {
-            if (!process_spawn(image,image_size,1,test_args,NULL,&spawned_pid) || spawned_pid==0ULL)
-                return false;
-            if (!process_mark_exited(spawned_pid) || !process_reap(spawned_pid))
-                return false;
-        }
-    }
     return true;
 }
 
@@ -864,6 +859,28 @@ bool process_manager_self_test(void) {
     if (!initialized || (read_cs()&3U)!=0U) return false;
     disable_interrupts();
     result=process_manager_self_test_locked();
+    restore_interrupt_flag(flags);
+    return result;
+}
+
+bool process_spawn_self_test(void) {
+    const uint64_t flags=read_rflags();
+    bool result=false;
+    if (!initialized || !scheduler_is_initialized() || (read_cs()&3U)!=0U) return false;
+    disable_interrupts();
+    {
+        uint8_t image[8192]={0U};
+        size_t image_size=0U;
+        uint64_t spawned_pid=0ULL;
+        const char *test_args[]={"spawned",NULL};
+        if (elf64_build_test_exit_image(image,sizeof(image),&image_size)) {
+            if (process_spawn(image,image_size,1,test_args,NULL,&spawned_pid) && spawned_pid!=0ULL) {
+                if (process_mark_exited(spawned_pid) && process_reap(spawned_pid)) {
+                    result=true;
+                }
+            }
+        }
+    }
     restore_interrupt_flag(flags);
     return result;
 }

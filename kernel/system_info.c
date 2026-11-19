@@ -69,7 +69,7 @@ static void local_read_cpu_model(char *dst, size_t capacity) {
     uint8_t *bytes = (uint8_t *)registers;
     size_t length = 0U;
     uint32_t largest_extended = 0U;
-    uint32_t a = 0U, b = 0U, c = 0U, d = 0U;
+    uint32_t b = 0U, c = 0U, d = 0U;
 
     if (dst == NULL || capacity == 0U) return;
     local_cpuid(0x80000000U, &largest_extended, &b, &c, &d);
