@@ -23,9 +23,18 @@ CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
 ASFLAGS = -m64 -ffreestanding -fno-pic -fno-pie -mno-red-zone
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 --build-id=none
 
+USER_CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
+              -Wundef -ffreestanding -fno-stack-protector -fno-pic -fno-pie \
+              -m64 -Iuser/include
+USER_LDFLAGS = -nostdlib -static -no-pie -T user/linker.ld -z max-page-size=0x1000
+
 KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o build/process.o build/elf-loader.o build/vfs.o build/fat32.o build/iso9660.o build/vfs-cache.o build/file-explorer.o build/block_dev.o build/pci.o build/ahci.o build/nvme.o build/partition.o build/storage_manager.o build/device.o build/ps2.o build/xhci.o build/usb_hid.o build/input.o build/rtc.o build/gfx.o build/window_manager.o build/desktop.o build/calculator.o build/calendar.o build/shell.o build/terminal.o build/task_manager.o build/net.o build/audio.o build/settings.o build/installer.o build/security.o build/app_runtime.o build/service_manager.o build/power.o build/localization.o build/advanced.o build/os_metadata.o build/system_info.o
 
-.PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all metadata
+USER_BINARIES = build/user/init.elf build/user/sh.elf build/user/echo.elf \
+                build/user/cat.elf build/user/ls.elf build/user/ld_dawn.elf \
+                build/user/gui_demo.elf
+
+.PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all metadata user-bins
 
 metadata: include/dawn_metadata_generated.h
 
@@ -352,6 +361,48 @@ build/system-info-test.o: kernel/system_info.c include/system_info.h include/os_
 build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/rtc-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/calculator-test.o build/calendar-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o linker.ld
 	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/rtc-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/calculator-test.o build/calendar-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o
 
+build/user:
+	mkdir -p build/user
+
+build/user/crt0.o: user/crt0.S | build/user
+	$(CC) $(ASFLAGS) -c $< -o $@
+
+build/user/libdawn.o: user/libdawn.c user/include/dawn.h | build/user
+	$(CC) $(USER_CFLAGS) -c $< -o $@
+
+build/user/libdawn_gui.o: user/libdawn_gui.c user/include/dawn_gui.h user/include/dawn.h | build/user
+	$(CC) $(USER_CFLAGS) -c $< -o $@
+
+build/user/init.elf: build/user/crt0.o user/init.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/init.c -o build/user/init.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/init.o build/user/libdawn.o
+
+build/user/sh.elf: build/user/crt0.o user/sh.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/sh.c -o build/user/sh.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/sh.o build/user/libdawn.o
+
+build/user/echo.elf: build/user/crt0.o user/echo.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/echo.c -o build/user/echo.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/echo.o build/user/libdawn.o
+
+build/user/cat.elf: build/user/crt0.o user/cat.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/cat.c -o build/user/cat.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/cat.o build/user/libdawn.o
+
+build/user/ls.elf: build/user/crt0.o user/ls.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/ls.c -o build/user/ls.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/ls.o build/user/libdawn.o
+
+build/user/ld_dawn.elf: build/user/crt0.o user/ld_dawn.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/ld_dawn.c -o build/user/ld_dawn.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/ld_dawn.o build/user/libdawn.o
+
+build/user/gui_demo.elf: build/user/crt0.o user/gui_demo.c build/user/libdawn.o build/user/libdawn_gui.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/gui_demo.c -o build/user/gui_demo.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/gui_demo.o build/user/libdawn.o build/user/libdawn_gui.o
+
+user-bins: $(USER_BINARIES)
+
 check: kernel
 	@set -eu; \
 	$(READELF) -h build/dawn-kernel.elf | grep -q 'Class:.*ELF64'; \
@@ -362,7 +413,7 @@ check: kernel
 	$(READELF) -l build/dawn-kernel.elf | grep -q 'RW '; \
 	echo 'ELF check: PASS (ELF64 x86-64 executable; Limine requests and load segments present)'
 
-iso: $(KERNEL_ELF)
+iso: $(KERNEL_ELF) user-bins
 	@command -v $(XORRISO) >/dev/null 2>&1 || { echo 'xorriso not found' >&2; exit 1; }
 	@test -x "$(LIMINE)" || { echo 'Limine installer not found/executable: $(LIMINE)' >&2; exit 1; }
 	@test -f "$(LIMINE_BIOS_SYS)" || { echo 'Missing $(LIMINE_BIOS_SYS)' >&2; exit 1; }
@@ -370,11 +421,12 @@ iso: $(KERNEL_ELF)
 	@test -f "$(LIMINE_UEFI_CD)" || { echo 'Missing $(LIMINE_UEFI_CD)' >&2; exit 1; }
 	@test -f "$(LIMINE_EFI)" || { echo 'Missing $(LIMINE_EFI)' >&2; exit 1; }
 	rm -rf build/iso_root
-	mkdir -p build/iso_root/boot/limine build/iso_root/EFI/BOOT
+	mkdir -p build/iso_root/boot/limine build/iso_root/EFI/BOOT build/iso_root/bin
 	cp "$(KERNEL_ELF)" build/iso_root/boot/dawnos.elf
 	cp limine.conf build/iso_root/boot/limine/limine.conf
 	cp "$(LIMINE_BIOS_SYS)" "$(LIMINE_BIOS_CD)" "$(LIMINE_UEFI_CD)" build/iso_root/boot/limine/
 	cp "$(LIMINE_EFI)" build/iso_root/EFI/BOOT/BOOTX64.EFI
+	cp build/user/*.elf build/iso_root/bin/ 2>/dev/null || true
 	$(XORRISO) -as mkisofs -R -r -J -hfsplus -apm-block-size 2048 \
 		-b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table \
 		--efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image \
