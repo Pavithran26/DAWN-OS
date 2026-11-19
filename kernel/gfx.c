@@ -332,6 +332,27 @@ void gfx_draw_icon(struct gfx_surface *surf, uint32_t x, uint32_t y, enum gfx_ic
             gfx_draw_rect_outline(surf, x + 2, y + 2, 12, 12, color);
             gfx_draw_line(surf, (int32_t)(x + 7), (int32_t)(y + 1), (int32_t)(x + 7), (int32_t)(y + 6), color);
             break;
+        case GFX_ICON_CALCULATOR:
+            /* Calculator body with screen and 4 buttons */
+            gfx_draw_glass_panel(surf, x + 1, y + 1, 14, 14, GFX_COLOR_EMERALD_BASE);
+            gfx_draw_rect_outline(surf, x + 1, y + 1, 14, 14, color);
+            gfx_draw_rect_filled(surf, x + 3, y + 3, 10, 3, GFX_COLOR_EMERALD_DEEP);
+            gfx_draw_rect_filled(surf, x + 3, y + 8, 3, 2, color);
+            gfx_draw_rect_filled(surf, x + 7, y + 8, 3, 2, color);
+            gfx_draw_rect_filled(surf, x + 3, y + 11, 3, 2, color);
+            gfx_draw_rect_filled(surf, x + 7, y + 11, 6, 2, GFX_COLOR_EMERALD_HIGHLIGHT);
+            break;
+        case GFX_ICON_CALENDAR:
+            /* Calendar sheet with red/emerald top bar and date grid */
+            gfx_draw_glass_panel(surf, x + 1, y + 2, 14, 13, GFX_COLOR_EMERALD_BASE);
+            gfx_draw_rect_outline(surf, x + 1, y + 2, 14, 13, color);
+            gfx_draw_rect_filled(surf, x + 1, y + 2, 14, 4, GFX_COLOR_EMERALD_PRIMARY);
+            gfx_draw_line(surf, (int32_t)(x + 4), (int32_t)y, (int32_t)(x + 4), (int32_t)(y + 2), color);
+            gfx_draw_line(surf, (int32_t)(x + 11), (int32_t)y, (int32_t)(x + 11), (int32_t)(y + 2), color);
+            gfx_draw_rect_filled(surf, x + 4, y + 8, 2, 2, color);
+            gfx_draw_rect_filled(surf, x + 8, y + 8, 2, 2, color);
+            gfx_draw_rect_filled(surf, x + 6, y + 11, 4, 3, GFX_COLOR_EMERALD_HIGHLIGHT);
+            break;
         case GFX_ICON_DAWN_LOGO:
         default:
             /* Emerald diamond / dawn sun symbol */

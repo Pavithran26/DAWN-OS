@@ -49,6 +49,9 @@
 #include "advanced.h"
 #include "os_metadata.h"
 #include "system_info.h"
+#include "rtc.h"
+#include "calculator.h"
+#include "calendar.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -781,6 +784,15 @@ void kernel_main(void) {
     }
     serial_write("DAWN-OS: device manager and driver framework initialized\n");
 
+    if (!rtc_initialize()) {
+        serial_write("DAWN-OS: FAIL: RTC driver initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: CMOS real-time clock driver initialized\n");
+
     if (!input_initialize()) {
         serial_write("DAWN-OS: FAIL: input subsystem initialization\n");
 #ifdef DAWN_KERNEL_TEST
@@ -1196,6 +1208,12 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: unified input event queue and dispatch\n");
+    if (!rtc_self_test()) {
+        serial_write("DAWN-TEST: FAIL: real-time clock BCD decoding and formatting\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: real-time clock BCD decoding and formatting\n");
 
     /* Phase G: Graphics and Desktop Environment */
     if (!gfx_self_test()) {
@@ -1216,6 +1234,18 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: desktop taskbar, launcher and composition\n");
+    if (!calculator_self_test()) {
+        serial_write("DAWN-TEST: FAIL: calculator application operations\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: calculator application operations and button layout\n");
+    if (!calendar_self_test()) {
+        serial_write("DAWN-TEST: FAIL: calendar date calculations and month navigation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: calendar date calculations and month navigation\n");
 
     /* Phase H: Terminal and Shell */
     if (!shell_self_test()) {

@@ -3,6 +3,9 @@
 #include "os_metadata.h"
 #include "settings.h"
 #include "power.h"
+#include "rtc.h"
+#include "calculator.h"
+#include "calendar.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -112,10 +115,10 @@ void desktop_handle_input_event(const struct input_event *event) {
             /* Check Launcher items if launcher open */
             if (state.launcher_open) {
                 int32_t lx = 8;
-                int32_t ly = (int32_t)(tb_y - 290);
+                int32_t ly = (int32_t)(tb_y - 350);
                 if (mevt->x >= lx && mevt->x <= lx + 220 && mevt->y >= ly && mevt->y <= (int32_t)tb_y) {
-                    /* Item 1: Terminal (ly + 40 to ly + 68) */
-                    if (mevt->y >= ly + 40 && mevt->y < ly + 68) {
+                    /* Item 1: Terminal (ly + 38 to ly + 64) */
+                    if (mevt->y >= ly + 38 && mevt->y < ly + 64) {
                         struct window *existing = wm_find_window_by_title("Terminal");
                         if (existing != NULL) {
                             if (existing->minimized) wm_minimize_window(existing->id);
@@ -126,8 +129,8 @@ void desktop_handle_input_event(const struct input_event *event) {
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 2: File Explorer (ly + 70 to ly + 98) */
-                    if (mevt->y >= ly + 70 && mevt->y < ly + 98) {
+                    /* Item 2: File Explorer (ly + 66 to ly + 92) */
+                    if (mevt->y >= ly + 66 && mevt->y < ly + 92) {
                         struct window *existing = wm_find_window_by_title("File Explorer");
                         if (existing != NULL) {
                             if (existing->minimized) wm_minimize_window(existing->id);
@@ -138,8 +141,8 @@ void desktop_handle_input_event(const struct input_event *event) {
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 3: Task Manager (ly + 100 to ly + 128) */
-                    if (mevt->y >= ly + 100 && mevt->y < ly + 128) {
+                    /* Item 3: Task Manager (ly + 94 to ly + 120) */
+                    if (mevt->y >= ly + 94 && mevt->y < ly + 120) {
                         struct window *existing = wm_find_window_by_title("Task Manager");
                         if (existing != NULL) {
                             if (existing->minimized) wm_minimize_window(existing->id);
@@ -150,26 +153,38 @@ void desktop_handle_input_event(const struct input_event *event) {
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 4: Settings (ly + 130 to ly + 158) */
-                    if (mevt->y >= ly + 130 && mevt->y < ly + 158) {
+                    /* Item 4: Calculator (ly + 122 to ly + 148) */
+                    if (mevt->y >= ly + 122 && mevt->y < ly + 148) {
+                        calculator_window_open();
+                        state.launcher_open = false;
+                        return;
+                    }
+                    /* Item 5: Calendar (ly + 150 to ly + 176) */
+                    if (mevt->y >= ly + 150 && mevt->y < ly + 176) {
+                        calendar_window_open();
+                        state.launcher_open = false;
+                        return;
+                    }
+                    /* Item 6: Settings (ly + 178 to ly + 204) */
+                    if (mevt->y >= ly + 178 && mevt->y < ly + 204) {
                         settings_window_open();
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 5: Help & Support (ly + 160 to ly + 188) */
-                    if (mevt->y >= ly + 160 && mevt->y < ly + 188) {
+                    /* Item 7: Help & Support (ly + 206 to ly + 232) */
+                    if (mevt->y >= ly + 206 && mevt->y < ly + 232) {
                         settings_window_open_tab(TAB_HELP_SUPPORT);
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 6: About DAWN-OS (ly + 190 to ly + 218) */
-                    if (mevt->y >= ly + 190 && mevt->y < ly + 218) {
+                    /* Item 8: About DAWN-OS (ly + 234 to ly + 264) */
+                    if (mevt->y >= ly + 234 && mevt->y < ly + 264) {
                         settings_window_open_tab(TAB_ABOUT);
                         state.launcher_open = false;
                         return;
                     }
-                    /* Shutdown button (ly + 228 to ly + 280) */
-                    if (mevt->y >= ly + 228 && mevt->y < ly + 280) {
+                    /* Shutdown button (ly + 280 to ly + 340) */
+                    if (mevt->y >= ly + 280 && mevt->y < ly + 340) {
                         desktop_show_notification("Power", "System Shut Down initiated");
                         state.launcher_open = false;
                         power_shutdown();
@@ -179,6 +194,12 @@ void desktop_handle_input_event(const struct input_event *event) {
                     /* Clicked outside launcher */
                     state.launcher_open = false;
                 }
+            }
+
+            /* Check Tray Clock Click to open Calendar */
+            if (mevt->y >= (int32_t)tb_y && mevt->x >= (int32_t)(state.screen_width - 180)) {
+                calendar_window_open();
+                return;
             }
 
             /* Check Taskbar Window Tabs BEFORE Taskbar footer */
@@ -262,17 +283,27 @@ void desktop_handle_input_event(const struct input_event *event) {
                         return;
                     }
                     /* Settings */
-                    if (mevt->y >= 240 && mevt->y < 292) {
+                    if (mevt->y >= 352 && mevt->y < 404) {
                         settings_window_open();
                         return;
                     }
-                    /* About OS */
+                    /* Calculator */
+                    if (mevt->y >= 240 && mevt->y < 292) {
+                        calculator_window_open();
+                        return;
+                    }
+                    /* Calendar */
                     if (mevt->y >= 296 && mevt->y < 348) {
+                        calendar_window_open();
+                        return;
+                    }
+                    /* About OS */
+                    if (mevt->y >= 408 && mevt->y < 460) {
                         settings_window_open_tab(TAB_ABOUT);
                         return;
                     }
                     /* Help */
-                    if (mevt->y >= 352 && mevt->y < 404) {
+                    if (mevt->y >= 464 && mevt->y < 516) {
                         settings_window_open_tab(TAB_HELP_SUPPORT);
                         return;
                     }
@@ -304,14 +335,20 @@ void desktop_render(struct gfx_surface *surf) {
     gfx_draw_icon(surf, 24, 188, GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
     gfx_draw_string(surf, 12, 208, "Task Mgr", GFX_COLOR_TEXT_PRIMARY);
 
-    gfx_draw_icon(surf, 24, 244, GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 14, 264, "Settings", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_icon(surf, 24, 244, GFX_ICON_CALCULATOR, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 22, 264, "Calc", GFX_COLOR_TEXT_PRIMARY);
 
-    gfx_draw_icon(surf, 24, 300, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 14, 320, "About OS", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_icon(surf, 24, 300, GFX_ICON_CALENDAR, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 10, 320, "Calendar", GFX_COLOR_TEXT_PRIMARY);
 
     gfx_draw_icon(surf, 24, 356, GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 16, 376, "Help", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_string(surf, 14, 376, "Settings", GFX_COLOR_TEXT_PRIMARY);
+
+    gfx_draw_icon(surf, 24, 412, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 14, 432, "About OS", GFX_COLOR_TEXT_PRIMARY);
+
+    gfx_draw_icon(surf, 24, 468, GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 16, 488, "Help", GFX_COLOR_TEXT_PRIMARY);
 
     /* Render Taskbar at bottom */
     uint32_t tb_y = surf->height - DESKTOP_TASKBAR_HEIGHT;
@@ -338,9 +375,24 @@ void desktop_render(struct gfx_surface *surf) {
         tab_x += 128;
     }
 
-    /* System Tray */
+    /* System Tray with dynamic RTC clock */
     uint32_t tray_x = surf->width - 180;
-    gfx_draw_string(surf, tray_x, tb_y + 16, "[NET] [VOL] 12:00", GFX_COLOR_TEXT_SECONDARY);
+    struct rtc_datetime rtc_now;
+    char clock_str[32];
+    if (rtc_get_datetime(&rtc_now)) {
+        char time_buf[16];
+        rtc_format_time(&rtc_now, time_buf, sizeof(time_buf));
+        str_copy(clock_str, "[NET] [VOL] ", sizeof(clock_str));
+        size_t c_len = str_length(clock_str);
+        size_t t_idx = 0;
+        while (time_buf[t_idx] != '\0' && c_len + 1 < sizeof(clock_str)) {
+            clock_str[c_len++] = time_buf[t_idx++];
+        }
+        clock_str[c_len] = '\0';
+    } else {
+        str_copy(clock_str, "[NET] [VOL] 12:00", sizeof(clock_str));
+    }
+    gfx_draw_string(surf, tray_x, tb_y + 16, clock_str, GFX_COLOR_TEXT_SECONDARY);
 
     /* Developer footer from the central metadata source. The domain is
      * underlined and click-handled above. */
@@ -364,8 +416,8 @@ void desktop_render(struct gfx_surface *surf) {
     /* Render Start Menu / App Launcher if open */
     if (state.launcher_open) {
         int32_t lx = 8;
-        int32_t ly = (int32_t)(tb_y - 290);
-        gfx_draw_glass_panel(surf, (uint32_t)lx, (uint32_t)ly, 220, 286, GFX_COLOR_GLASS_PANEL);
+        int32_t ly = (int32_t)(tb_y - 350);
+        gfx_draw_glass_panel(surf, (uint32_t)lx, (uint32_t)ly, 220, 346, GFX_COLOR_GLASS_PANEL);
 
         /* Header */
         gfx_draw_icon(surf, (uint32_t)(lx + 12), (uint32_t)(ly + 10), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
@@ -376,25 +428,31 @@ void desktop_render(struct gfx_surface *surf) {
         gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 42), GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_ACCENT);
         gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 42), "Terminal", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 72), GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 72), "File Explorer", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 70), GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 70), "File Explorer", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 102), GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 102), "Task Manager", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 98), GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 98), "Task Manager", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 132), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 132), "Settings", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 126), GFX_ICON_CALCULATOR, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 126), "Calculator", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 162), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 162), "Help & Support", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 154), GFX_ICON_CALENDAR, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 154), "Calendar", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 192), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 192), "About DAWN-OS", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 182), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 182), "Settings", GFX_COLOR_TEXT_PRIMARY);
+
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 210), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 210), "Help & Support", GFX_COLOR_TEXT_PRIMARY);
+
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 238), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 238), "About DAWN-OS", GFX_COLOR_TEXT_PRIMARY);
 
         /* Shutdown button at bottom */
-        gfx_draw_line(surf, lx + 8, ly + 224, lx + 212, ly + 224, GFX_COLOR_GLASS_BORDER);
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 238), GFX_ICON_SHUTDOWN, GFX_COLOR_BTN_CLOSE);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 238), "Shut Down", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_line(surf, lx + 8, ly + 270, lx + 212, ly + 270, GFX_COLOR_GLASS_BORDER);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 288), GFX_ICON_SHUTDOWN, GFX_COLOR_BTN_CLOSE);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 288), "Shut Down", GFX_COLOR_TEXT_PRIMARY);
     }
 
     /* Render Notifications in top right */

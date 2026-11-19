@@ -8,6 +8,7 @@
 #include "desktop.h"
 #include "os_metadata.h"
 #include "system_info.h"
+#include "rtc.h"
 
 static struct system_settings active_settings;
 static bool settings_initialized = false;
@@ -478,12 +479,25 @@ void settings_window_render(void) {
             gfx_draw_string(&surf, cx, cy + 160, "Configuration:  Static / Manual", GFX_COLOR_TEXT_MUTED);
             break;
 
-        case TAB_TIME:
+        case TAB_TIME: {
             gfx_draw_string(&surf, cx, cy, "Date & Time", GFX_COLOR_EMERALD_NEON);
-            gfx_draw_string(&surf, cx, cy + 30, "Clock Source: Hardware RTC (CMOS)", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 60, "Timezone:     UTC+00:00 (Universal)", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 90, "Format:       24-Hour Clock", GFX_COLOR_TEXT_PRIMARY);
+            struct rtc_datetime sdt = {0};
+            char stime_buf[36] = "Current Time: ";
+            char sdate_buf[36] = "Current Date: ";
+            if (rtc_get_datetime(&sdt)) {
+                char s_t[16] = {0}, s_d[16] = {0};
+                rtc_format_time_sec(&sdt, s_t, sizeof(s_t));
+                rtc_format_date(&sdt, s_d, sizeof(s_d));
+                for (size_t idx = 0; s_t[idx] != '\0' && idx < 12; idx++) stime_buf[14 + idx] = s_t[idx];
+                for (size_t idx = 0; s_d[idx] != '\0' && idx < 12; idx++) sdate_buf[14 + idx] = s_d[idx];
+            }
+            gfx_draw_string(&surf, cx, cy + 28, stime_buf, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 52, sdate_buf, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 78, "Clock Source: Hardware RTC (CMOS)", GFX_COLOR_TEXT_SECONDARY);
+            gfx_draw_string(&surf, cx, cy + 102, "Timezone:     UTC+00:00 (Universal)", GFX_COLOR_TEXT_SECONDARY);
+            gfx_draw_string(&surf, cx, cy + 126, "Format:       24-Hour Clock", GFX_COLOR_TEXT_MUTED);
             break;
+        }
 
         case TAB_APPEARANCE:
             gfx_draw_string(&surf, cx, cy, "Emerald Neo-Liquid Glass", GFX_COLOR_EMERALD_NEON);

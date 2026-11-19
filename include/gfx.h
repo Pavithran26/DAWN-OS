@@ -87,7 +87,9 @@ enum gfx_icon {
     GFX_ICON_SETTINGS = 3,
     GFX_ICON_COMPUTER = 4,
     GFX_ICON_SHUTDOWN = 5,
-    GFX_ICON_DAWN_LOGO = 6
+    GFX_ICON_DAWN_LOGO = 6,
+    GFX_ICON_CALCULATOR = 7,
+    GFX_ICON_CALENDAR = 8
 };
 
 void gfx_draw_icon(struct gfx_surface *surf, uint32_t x, uint32_t y, enum gfx_icon icon, uint32_t color);
