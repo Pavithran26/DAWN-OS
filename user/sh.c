@@ -6,10 +6,15 @@ static void cmd_help(void) {
     dawn_println("  help            - Display this help message");
     dawn_println("  echo [args...]  - Print text to standard output");
     dawn_println("  cat <file>      - Display contents of a file");
+    dawn_println("  ls [dir]        - List files in directory");
     dawn_println("  pwd             - Print current working directory");
     dawn_println("  cd <dir>        - Change working directory");
-    dawn_println("  date            - Show system Unix epoch timestamp");
+    dawn_println("  mkdir <dir>     - Create a directory");
+    dawn_println("  rm <file>       - Remove a file");
+    dawn_println("  date            - Show system UTC date and time");
+    dawn_println("  uptime          - Show system uptime report");
     dawn_println("  pid             - Print shell process identifier");
+    dawn_println("  kill <pid>      - Terminate a process");
     dawn_println("  mem             - Test dynamic heap memory allocator");
     dawn_println("  clear           - Clear terminal display");
     dawn_println("  exit            - Terminate shell session");
@@ -43,6 +48,38 @@ static void cmd_cat(const char *path) {
     dawn_close((uint64_t)fd);
 }
 
+static void cmd_ls(const char *path) {
+    char target[128];
+    if (path != NULL) {
+        dawn_strcpy(target, path);
+    } else {
+        if (dawn_getcwd(target, sizeof(target)) < 0) {
+            dawn_strcpy(target, "/");
+        }
+    }
+
+    int64_t fd = dawn_open(target, DAWN_O_RDONLY, 0);
+    if (fd < 0) {
+        dawn_printf("ls: cannot access '%s'\n", target);
+        return;
+    }
+
+    struct dawn_dirent dent;
+    int count = 0;
+    while (dawn_getdents((uint64_t)fd, &dent, sizeof(dent)) > 0) {
+        count++;
+        if (dent.d_type == 2) {
+            dawn_printf("[DIR]  %-20s\n", dent.d_name);
+        } else {
+            dawn_printf("       %-20s %u B\n", dent.d_name, (unsigned int)dent.d_size);
+        }
+    }
+    if (count == 0) {
+        dawn_println("(empty directory)");
+    }
+    dawn_close((uint64_t)fd);
+}
+
 static void cmd_pwd(void) {
     char cwd[128];
     if (dawn_getcwd(cwd, sizeof(cwd)) >= 0) {
@@ -59,10 +96,87 @@ static void cmd_cd(const char *path) {
     }
 }
 
+static void cmd_mkdir(const char *path) {
+    if (path == NULL) {
+        dawn_println("Usage: mkdir <directory>");
+        return;
+    }
+    if (dawn_mkdir(path, 0755) < 0) {
+        dawn_printf("mkdir: failed to create '%s'\n", path);
+    }
+}
+
+static void cmd_rm(const char *path) {
+    if (path == NULL) {
+        dawn_println("Usage: rm <file>");
+        return;
+    }
+    if (dawn_unlink(path) < 0) {
+        dawn_printf("rm: failed to remove '%s'\n", path);
+    }
+}
+
 static void cmd_date(void) {
-    uint64_t now = 0;
-    dawn_time(&now);
-    dawn_printf("Unix Timestamp: %u seconds since epoch\n", (unsigned int)now);
+    uint64_t epoch = 0;
+    dawn_time(&epoch);
+    uint64_t seconds = epoch % 60;
+    uint64_t total_minutes = epoch / 60;
+    uint64_t minutes = total_minutes % 60;
+    uint64_t total_hours = total_minutes / 60;
+    uint64_t hours = total_hours % 24;
+    uint64_t days = total_hours / 24;
+
+    uint64_t year = 1970;
+    while (1) {
+        bool leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+        uint64_t diy = leap ? 366 : 365;
+        if (days < diy) break;
+        days -= diy;
+        year++;
+    }
+
+    bool leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+    static const uint8_t mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    uint64_t month = 1;
+    for (size_t m = 0; m < 12; m++) {
+        uint64_t dim = mdays[m];
+        if (m == 1 && leap) dim = 29;
+        if (days < dim) {
+            month = m + 1;
+            break;
+        }
+        days -= dim;
+    }
+    uint64_t day = days + 1;
+
+    dawn_printf("%u-%02u-%02u %02u:%02u:%02u UTC\n",
+                (unsigned int)year, (unsigned int)month, (unsigned int)day,
+                (unsigned int)hours, (unsigned int)minutes, (unsigned int)seconds);
+}
+
+static void cmd_uptime(void) {
+    uint64_t epoch = 0;
+    dawn_time(&epoch);
+    dawn_printf("System time: %u seconds since Unix epoch\n", (unsigned int)epoch);
+}
+
+static void cmd_kill(const char *pid_str) {
+    if (pid_str == NULL) {
+        dawn_println("Usage: kill <pid>");
+        return;
+    }
+    uint64_t pid = 0;
+    while (*pid_str >= '0' && *pid_str <= '9') {
+        pid = pid * 10 + (uint64_t)(*pid_str - '0');
+        pid_str++;
+    }
+    if (pid == 0) {
+        dawn_println("kill: invalid PID");
+        return;
+    }
+    if (dawn_kill(pid, 9) < 0) {
+        dawn_printf("kill: failed to signal process %u\n", (unsigned int)pid);
+    }
 }
 
 static void cmd_mem(void) {
@@ -125,14 +239,24 @@ int main(int argc, char *argv[], char *envp[]) {
             cmd_echo(token_count, tokens);
         } else if (dawn_strcmp(cmd, "cat") == 0) {
             cmd_cat(token_count > 1 ? tokens[1] : NULL);
+        } else if (dawn_strcmp(cmd, "ls") == 0) {
+            cmd_ls(token_count > 1 ? tokens[1] : NULL);
         } else if (dawn_strcmp(cmd, "pwd") == 0) {
             cmd_pwd();
         } else if (dawn_strcmp(cmd, "cd") == 0) {
             cmd_cd(token_count > 1 ? tokens[1] : "/");
+        } else if (dawn_strcmp(cmd, "mkdir") == 0) {
+            cmd_mkdir(token_count > 1 ? tokens[1] : NULL);
+        } else if (dawn_strcmp(cmd, "rm") == 0) {
+            cmd_rm(token_count > 1 ? tokens[1] : NULL);
         } else if (dawn_strcmp(cmd, "date") == 0) {
             cmd_date();
+        } else if (dawn_strcmp(cmd, "uptime") == 0) {
+            cmd_uptime();
         } else if (dawn_strcmp(cmd, "pid") == 0) {
             dawn_printf("PID: %u\n", (unsigned int)dawn_getpid());
+        } else if (dawn_strcmp(cmd, "kill") == 0) {
+            cmd_kill(token_count > 1 ? tokens[1] : NULL);
         } else if (dawn_strcmp(cmd, "mem") == 0) {
             cmd_mem();
         } else if (dawn_strcmp(cmd, "clear") == 0) {

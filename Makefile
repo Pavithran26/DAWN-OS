@@ -32,7 +32,9 @@ KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o b
 
 USER_BINARIES = build/user/init.elf build/user/sh.elf build/user/echo.elf \
                 build/user/cat.elf build/user/ls.elf build/user/ld_dawn.elf \
-                build/user/gui_demo.elf
+                build/user/gui_demo.elf build/user/pwd.elf build/user/mkdir.elf \
+                build/user/rm.elf build/user/date.elf build/user/kill.elf \
+                build/user/uptime.elf
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all metadata user-bins
 
@@ -400,6 +402,30 @@ build/user/ld_dawn.elf: build/user/crt0.o user/ld_dawn.c build/user/libdawn.o us
 build/user/gui_demo.elf: build/user/crt0.o user/gui_demo.c build/user/libdawn.o build/user/libdawn_gui.o user/linker.ld | build/user
 	$(CC) $(USER_CFLAGS) -c user/gui_demo.c -o build/user/gui_demo.o
 	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/gui_demo.o build/user/libdawn.o build/user/libdawn_gui.o
+
+build/user/pwd.elf: build/user/crt0.o user/pwd.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/pwd.c -o build/user/pwd.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/pwd.o build/user/libdawn.o
+
+build/user/mkdir.elf: build/user/crt0.o user/mkdir.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/mkdir.c -o build/user/mkdir.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/mkdir.o build/user/libdawn.o
+
+build/user/rm.elf: build/user/crt0.o user/rm.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/rm.c -o build/user/rm.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/rm.o build/user/libdawn.o
+
+build/user/date.elf: build/user/crt0.o user/date.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/date.c -o build/user/date.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/date.o build/user/libdawn.o
+
+build/user/kill.elf: build/user/crt0.o user/kill.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/kill.c -o build/user/kill.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/kill.o build/user/libdawn.o
+
+build/user/uptime.elf: build/user/crt0.o user/uptime.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/uptime.c -o build/user/uptime.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/uptime.o build/user/libdawn.o
 
 user-bins: $(USER_BINARIES)
 

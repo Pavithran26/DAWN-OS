@@ -27,10 +27,42 @@
 #define DAWN_SYS_CHDIR       15ULL
 #define DAWN_SYS_UNLINK      16ULL
 #define DAWN_SYS_DUP2        17ULL
+#define DAWN_SYS_MKDIR       18ULL
+#define DAWN_SYS_STAT        19ULL
+#define DAWN_SYS_LSEEK       20ULL
+#define DAWN_SYS_GETDENTS    21ULL
+#define DAWN_SYS_KILL        22ULL
 
 #define DAWN_O_RDONLY 0x0001U
 #define DAWN_O_WRONLY 0x0002U
 #define DAWN_O_RDWR   0x0003U
+
+#define DAWN_SEEK_SET 0
+#define DAWN_SEEK_CUR 1
+#define DAWN_SEEK_END 2
+
+struct dawn_posix_stat {
+    uint64_t st_dev;
+    uint64_t st_ino;
+    uint32_t st_mode;
+    uint32_t st_nlink;
+    uint32_t st_uid;
+    uint32_t st_gid;
+    uint64_t st_rdev;
+    int64_t  st_size;
+    int64_t  st_blksize;
+    int64_t  st_blocks;
+    int64_t  st_atime;
+    int64_t  st_mtime;
+    int64_t  st_ctime;
+};
+
+struct dawn_dirent {
+    uint64_t d_ino;
+    uint8_t d_type;
+    char d_name[128];
+    uint64_t d_size;
+};
 
 #define DAWN_STDIN_FILENO  0ULL
 #define DAWN_STDOUT_FILENO 1ULL
@@ -169,6 +201,26 @@ static inline int64_t dawn_chdir(const char *path) {
 
 static inline int64_t dawn_unlink(const char *path) {
     return dawn_syscall1(DAWN_SYS_UNLINK, (uint64_t)(uintptr_t)path);
+}
+
+static inline int64_t dawn_mkdir(const char *path, uint64_t mode) {
+    return dawn_syscall2(DAWN_SYS_MKDIR, (uint64_t)(uintptr_t)path, mode);
+}
+
+static inline int64_t dawn_stat(const char *path, struct dawn_posix_stat *buf) {
+    return dawn_syscall2(DAWN_SYS_STAT, (uint64_t)(uintptr_t)path, (uint64_t)(uintptr_t)buf);
+}
+
+static inline int64_t dawn_lseek(uint64_t fd, int64_t offset, int whence) {
+    return dawn_syscall3(DAWN_SYS_LSEEK, fd, (uint64_t)offset, (uint64_t)whence);
+}
+
+static inline int64_t dawn_getdents(uint64_t fd, struct dawn_dirent *dirp, size_t count) {
+    return dawn_syscall3(DAWN_SYS_GETDENTS, fd, (uint64_t)(uintptr_t)dirp, count);
+}
+
+static inline int64_t dawn_kill(uint64_t pid, int sig) {
+    return dawn_syscall2(DAWN_SYS_KILL, pid, (uint64_t)sig);
 }
 
 static inline int64_t dawn_spawn(const void *image, uint64_t image_size, const char *const argv[], const char *const envp[]) {

@@ -37,7 +37,19 @@ enum dawn_syscall_number {
     DAWN_SYS_GETCWD = 14,
     DAWN_SYS_CHDIR = 15,
     DAWN_SYS_UNLINK = 16,
-    DAWN_SYS_DUP2 = 17
+    DAWN_SYS_DUP2 = 17,
+    DAWN_SYS_MKDIR = 18,
+    DAWN_SYS_STAT = 19,
+    DAWN_SYS_LSEEK = 20,
+    DAWN_SYS_GETDENTS = 21,
+    DAWN_SYS_KILL = 22
+};
+
+struct dawn_dirent {
+    uint64_t d_ino;
+    uint8_t d_type;
+    char d_name[128];
+    uint64_t d_size;
 };
 
 enum dawn_syscall_errno {

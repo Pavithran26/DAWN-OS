@@ -405,6 +405,57 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
         return 0;
     }
 
+    /* Check for executable binary in VFS: cmd, /bin/<cmd>, /bin/<cmd>.elf */
+    char bin_path[VFS_MAX_PATH];
+    struct vfs_node *bin_node = NULL;
+    if (cmd[0] == '/') {
+        str_copy(bin_path, cmd, sizeof(bin_path));
+        (void)vfs_resolve_path(bin_path, &bin_node);
+    } else {
+        str_copy(bin_path, "/bin/", sizeof(bin_path));
+        size_t b_idx = 5;
+        for (size_t c = 0; cmd[c] != '\0' && b_idx + 1 < sizeof(bin_path); c++) {
+            bin_path[b_idx++] = cmd[c];
+        }
+        bin_path[b_idx] = '\0';
+        if (!vfs_resolve_path(bin_path, &bin_node) || bin_node == NULL) {
+            if (b_idx + 4 < sizeof(bin_path)) {
+                bin_path[b_idx++] = '.';
+                bin_path[b_idx++] = 'e';
+                bin_path[b_idx++] = 'l';
+                bin_path[b_idx++] = 'f';
+                bin_path[b_idx] = '\0';
+                (void)vfs_resolve_path(bin_path, &bin_node);
+            }
+        }
+    }
+
+    if (bin_node != NULL && bin_node->type == VFS_TYPE_FILE && bin_node->size > 0 && bin_node->size <= 65536) {
+        static uint8_t bin_buf[65536];
+        int64_t bytes_read = vfs_read(bin_node, 0, (size_t)bin_node->size, bin_buf);
+        if (bytes_read > 0) {
+            const char *arg_ptrs[SHELL_ARGS_MAX + 1];
+            for (size_t a = 0; a < argc; a++) {
+                arg_ptrs[a] = args[a];
+            }
+            arg_ptrs[argc] = NULL;
+            uint64_t child_pid = 0;
+            if (process_spawn(bin_buf, (size_t)bytes_read, (int)argc, arg_ptrs, NULL, &child_pid)) {
+                char pbuf[32];
+                u64_to_str(child_pid, pbuf);
+                shell_output_write(ctx, "[DAWN] Process started with PID ");
+                shell_output_write(ctx, pbuf);
+                shell_output_write(ctx, "\n");
+                ctx->last_exit_code = 0;
+                return 0;
+            } else {
+                shell_output_write(ctx, "dsh: failed to spawn process\n");
+                ctx->last_exit_code = 126;
+                return 126;
+            }
+        }
+    }
+
     /* Command not found */
     shell_output_write(ctx, "dsh: command not found: ");
     shell_output_write(ctx, cmd);

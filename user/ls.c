@@ -18,8 +18,17 @@ int main(int argc, char *argv[], char *envp[]) {
         return 1;
     }
 
-    /* Print common directory header */
-    dawn_printf("Directory listing: %s\n", target_dir);
+    struct dawn_dirent dent;
+    int count = 0;
+    while (dawn_getdents((uint64_t)fd, &dent, sizeof(dent)) > 0) {
+        count++;
+        if (dent.d_type == 2) { /* Directory */
+            dawn_printf("[DIR]  %-20s\n", dent.d_name);
+        } else {
+            dawn_printf("       %-20s %u B\n", dent.d_name, (unsigned int)dent.d_size);
+        }
+    }
+
     dawn_close((uint64_t)fd);
     return 0;
 }

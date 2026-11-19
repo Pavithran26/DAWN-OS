@@ -364,6 +364,156 @@ static int64_t syscall_unlink(uint64_t user_path) {
     return res == 0 ? 0 : -(int64_t)DAWN_ERRNO_ENOENT;
 }
 
+static int64_t syscall_mkdir(uint64_t user_path, uint64_t mode) {
+    if (user_path == 0ULL || !vm_user_range_valid(user_path, 1, false))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    char path[VFS_MAX_PATH] = {0};
+    size_t i = 0;
+    while (i + 1 < sizeof(path)) {
+        uint8_t ch = 0;
+        if (!vm_copy_from_user(&ch, user_path + i, 1)) return -(int64_t)DAWN_ERRNO_EFAULT;
+        path[i] = (char)ch;
+        if (ch == '\0') break;
+        i++;
+    }
+    path[i] = '\0';
+
+    int res = vfs_mkdir(path, (uint32_t)mode, NULL);
+    return res == 0 ? 0 : -(int64_t)DAWN_ERRNO_EIO;
+}
+
+struct dawn_stat_buf {
+    uint64_t st_dev;
+    uint64_t st_ino;
+    uint32_t st_mode;
+    uint32_t st_nlink;
+    uint32_t st_uid;
+    uint32_t st_gid;
+    uint64_t st_rdev;
+    int64_t  st_size;
+    int64_t  st_blksize;
+    int64_t  st_blocks;
+    int64_t  st_atime;
+    int64_t  st_mtime;
+    int64_t  st_ctime;
+};
+
+static int64_t syscall_stat(uint64_t user_path, uint64_t user_buf) {
+    if (user_path == 0ULL || !vm_user_range_valid(user_path, 1, false))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+    if (user_buf == 0ULL || !vm_user_range_valid(user_buf, sizeof(struct dawn_stat_buf), true))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    char path[VFS_MAX_PATH] = {0};
+    size_t i = 0;
+    while (i + 1 < sizeof(path)) {
+        uint8_t ch = 0;
+        if (!vm_copy_from_user(&ch, user_path + i, 1)) return -(int64_t)DAWN_ERRNO_EFAULT;
+        path[i] = (char)ch;
+        if (ch == '\0') break;
+        i++;
+    }
+    path[i] = '\0';
+
+    struct vfs_node *node = NULL;
+    if (!vfs_resolve_path(path, &node) || node == NULL)
+        return -(int64_t)DAWN_ERRNO_ENOENT;
+
+    struct dawn_stat_buf st = {0};
+    st.st_ino = node->inode;
+    st.st_mode = (node->type == VFS_TYPE_DIRECTORY) ? 0040755U : 0100644U;
+    st.st_nlink = 1;
+    st.st_size = (int64_t)node->size;
+    st.st_blksize = 4096;
+    st.st_blocks = (int64_t)((node->size + 511) / 512);
+
+    if (!vm_copy_to_user(user_buf, &st, sizeof(st)))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+    return 0;
+}
+
+static int64_t syscall_lseek(uint64_t descriptor, int64_t offset, uint64_t whence) {
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    if (descriptor >= (uint64_t)DAWN_PROCESS_MAX_FDS) return -(int64_t)DAWN_ERRNO_EBADF;
+
+    struct dawn_fd_entry entry = {0};
+    if (!process_fd_get(active_pid, (int)descriptor, &entry) || entry.type != DAWN_FD_TYPE_VFS)
+        return -(int64_t)DAWN_ERRNO_EBADF;
+
+    struct vfs_node *node = (struct vfs_node *)entry.node;
+    if (node == NULL) return -(int64_t)DAWN_ERRNO_EBADF;
+
+    int64_t new_offset = 0;
+    if (whence == 0) {
+        new_offset = offset;
+    } else if (whence == 1) {
+        new_offset = (int64_t)entry.offset + offset;
+    } else if (whence == 2) {
+        new_offset = (int64_t)node->size + offset;
+    } else {
+        return -(int64_t)DAWN_ERRNO_EINVAL;
+    }
+
+    if (new_offset < 0) return -(int64_t)DAWN_ERRNO_EINVAL;
+    entry.offset = (uint64_t)new_offset;
+    (void)process_fd_set(active_pid, (int)descriptor, &entry);
+    return new_offset;
+}
+
+static int64_t syscall_getdents(uint64_t descriptor, uint64_t user_buf, uint64_t count) {
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    if (descriptor >= (uint64_t)DAWN_PROCESS_MAX_FDS) return -(int64_t)DAWN_ERRNO_EBADF;
+    if (user_buf == 0ULL || count < sizeof(struct dawn_dirent) ||
+        !vm_user_range_valid(user_buf, sizeof(struct dawn_dirent), true))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    struct dawn_fd_entry entry = {0};
+    if (!process_fd_get(active_pid, (int)descriptor, &entry) || entry.type != DAWN_FD_TYPE_VFS)
+        return -(int64_t)DAWN_ERRNO_EBADF;
+
+    struct vfs_node *node = (struct vfs_node *)entry.node;
+    if (node == NULL || node->type != VFS_TYPE_DIRECTORY) return -(int64_t)DAWN_ERRNO_EBADF;
+
+    uint32_t dir_index = (uint32_t)entry.offset;
+    struct vfs_dirent ventry = {0};
+    int res = vfs_readdir(node, dir_index, &ventry);
+    if (res != 0) return 0;
+
+    struct dawn_dirent dent = {0};
+    dent.d_ino = ventry.inode;
+    dent.d_type = (uint8_t)ventry.type;
+    dent.d_size = ventry.size;
+    for (size_t k = 0; k < sizeof(dent.d_name) && ventry.name[k] != '\0'; k++) {
+        dent.d_name[k] = ventry.name[k];
+    }
+
+    if (!vm_copy_to_user(user_buf, &dent, sizeof(dent)))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    entry.offset++;
+    (void)process_fd_set(active_pid, (int)descriptor, &entry);
+    return (int64_t)sizeof(dent);
+}
+
+static int64_t syscall_kill(uint64_t target_pid, uint64_t sig) {
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    if (target_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EINVAL;
+
+    struct process_info info = {0};
+    if (!process_get_info(target_pid, &info))
+        return -(int64_t)DAWN_ERRNO_ESRCH;
+
+    if (sig == 9 || sig == 15) {
+        (void)process_mark_exited(target_pid);
+        return 0;
+    }
+    return 0;
+}
+
 int64_t syscall_dispatch(uint64_t number,
                          uint64_t argument0,uint64_t argument1,
                          uint64_t argument2,uint64_t argument3,
@@ -398,6 +548,16 @@ int64_t syscall_dispatch(uint64_t number,
             return syscall_chdir(argument0);
         case DAWN_SYS_UNLINK:
             return syscall_unlink(argument0);
+        case DAWN_SYS_MKDIR:
+            return syscall_mkdir(argument0,argument1);
+        case DAWN_SYS_STAT:
+            return syscall_stat(argument0,argument1);
+        case DAWN_SYS_LSEEK:
+            return syscall_lseek(argument0,(int64_t)argument1,argument2);
+        case DAWN_SYS_GETDENTS:
+            return syscall_getdents(argument0,argument1,argument2);
+        case DAWN_SYS_KILL:
+            return syscall_kill(argument0,argument1);
         case DAWN_SYS_EXIT:
         case DAWN_SYS_YIELD:
         case DAWN_SYS_WAIT:
@@ -472,6 +632,21 @@ bool syscall_self_test(void) {
         return false;
     if (syscall_dispatch(DAWN_SYS_TIME,0ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)<0)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_MKDIR,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EFAULT)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_STAT,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EFAULT)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_LSEEK,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_GETDENTS,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_KILL,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
         return false;
     return syscall_dispatch(UINT64_MAX,0ULL,0ULL,0ULL,
                             0ULL,0ULL,0ULL)==-(int64_t)DAWN_ERRNO_ENOSYS;

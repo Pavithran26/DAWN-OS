@@ -2,7 +2,7 @@
 #include "vfs.h"
 
 #define RAMFS_MAX_CHILDREN 16U
-#define RAMFS_MAX_FILE_SIZE 8192U
+#define RAMFS_MAX_FILE_SIZE 32768U
 
 struct ramfs_node_data {
     uint8_t buffer[RAMFS_MAX_FILE_SIZE];
