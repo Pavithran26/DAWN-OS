@@ -8,6 +8,9 @@
 #include "process.h"
 #include "elf_loader.h"
 #include "scheduler.h"
+#include "vfs.h"
+
+extern uint64_t dawn_syscall_kernel_stack_top;
 
 #define CPU_RFLAGS_INTERRUPT_ENABLE (1ULL << 9)
 
@@ -21,6 +24,9 @@ struct process_record {
     struct process_user_page user_pages[DAWN_PROCESS_MAX_USER_PAGES];
     size_t user_page_count;
     struct dawn_fd_entry fds[DAWN_PROCESS_MAX_FDS];
+    char cwd[VFS_MAX_PATH];
+    uint64_t heap_start;
+    uint64_t heap_break;
     uint64_t id;
     uint64_t parent_id;
     uint64_t kernel_stack_top;
@@ -116,6 +122,10 @@ bool process_create(uint64_t *process_id) {
     slot->kernel_stack_top=stack_top;
     slot->id=next_process_id++;
     slot->state=PROCESS_STATE_CREATED;
+    slot->heap_start=0x0000000010000000ULL;
+    slot->heap_break=0x0000000010000000ULL;
+    slot->cwd[0]='/';
+    slot->cwd[1]='\0';
     for (size_t f=0U;f<DAWN_PROCESS_MAX_FDS;f++) slot->fds[f]=(struct dawn_fd_entry){0};
     if (parent!=NULL) {
         for (size_t f=0U;f<DAWN_PROCESS_MAX_FDS;f++) slot->fds[f]=parent->fds[f];
@@ -205,6 +215,7 @@ static bool process_switch_to_locked(uint64_t target_id) {
             return false;
         }
         active_process_identifier=0ULL;
+        dawn_syscall_kernel_stack_top=bootstrap_kernel_stack_top;
         return true;
     }
     target=find_process(target_id);
@@ -245,6 +256,7 @@ static bool process_switch_to_locked(uint64_t target_id) {
         return false;
     }
     active_process_identifier=target_id;
+    dawn_syscall_kernel_stack_top=target->kernel_stack_top;
     return true;
 }
 
@@ -695,6 +707,105 @@ bool process_fd_dup2(uint64_t process_id,int oldfd,int newfd) {
         return false;
     }
     record->fds[newfd]=record->fds[oldfd];
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+uint64_t process_brk(uint64_t process_id, uint64_t new_brk) {
+    const uint64_t flags = read_rflags();
+    struct process_record *record = NULL;
+    uint64_t result = 0ULL;
+    if (!initialized || process_id == 0ULL || (read_cs() & 3U) != 0U) return 0ULL;
+    disable_interrupts();
+    record = find_process(process_id);
+    if (record == NULL) {
+        restore_interrupt_flag(flags);
+        return 0ULL;
+    }
+    if (new_brk == 0ULL || new_brk == record->heap_break) {
+        result = record->heap_break;
+        restore_interrupt_flag(flags);
+        return result;
+    }
+    if (new_brk < record->heap_start) {
+        result = record->heap_break;
+        restore_interrupt_flag(flags);
+        return result;
+    }
+    if (new_brk > record->heap_break) {
+        uint64_t old_page_aligned = (record->heap_break + 4095ULL) & ~4095ULL;
+        uint64_t new_page_aligned = (new_brk + 4095ULL) & ~4095ULL;
+        for (uint64_t va = old_page_aligned; va < new_page_aligned; va += 4096ULL) {
+            if (record->user_page_count >= DAWN_PROCESS_MAX_USER_PAGES) {
+                result = record->heap_break;
+                restore_interrupt_flag(flags);
+                return result;
+            }
+            uint64_t phys = 0ULL;
+            if (!physical_allocator_allocate(&phys)) {
+                result = record->heap_break;
+                restore_interrupt_flag(flags);
+                return result;
+            }
+            if (!vm_address_space_map_user(&record->address_space, va, phys,
+                                          (uint32_t)VM_PAGE_USER | (uint32_t)VM_PAGE_WRITE)) {
+                (void)physical_allocator_free(phys);
+                result = record->heap_break;
+                restore_interrupt_flag(flags);
+                return result;
+            }
+            record->user_pages[record->user_page_count].virtual_address = va;
+            record->user_pages[record->user_page_count].physical_address = phys;
+            record->user_page_count++;
+        }
+        record->heap_break = new_brk;
+        result = record->heap_break;
+    } else {
+        record->heap_break = new_brk;
+        result = record->heap_break;
+    }
+    restore_interrupt_flag(flags);
+    return result;
+}
+
+bool process_getcwd(uint64_t process_id, char *out_buf, size_t buf_size) {
+    const uint64_t flags = read_rflags();
+    struct process_record *record = NULL;
+    if (!initialized || process_id == 0ULL || out_buf == NULL || buf_size == 0U ||
+        (read_cs() & 3U) != 0U) return false;
+    disable_interrupts();
+    record = find_process(process_id);
+    if (record == NULL) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    size_t i = 0;
+    while (record->cwd[i] != '\0' && i + 1 < buf_size) {
+        out_buf[i] = record->cwd[i];
+        i++;
+    }
+    out_buf[i] = '\0';
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_chdir(uint64_t process_id, const char *path) {
+    const uint64_t flags = read_rflags();
+    struct process_record *record = NULL;
+    if (!initialized || process_id == 0ULL || path == NULL || (read_cs() & 3U) != 0U)
+        return false;
+    disable_interrupts();
+    record = find_process(process_id);
+    if (record == NULL) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    size_t i = 0;
+    while (path[i] != '\0' && i + 1 < sizeof(record->cwd)) {
+        record->cwd[i] = path[i];
+        i++;
+    }
+    record->cwd[i] = '\0';
     restore_interrupt_flag(flags);
     return true;
 }

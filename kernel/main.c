@@ -709,6 +709,15 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-OS: kernel GDT and 64-bit TSS loaded; privilege stack ready\n");
+
+    if (!syscall_init_hardware()) {
+        serial_write("DAWN-OS: FAIL: hardware syscall MSR initialization\n");
+#ifdef DAWN_KERNEL_TEST
+        qemu_debug_exit(QEMU_TEST_FAIL);
+#endif
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-OS: x86-64 hardware fast syscall (MSR STAR/LSTAR/FMASK) initialized\n");
     if (!process_manager_initialize()) {
         serial_write("DAWN-OS: FAIL: process resource manager initialization\n");
 #ifdef DAWN_KERNEL_TEST

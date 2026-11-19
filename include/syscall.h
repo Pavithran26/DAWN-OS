@@ -10,10 +10,9 @@
  *   RDI, RSI, RDX, R10, R8, R9 = arguments 0..5
  *   RAX = non-negative result or negative DAWN_ERRNO_* value
  *
- * SYS_EXIT (status in RDI), SYS_YIELD, and SYS_WAIT (target_pid in RDI,
- * status_address in RSI) are handled by the CPL3 scheduler path; the
- * kernel-callable dispatcher returns ENOSYS for them because it has no user
- * thread to terminate, yield, or block. SYS_GETPID returns the active process ID.
+ * Supported entry paths:
+ *   1. Hardware fast syscall: 'syscall' instruction (MSR STAR/LSTAR/FMASK)
+ *   2. Software interrupt: 'int $0x80' instruction (IDT DPL3 gate)
  */
 #define DAWN_SYSCALL_ABI_VERSION 1ULL
 #define DAWN_SYSCALL_VECTOR 0x80U
@@ -30,11 +29,20 @@ enum dawn_syscall_number {
     DAWN_SYS_CLOSE = 7,
     DAWN_SYS_DUP = 8,
     DAWN_SYS_SPAWN = 9,
-    DAWN_SYS_EXEC = 10
+    DAWN_SYS_EXEC = 10,
+    /* Core POSIX additions */
+    DAWN_SYS_OPEN = 11,
+    DAWN_SYS_BRK = 12,
+    DAWN_SYS_TIME = 13,
+    DAWN_SYS_GETCWD = 14,
+    DAWN_SYS_CHDIR = 15,
+    DAWN_SYS_UNLINK = 16,
+    DAWN_SYS_DUP2 = 17
 };
 
 enum dawn_syscall_errno {
     DAWN_ERRNO_EPERM = 1,
+    DAWN_ERRNO_ENOENT = 2,
     DAWN_ERRNO_ESRCH = 3,
     DAWN_ERRNO_EIO = 5,
     DAWN_ERRNO_EBADF = 9,
@@ -43,11 +51,15 @@ enum dawn_syscall_errno {
     DAWN_ERRNO_ENOMEM = 12,
     DAWN_ERRNO_EFAULT = 14,
     DAWN_ERRNO_EINVAL = 22,
+    DAWN_ERRNO_EMFILE = 24,
+    DAWN_ERRNO_ENAMETOOLONG = 36,
     DAWN_ERRNO_ENOSYS = 38
 };
 
 #define DAWN_STDOUT_FD 1ULL
 #define DAWN_STDERR_FD 2ULL
+
+bool syscall_init_hardware(void);
 
 int64_t syscall_dispatch(uint64_t number,
                          uint64_t argument0, uint64_t argument1,

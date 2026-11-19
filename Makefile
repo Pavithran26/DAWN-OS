@@ -62,10 +62,12 @@ build/apic.o: kernel/apic.c include/apic.h include/acpi.h include/page_table.h |
 build/scheduler.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h include/apic.h include/app_runtime.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h include/vfs.h | build
-	$(CC) $(CFLAGS) -c $< -o $@
+build/syscall.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h include/vfs.h include/rtc.h arch/x86_64/syscall.S | build
+	$(CC) $(CFLAGS) -c kernel/syscall.c -o build/syscall-c.o
+	$(CC) $(ASFLAGS) -c arch/x86_64/syscall.S -o build/syscall-asm.o
+	$(LD) -r -o $@ build/syscall-c.o build/syscall-asm.o
 
-build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
+build/process.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h include/vfs.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 build/user-mode.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h arch/x86_64/user_mode.S | build
 	$(CC) $(CFLAGS) -c kernel/user_mode.c -o build/user-mode-c.o
@@ -221,10 +223,12 @@ build/apic-test.o: kernel/apic.c include/apic.h include/acpi.h include/page_tabl
 build/scheduler-test.o: kernel/scheduler.c include/scheduler.h include/interrupts.h include/process.h include/gdt.h include/page_table.h include/physical_memory.h include/elf_loader.h include/syscall.h include/apic.h include/app_runtime.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h include/vfs.h | build
-	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+build/syscall-test.o: kernel/syscall.c include/syscall.h include/page_table.h include/process.h include/vfs.h include/rtc.h arch/x86_64/syscall.S | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c kernel/syscall.c -o build/syscall-test-c.o
+	$(CC) $(ASFLAGS) -c arch/x86_64/syscall.S -o build/syscall-test-asm.o
+	$(LD) -r -o $@ build/syscall-test-c.o build/syscall-test-asm.o
 
-build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h | build
+build/process-test.o: kernel/process.c include/process.h include/page_table.h include/gdt.h include/physical_memory.h include/elf_loader.h include/scheduler.h include/vfs.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 build/user-mode-test.o: kernel/user_mode.c include/user_mode.h include/gdt.h include/page_table.h include/process.h include/physical_memory.h arch/x86_64/user_mode.S | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c kernel/user_mode.c -o build/user-mode-test-c.o

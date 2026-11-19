@@ -6,10 +6,54 @@
 #include "page_table.h"
 #include "process.h"
 #include "vfs.h"
+#include "rtc.h"
 
 #define SERIAL_COM1 0x3f8U
 #define SERIAL_POLL_LIMIT 100000U
 #define SYSCALL_WRITE_CHUNK 128U
+
+#define MSR_EFER  0xC0000080U
+#define MSR_STAR  0xC0000081U
+#define MSR_LSTAR 0xC0000082U
+#define MSR_FMASK 0xC0000084U
+
+#define EFER_SCE      (1ULL << 0)
+#define FMASK_SYSCALL 0x0700ULL /* Mask IF (bit 9), TF (bit 8), DF (bit 10) */
+
+extern void dawn_syscall_entry(void);
+
+static inline void wrmsr(uint32_t msr, uint64_t value) {
+    uint32_t low = (uint32_t)(value & 0xFFFFFFFFULL);
+    uint32_t high = (uint32_t)(value >> 32);
+    __asm__ volatile ("wrmsr" : : "c"(msr), "a"(low), "d"(high));
+}
+
+static inline uint64_t rdmsr(uint32_t msr) {
+    uint32_t low = 0, high = 0;
+    __asm__ volatile ("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
+    return ((uint64_t)high << 32) | (uint64_t)low;
+}
+
+bool syscall_init_hardware(void) {
+    /* 1. Enable System Call Extensions (SCE) in EFER */
+    uint64_t efer = rdmsr(MSR_EFER);
+    wrmsr(MSR_EFER, efer | EFER_SCE);
+
+    /* 2. Configure STAR:
+     * User base = 0x0010 (User SS = 0x18 | 3 = 0x1B, User CS = 0x20 | 3 = 0x23)
+     * Kernel base = 0x0008 (Kernel CS = 0x08, Kernel SS = 0x10)
+     */
+    uint64_t star = ((uint64_t)0x0010ULL << 48) | ((uint64_t)0x0008ULL << 32);
+    wrmsr(MSR_STAR, star);
+
+    /* 3. Configure LSTAR with kernel fast syscall entry point */
+    wrmsr(MSR_LSTAR, (uint64_t)(uintptr_t)&dawn_syscall_entry);
+
+    /* 4. Configure FMASK to clear IF on syscall entry */
+    wrmsr(MSR_FMASK, FMASK_SYSCALL);
+
+    return true;
+}
 
 static inline void outb(uint16_t port,uint8_t value) {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -173,6 +217,153 @@ static int64_t syscall_dup(uint64_t oldfd) {
     return process_fd_dup(active_pid,(int)oldfd,&newfd) ? (int64_t)newfd : -(int64_t)DAWN_ERRNO_EBADF;
 }
 
+static int64_t syscall_dup2(uint64_t oldfd, uint64_t newfd) {
+    const uint64_t active_pid=process_active_id();
+    if (active_pid==0ULL || oldfd>=(uint64_t)DAWN_PROCESS_MAX_FDS ||
+        newfd>=(uint64_t)DAWN_PROCESS_MAX_FDS)
+        return -(int64_t)DAWN_ERRNO_EBADF;
+    return process_fd_dup2(active_pid,(int)oldfd,(int)newfd) ? (int64_t)newfd : -(int64_t)DAWN_ERRNO_EBADF;
+}
+
+static int64_t syscall_open(uint64_t user_path, uint64_t flags, uint64_t mode) {
+    (void)mode;
+    char path_buf[VFS_MAX_PATH];
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    if (user_path == 0ULL || !vm_user_range_valid(user_path, 1, false))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    size_t i = 0;
+    while (i + 1 < sizeof(path_buf)) {
+        uint8_t ch = 0;
+        if (!vm_copy_from_user(&ch, user_path + i, 1))
+            return -(int64_t)DAWN_ERRNO_EFAULT;
+        path_buf[i] = (char)ch;
+        if (ch == '\0') break;
+        i++;
+    }
+    path_buf[i] = '\0';
+
+    struct vfs_node *node = NULL;
+    if (!vfs_resolve_path(path_buf, &node) || node == NULL) {
+        return -(int64_t)DAWN_ERRNO_ENOENT;
+    }
+
+    uint32_t fd_flags = 0;
+    if ((flags & 0x03) == 0) fd_flags = DAWN_O_RDONLY;
+    else if ((flags & 0x03) == 1) fd_flags = DAWN_O_WRONLY;
+    else fd_flags = DAWN_O_RDWR;
+
+    int new_fd = -1;
+    if (!process_fd_allocate(active_pid, DAWN_FD_TYPE_VFS, fd_flags, node, &new_fd)) {
+        return -(int64_t)DAWN_ERRNO_EMFILE;
+    }
+    return (int64_t)new_fd;
+}
+
+static int64_t syscall_brk(uint64_t new_brk) {
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    return (int64_t)process_brk(active_pid, new_brk);
+}
+
+static uint64_t rtc_to_unix_epoch(const struct rtc_datetime *dt) {
+    if (dt == NULL || dt->year < 1970) return 0;
+    static const uint16_t days_before_month[12] = {
+        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+    };
+    uint64_t days = 0;
+    for (uint32_t y = 1970; y < dt->year; y++) {
+        days += ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)) ? 366 : 365;
+    }
+    if (dt->month >= 1 && dt->month <= 12) {
+        days += days_before_month[dt->month - 1];
+        if (dt->month > 2 && ((dt->year % 4 == 0 && dt->year % 100 != 0) || (dt->year % 400 == 0))) {
+            days += 1;
+        }
+    }
+    if (dt->day >= 1) days += (dt->day - 1);
+    uint64_t seconds = days * 86400ULL + (uint64_t)dt->hour * 3600ULL +
+                       (uint64_t)dt->minute * 60ULL + (uint64_t)dt->second;
+    return seconds;
+}
+
+static int64_t syscall_time(uint64_t user_tloc) {
+    struct rtc_datetime dt = {0};
+    uint64_t timestamp = 0;
+    if (rtc_get_datetime(&dt)) {
+        timestamp = rtc_to_unix_epoch(&dt);
+    }
+    if (user_tloc != 0ULL) {
+        if (!vm_user_range_valid(user_tloc, sizeof(uint64_t), true))
+            return -(int64_t)DAWN_ERRNO_EFAULT;
+        if (!vm_copy_to_user(user_tloc, &timestamp, sizeof(uint64_t)))
+            return -(int64_t)DAWN_ERRNO_EFAULT;
+    }
+    return (int64_t)timestamp;
+}
+
+static int64_t syscall_getcwd(uint64_t user_buf, uint64_t size) {
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    if (user_buf == 0ULL || size == 0ULL) return -(int64_t)DAWN_ERRNO_EINVAL;
+    if (!vm_user_range_valid(user_buf, size, true)) return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    char cwd[VFS_MAX_PATH] = {0};
+    if (!process_getcwd(active_pid, cwd, sizeof(cwd))) return -(int64_t)DAWN_ERRNO_EINVAL;
+
+    size_t len = 0;
+    while (cwd[len] != '\0') len++;
+    if (len + 1 > size) return -(int64_t)DAWN_ERRNO_ENAMETOOLONG;
+
+    if (!vm_copy_to_user(user_buf, cwd, len + 1)) return -(int64_t)DAWN_ERRNO_EFAULT;
+    return (int64_t)user_buf;
+}
+
+static int64_t syscall_chdir(uint64_t user_path) {
+    const uint64_t active_pid = process_active_id();
+    if (active_pid == 0ULL) return -(int64_t)DAWN_ERRNO_EPERM;
+    if (user_path == 0ULL || !vm_user_range_valid(user_path, 1, false))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    char path[VFS_MAX_PATH] = {0};
+    size_t i = 0;
+    while (i + 1 < sizeof(path)) {
+        uint8_t ch = 0;
+        if (!vm_copy_from_user(&ch, user_path + i, 1)) return -(int64_t)DAWN_ERRNO_EFAULT;
+        path[i] = (char)ch;
+        if (ch == '\0') break;
+        i++;
+    }
+    path[i] = '\0';
+
+    struct vfs_node *node = NULL;
+    if (!vfs_resolve_path(path, &node) || node == NULL || node->type != VFS_TYPE_DIRECTORY)
+        return -(int64_t)DAWN_ERRNO_ENOENT;
+
+    if (!process_chdir(active_pid, path)) return -(int64_t)DAWN_ERRNO_EINVAL;
+    return 0;
+}
+
+static int64_t syscall_unlink(uint64_t user_path) {
+    if (user_path == 0ULL || !vm_user_range_valid(user_path, 1, false))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    char path[VFS_MAX_PATH] = {0};
+    size_t i = 0;
+    while (i + 1 < sizeof(path)) {
+        uint8_t ch = 0;
+        if (!vm_copy_from_user(&ch, user_path + i, 1)) return -(int64_t)DAWN_ERRNO_EFAULT;
+        path[i] = (char)ch;
+        if (ch == '\0') break;
+        i++;
+    }
+    path[i] = '\0';
+
+    int res = vfs_unlink(path);
+    return res == 0 ? 0 : -(int64_t)DAWN_ERRNO_ENOENT;
+}
+
 int64_t syscall_dispatch(uint64_t number,
                          uint64_t argument0,uint64_t argument1,
                          uint64_t argument2,uint64_t argument3,
@@ -191,8 +382,22 @@ int64_t syscall_dispatch(uint64_t number,
             return syscall_close(argument0);
         case DAWN_SYS_DUP:
             return syscall_dup(argument0);
+        case DAWN_SYS_DUP2:
+            return syscall_dup2(argument0,argument1);
         case DAWN_SYS_GETPID:
             return (int64_t)process_active_id();
+        case DAWN_SYS_OPEN:
+            return syscall_open(argument0,argument1,argument2);
+        case DAWN_SYS_BRK:
+            return syscall_brk(argument0);
+        case DAWN_SYS_TIME:
+            return syscall_time(argument0);
+        case DAWN_SYS_GETCWD:
+            return syscall_getcwd(argument0,argument1);
+        case DAWN_SYS_CHDIR:
+            return syscall_chdir(argument0);
+        case DAWN_SYS_UNLINK:
+            return syscall_unlink(argument0);
         case DAWN_SYS_EXIT:
         case DAWN_SYS_YIELD:
         case DAWN_SYS_WAIT:
@@ -205,6 +410,7 @@ int64_t syscall_dispatch(uint64_t number,
 
 #ifdef DAWN_KERNEL_TEST
 bool syscall_self_test(void) {
+    if (!syscall_init_hardware()) return false;
     if (syscall_dispatch(DAWN_SYS_ABI_VERSION,0ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=(int64_t)DAWN_SYSCALL_ABI_VERSION)
         return false;
@@ -246,8 +452,26 @@ bool syscall_self_test(void) {
     if (syscall_dispatch(DAWN_SYS_DUP,100ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EBADF)
         return false;
+    if (syscall_dispatch(DAWN_SYS_DUP2,100ULL,101ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EBADF)
+        return false;
     if (syscall_dispatch(DAWN_SYS_READ,100ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EBADF)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_OPEN,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_BRK,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_GETCWD,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_CHDIR,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_TIME,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)<0)
         return false;
     return syscall_dispatch(UINT64_MAX,0ULL,0ULL,0ULL,
                             0ULL,0ULL,0ULL)==-(int64_t)DAWN_ERRNO_ENOSYS;

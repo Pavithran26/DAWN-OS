@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #define DAWN_PROCESS_MAX 4U
-#define DAWN_PROCESS_MAX_USER_PAGES 256U
+#define DAWN_PROCESS_MAX_USER_PAGES 1024U
 #define DAWN_PROCESS_MAX_FDS 16U
 
 enum dawn_fd_type {
@@ -86,6 +86,11 @@ bool process_fd_dup2(uint64_t process_id,int oldfd,int newfd);
 bool process_spawn(const void *image,size_t image_size,
                    int argc,const char *const argv[],const char *const envp[],
                    uint64_t *out_pid);
+
+/* Dynamic memory break and process working directory */
+uint64_t process_brk(uint64_t process_id, uint64_t new_brk);
+bool process_getcwd(uint64_t process_id, char *out_buf, size_t buf_size);
+bool process_chdir(uint64_t process_id, const char *path);
 
 #ifdef DAWN_KERNEL_TEST
 bool process_manager_self_test(void);
