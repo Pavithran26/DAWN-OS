@@ -82,6 +82,8 @@ bool settings_save_file(const char *path);
 
 /* GUI Settings Application Window */
 bool settings_window_open(void);
+bool settings_window_open_tab(enum settings_tab tab);
+int settings_window_get_id(void);
 void settings_window_close(void);
 void settings_window_render(void);
 void settings_window_handle_click(int32_t local_x, int32_t local_y);

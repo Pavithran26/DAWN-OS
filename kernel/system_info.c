@@ -5,6 +5,7 @@
 #include "os_metadata.h"
 #include "physical_memory.h"
 #include "storage_manager.h"
+#include "limine_requests.h"
 
 static const char not_available[] = "Not available";
 
@@ -112,8 +113,16 @@ bool dawn_system_info_refresh(struct dawn_system_info *out) {
         out->cpu_model[index] = '\0';
     }
 
-    /* No runtime firmware-interface probe exists yet; report honestly. */
-    out->boot_mode = not_available;
+    /* Detect firmware boot mode through the Limine protocol. */
+    if (limine_efi_system_table_request.response != NULL &&
+        limine_efi_system_table_request.response->address != NULL) {
+        out->boot_mode = "UEFI (Limine)";
+    } else if (limine_framebuffer_request.response != NULL ||
+               limine_memmap_request.response != NULL) {
+        out->boot_mode = "BIOS (Limine)";
+    } else {
+        out->boot_mode = not_available;
+    }
 
     disk_count = storage_get_disk_count();
     out->disk_count = disk_count;
@@ -187,7 +196,6 @@ bool dawn_system_info_refresh(struct dawn_system_info *out) {
     return dawn_metadata_is_valid();
 }
 
-#ifdef DAWN_KERNEL_TEST
 bool system_info_self_test(void) {
     struct dawn_system_info info;
     char buffer[32];
@@ -201,4 +209,3 @@ bool system_info_self_test(void) {
     if (info.boot_mode == NULL) return false;
     return true;
 }
-#endif

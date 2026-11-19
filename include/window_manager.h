@@ -43,6 +43,7 @@ struct window {
     int32_t drag_dy;
     uint32_t *client_buffer;
     uint32_t client_pitch;
+    void (*on_click)(int32_t local_x, int32_t local_y);
     bool active;
 };
 
@@ -58,6 +59,7 @@ int wm_maximize_window(uint32_t id);
 struct window *wm_get_window_by_id(uint32_t id);
 struct window *wm_get_top_window(void);
 struct window *wm_get_window_at_z(size_t index);
+struct window *wm_find_window_at(int32_t x, int32_t y);
 size_t wm_get_window_count(void);
 
 void wm_handle_mouse(const struct mouse_event *mevt);

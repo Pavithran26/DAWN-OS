@@ -32,10 +32,14 @@ Phase L implements the central System Settings framework, hardware profile confi
     5. **Time**: Hardware RTC status, UTC offset, and time format.
     6. **Appearance**: Neo-Liquid Glass theme colors, opacity percentage, and visual styling.
     7. **About**: Real OS version, channel, developer, website/GitHub/repository links, build and kernel metadata from the central metadata API.
-    8. **Credits**: Developer Credits with Pavithran, project owner, role, clickable website/GitHub and the footer string.
-    9. **Help**: Three-page Help & Support Center (Getting Started, Install & Boot, Reference) with Prev/Next navigation, issue-tracker links and "Coming Soon" labels for unfinished features.
-    10. **Sys Info**: System Information from real kernel APIs (CPUID brand string, memory, LAPIC uptime, boot mode, storage and filesystem summary) with "Not available" for undetectable values.
-  - Interactive mouse event routing: clicking sidebar tabs switches views; clicking hyperlinks validates the URL then delegates to the desktop link handler; clicking buttons triggers actions (e.g. sound chime, help page navigation).
+    8. **Credits**: Developer Credits with Pavithran, project owner Pavithran26, role, clickable website (`https://pavithran26.net`), GitHub profile (`https://github.com/Pavithran26`), repository link, and taskbar footer string.
+    9. **Help**: Four-category Help & Support Center (Getting Started, Installation & BIOS/UEFI Troubleshooting, Subsystems & Applications, FAQ & Known Issues) with working Prev/Next navigation, GitHub issue-tracker links, and clear "Coming Soon" indicators for unimplemented functionality.
+    10. **Sys Info**: System Information from real kernel APIs (CPUID brand string, architecture x86_64, memory from physical allocator, LAPIC uptime, Limine firmware boot mode detection: "UEFI (Limine)" vs "BIOS (Limine)", storage and filesystem summary) with "Not available" for undetectable values.
+  - Interactive mouse event routing: clicking sidebar tabs switches views; clicking hyperlinks validates the URL then delegates to `desktop_open_url`; clicking buttons triggers actions (e.g. sound chime, help category navigation); window client area clicks are routed via `win->on_click`.
+  - Desktop & Launcher Integration:
+    - Desktop icons: "This PC" (opens System Info), "Files", "Terminal", "Task Mgr", "Settings", "About OS" (opens About DAWN-OS), and "Help" (opens Help & Support).
+    - Start Menu launcher items: Terminal, File Explorer, Task Manager, Settings, Help & Support, About DAWN-OS, and Shut Down.
+    - Helper API `settings_window_open_tab(tab)` for targeted navigation from any desktop trigger.
 - Self-test (`settings_self_test`):
   - Validates default parameter assignment.
   - Validates key=value text serialization and round-trip deserialization.

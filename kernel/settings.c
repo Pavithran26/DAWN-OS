@@ -355,7 +355,7 @@ static size_t settings_format_labelled(char *dst, size_t capacity,
     size_t position = 0U;
     if (dst == NULL || capacity == 0U) return 0U;
     label = (label != NULL) ? label : "";
-    value = (value != NULL) ? value : "Not available";
+    value = (value != NULL && value[0] != '\0') ? value : "Not available";
     for (size_t i = 0U; label[i] != '\0' && position + 1U < capacity; ++i) {
         dst[position++] = label[i];
     }
@@ -494,140 +494,177 @@ void settings_window_render(void) {
 
         case TAB_ABOUT: {
             const struct dawn_metadata_view *meta = dawn_metadata_get();
-            char line[64];
+            char line[80];
             gfx_draw_icon(&surf, cx, cy, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
             gfx_draw_string(&surf, cx + 24U, cy, "About DAWN-OS", GFX_COLOR_EMERALD_NEON);
             if (meta == NULL) {
                 gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
                 break;
             }
+            settings_format_labelled(line, sizeof(line), "OS: ", meta->os_display_name);
+            gfx_draw_string(&surf, cx, cy + 22, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Version: ", meta->version);
-            gfx_draw_string(&surf, cx, cy + 25, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 42, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Channel: ", meta->channel);
-            gfx_draw_string(&surf, cx, cy + 50, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 62, line, GFX_COLOR_TEXT_MUTED);
             settings_format_labelled(line, sizeof(line), "Developer: ", meta->developer_display_name);
-            gfx_draw_string(&surf, cx, cy + 75, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 82, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Project Owner: ", meta->developer_username);
+            gfx_draw_string(&surf, cx, cy + 102, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Role: ", meta->developer_role);
-            gfx_draw_string(&surf, cx, cy + 100, line, GFX_COLOR_TEXT_MUTED);
-            settings_add_link(&surf, cx, cy + 125, "Website: pavithran26.net", meta->developer_website);
-            settings_add_link(&surf, cx, cy + 150, "GitHub: Pavithran26", meta->developer_github);
-            settings_add_link(&surf, cx, cy + 175, "Repository: DAWN-OS", meta->repository_url);
-            settings_format_labelled(line, sizeof(line), "Build: ", meta->build_id);
-            settings_draw_limited(&surf, cx, cy + 200, line, 50U, GFX_COLOR_TEXT_MUTED);
-            settings_format_labelled(line, sizeof(line), "Date: ", meta->build_date);
-            gfx_draw_string(&surf, cx, cy + 225, line, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, cy + 122, line, GFX_COLOR_TEXT_MUTED);
+            settings_add_link(&surf, cx, cy + 144, "Official Website: https://pavithran26.net", meta->developer_website);
+            settings_add_link(&surf, cx, cy + 166, "GitHub Profile: https://github.com/Pavithran26", meta->developer_github);
+            settings_add_link(&surf, cx, cy + 188, "Repository: https://github.com/Pavithran26/DAWN-OS", meta->repository_url);
             settings_format_labelled(line, sizeof(line), "Kernel: ", meta->kernel_version);
+            settings_draw_limited(&surf, cx, cy + 210, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Architecture: ", meta->architecture);
+            gfx_draw_string(&surf, cx, cy + 230, line, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Build: ", meta->build_id);
             settings_draw_limited(&surf, cx, cy + 250, line, 50U, GFX_COLOR_TEXT_MUTED);
-            settings_format_labelled(line, sizeof(line), "Arch: ", meta->architecture);
-            gfx_draw_string(&surf, cx, cy + 275, line, GFX_COLOR_TEXT_MUTED);
-            settings_draw_limited(&surf, cx, cy + 300, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Date: ", meta->build_date);
+            gfx_draw_string(&surf, cx, cy + 270, line, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "License: ", meta->license_name);
+            gfx_draw_string(&surf, cx, cy + 292, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_draw_limited(&surf, cx, cy + 314, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
             break;
         }
 
         case TAB_CREDITS: {
             const struct dawn_metadata_view *meta = dawn_metadata_get();
-            char line[64];
-            gfx_draw_string(&surf, cx, cy, "Developer Credits", GFX_COLOR_EMERALD_NEON);
+            char line[80];
+            gfx_draw_string(&surf, cx, cy, "Developer Profile & Credits", GFX_COLOR_EMERALD_NEON);
             if (meta == NULL) {
                 gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
                 break;
             }
-            gfx_draw_string(&surf, cx, cy + 30, "Developed and maintained by", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx, cy + 55, meta->developer_display_name, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 28, "Developed and maintained by Pavithran", GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Role: ", meta->developer_role);
-            gfx_draw_string(&surf, cx, cy + 85, line, GFX_COLOR_TEXT_PRIMARY);
-            settings_format_labelled(line, sizeof(line), "Owner: ", meta->developer_username);
-            gfx_draw_string(&surf, cx, cy + 110, line, GFX_COLOR_TEXT_PRIMARY);
-            settings_add_link(&surf, cx, cy + 140, "Website: pavithran26.net", meta->developer_website);
-            settings_add_link(&surf, cx, cy + 165, "GitHub: github.com/Pavithran26", meta->developer_github);
-            settings_draw_limited(&surf, cx, cy + 200, meta->footer_text, 50U, GFX_COLOR_TEXT_SECONDARY);
-            settings_draw_limited(&surf, cx, cy + 230, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, cy + 52, line, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Project Owner: ", meta->developer_username);
+            gfx_draw_string(&surf, cx, cy + 74, line, GFX_COLOR_TEXT_PRIMARY);
+            settings_add_link(&surf, cx, cy + 100, "Official Website: https://pavithran26.net", meta->developer_website);
+            settings_add_link(&surf, cx, cy + 124, "GitHub Profile: https://github.com/Pavithran26", meta->developer_github);
+            settings_add_link(&surf, cx, cy + 148, "Repository: https://github.com/Pavithran26/DAWN-OS", meta->repository_url);
+            settings_add_link(&surf, cx, cy + 172, "Issue Tracker: https://github.com/Pavithran26/DAWN-OS/issues", meta->issues_url);
+            gfx_draw_string(&surf, cx, cy + 204, "Taskbar Footer:", GFX_COLOR_TEXT_MUTED);
+            settings_draw_limited(&surf, cx, cy + 224, meta->footer_text, 50U, GFX_COLOR_TEXT_SECONDARY);
+            settings_format_labelled(line, sizeof(line), "License: ", meta->license_name);
+            gfx_draw_string(&surf, cx, cy + 248, line, GFX_COLOR_TEXT_MUTED);
+            settings_draw_limited(&surf, cx, cy + 270, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
             break;
         }
 
         case TAB_HELP_SUPPORT: {
             const struct dawn_metadata_view *meta = dawn_metadata_get();
-            if (help_page > 2U) help_page = 0U;
+            if (help_page > 3U) help_page = 0U;
             if (meta == NULL) {
                 gfx_draw_string(&surf, cx, cy, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
                 break;
             }
             if (help_page == 0U) {
-                gfx_draw_string(&surf, cx, cy, "Help & Support - Getting Started", GFX_COLOR_EMERALD_NEON);
-                gfx_draw_string(&surf, cx, cy + 30, "Open Terminal from the launcher", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 55, "Type 'help' for shell commands", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 80, "Settings configures the desktop", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 105, "Files browses the virtual filesystem", GFX_COLOR_TEXT_PRIMARY);
-                settings_add_link(&surf, cx, cy + 140, "Official website", meta->support_website);
-                settings_add_link(&surf, cx, cy + 165, "GitHub repository", meta->repository_url);
+                gfx_draw_string(&surf, cx, cy, "Help - 1. Getting Started", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 28, "Desktop: Emerald Neo-Liquid Glass interface", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 50, "Start Menu: Click bottom-left logo for apps", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 72, "Terminal: Type 'help', 'sysinfo', 'ls', 'ps'", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 94, "Files: File Explorer browses VFS partitions", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 116, "Settings: Configure display, audio, network", GFX_COLOR_TEXT_PRIMARY);
+                settings_add_link(&surf, cx, cy + 144, "Official Website: https://pavithran26.net", meta->support_website);
+                settings_add_link(&surf, cx, cy + 168, "GitHub Repository: DAWN-OS", meta->repository_url);
             } else if (help_page == 1U) {
-                gfx_draw_string(&surf, cx, cy, "Help & Support - Install & Boot", GFX_COLOR_EMERALD_NEON);
-                gfx_draw_string(&surf, cx, cy + 30, "Installer: available in Settings", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 55, "Boot: Limine BIOS and UEFI", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 80, "Input: PS/2 and USB HID", GFX_COLOR_TEXT_MUTED);
-                gfx_draw_string(&surf, cx, cy + 105, "Storage: AHCI, NVMe, MBR/GPT", GFX_COLOR_TEXT_MUTED);
-                settings_add_link(&surf, cx, cy + 140, "Bug reports", meta->bug_report_url);
-                settings_add_link(&surf, cx, cy + 165, "Feature requests", meta->feature_request_url);
+                gfx_draw_string(&surf, cx, cy, "Help - 2. Install & BIOS/UEFI Troubleshooting", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 28, "Bootloader: Limine dual BIOS & UEFI support", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 50, "Storage: AHCI SATA & NVMe PCIe auto-detected", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 72, "Black Screen: Check GOP/VBE display modes", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 94, "Boot Freeze: Verify APIC & IOAPIC routing", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 116, "Recovery Shell: Boot with safe-mode flag", GFX_COLOR_TEXT_MUTED);
+                settings_add_link(&surf, cx, cy + 144, "Bug Reports: GitHub Issues", meta->bug_report_url);
+                settings_add_link(&surf, cx, cy + 168, "Documentation: pavithran26.net", meta->support_website);
+            } else if (help_page == 2U) {
+                gfx_draw_string(&surf, cx, cy, "Help - 3. Applications & Subsystems", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 28, "File Explorer: Copy, move, create dir, FAT32", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 50, "Terminal: Ring 3 ELF execution & pipes", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 72, "Task Manager: Process PID table & kill", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 94, "Storage Manager: MBR/GPT mount tables", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 116, "Audio: Intel HD Audio output & tones", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 138, "Dynamic Modules: Coming Soon", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 158, "GUI Browser: Coming Soon", GFX_COLOR_TEXT_MUTED);
+                settings_add_link(&surf, cx, cy + 180, "Feature Requests: GitHub Issues", meta->feature_request_url);
             } else {
-                gfx_draw_string(&surf, cx, cy, "Help & Support - Reference", GFX_COLOR_EMERALD_NEON);
-                gfx_draw_string(&surf, cx, cy + 30, "Terminal: command documentation", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 55, "File Explorer: copy, move, search", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 80, "Task Manager: process monitoring", GFX_COLOR_TEXT_PRIMARY);
-                gfx_draw_string(&surf, cx, cy + 105, "Bug reports: use the tracker below", GFX_COLOR_TEXT_MUTED);
-                gfx_draw_string(&surf, cx, cy + 130, "Feature requests: same tracker", GFX_COLOR_TEXT_MUTED);
-                gfx_draw_string(&surf, cx, cy + 155, "Dynamic modules: Coming Soon", GFX_COLOR_TEXT_MUTED);
-                settings_add_link(&surf, cx, cy + 165, "Issue tracker", meta->issues_url);
+                gfx_draw_string(&surf, cx, cy, "Help - 4. FAQ & Known Issues", GFX_COLOR_EMERALD_NEON);
+                gfx_draw_string(&surf, cx, cy + 28, "Q: Is DAWN-OS Linux or Windows based?", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 48, "A: No! Independent custom x86_64 kernel.", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 70, "Q: What filesystem is supported?", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 90, "A: VFS with FAT32 read/write & ISO9660.", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 112, "Known Issue: DHCP client: Coming Soon", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 132, "Known Issue: Web browser: Coming Soon", GFX_COLOR_TEXT_MUTED);
+                settings_add_link(&surf, cx, cy + 156, "Bug Reports: https://github.com/Pavithran26/DAWN-OS/issues", meta->bug_report_url);
+                settings_add_link(&surf, cx, cy + 180, "Feature Requests: https://github.com/Pavithran26/DAWN-OS/issues", meta->feature_request_url);
             }
-            gfx_draw_rect(&surf, cx, cy + 195, 70U, 24U, GFX_COLOR_GLASS_BORDER);
-            gfx_draw_string(&surf, cx + 16U, cy + 201, "Prev", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_rect(&surf, cx + 90U, cy + 195, 70U, 24U, GFX_COLOR_GLASS_BORDER);
-            gfx_draw_string(&surf, cx + 106U, cy + 201, "Next", GFX_COLOR_TEXT_PRIMARY);
+            /* Prev / Next buttons and category indicator */
+            gfx_draw_rect(&surf, cx, cy + 215, 70U, 24U, GFX_COLOR_GLASS_BORDER);
+            gfx_draw_string(&surf, cx + 16U, cy + 221, "Prev", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_rect(&surf, cx + 80U, cy + 215, 70U, 24U, GFX_COLOR_GLASS_BORDER);
+            gfx_draw_string(&surf, cx + 96U, cy + 221, "Next", GFX_COLOR_TEXT_PRIMARY);
+            {
+                char cat_str[24];
+                cat_str[0] = 'P'; cat_str[1] = 'a'; cat_str[2] = 'g'; cat_str[3] = 'e';
+                cat_str[4] = ' '; cat_str[5] = (char)('1' + help_page);
+                cat_str[6] = ' '; cat_str[7] = 'o'; cat_str[8] = 'f';
+                cat_str[9] = ' '; cat_str[10] = '4'; cat_str[11] = '\0';
+                gfx_draw_string(&surf, cx + 165U, cy + 221, cat_str, GFX_COLOR_TEXT_MUTED);
+            }
             break;
         }
 
         case TAB_SYSTEM_INFO: {
             const struct dawn_metadata_view *meta = dawn_metadata_get();
             struct dawn_system_info info;
-            char line[64];
+            char line[80];
             gfx_draw_string(&surf, cx, cy, "System Information", GFX_COLOR_EMERALD_NEON);
             if (meta == NULL) {
                 gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
                 break;
             }
             settings_format_labelled(line, sizeof(line), "OS: ", meta->os_display_name);
-            gfx_draw_string(&surf, cx, cy + 25, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 22, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Version: ", meta->version);
-            gfx_draw_string(&surf, cx, cy + 50, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, cy + 42, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Kernel: ", meta->kernel_version);
-            settings_draw_limited(&surf, cx, cy + 75, line, 50U, GFX_COLOR_TEXT_PRIMARY);
+            settings_draw_limited(&surf, cx, cy + 62, line, 50U, GFX_COLOR_TEXT_PRIMARY);
+            settings_format_labelled(line, sizeof(line), "Architecture: ", meta->architecture);
+            gfx_draw_string(&surf, cx, cy + 82, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Build: ", meta->build_id);
-            settings_draw_limited(&surf, cx, cy + 100, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_draw_limited(&surf, cx, cy + 102, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_format_labelled(line, sizeof(line), "Build Date: ", meta->build_date);
+            gfx_draw_string(&surf, cx, cy + 122, line, GFX_COLOR_TEXT_MUTED);
             if (dawn_system_info_refresh(&info)) {
                 char memory[24];
                 char uptime[24];
-                settings_draw_limited(&surf, cx, cy + 125, info.cpu_model, 50U, GFX_COLOR_TEXT_PRIMARY);
+                settings_format_labelled(line, sizeof(line), "CPU: ", info.cpu_model);
+                settings_draw_limited(&surf, cx, cy + 144, line, 50U, GFX_COLOR_TEXT_PRIMARY);
                 if (dawn_human_bytes(info.physical_memory_bytes, memory, sizeof(memory)) != 0U) {
-                    settings_format_labelled(line, sizeof(line), "Memory: ", memory);
-                    gfx_draw_string(&surf, cx, cy + 150, line, GFX_COLOR_TEXT_MUTED);
+                    settings_format_labelled(line, sizeof(line), "Total Memory: ", memory);
+                    gfx_draw_string(&surf, cx, cy + 166, line, GFX_COLOR_TEXT_MUTED);
                 }
                 if (dawn_human_bytes(info.free_memory_bytes, memory, sizeof(memory)) != 0U) {
-                    settings_format_labelled(line, sizeof(line), "Free: ", memory);
-                    gfx_draw_string(&surf, cx, cy + 175, line, GFX_COLOR_TEXT_MUTED);
+                    settings_format_labelled(line, sizeof(line), "Free Memory: ", memory);
+                    gfx_draw_string(&surf, cx, cy + 188, line, GFX_COLOR_TEXT_MUTED);
                 }
-                settings_format_labelled(line, sizeof(line), "Boot mode: ", info.boot_mode);
-                gfx_draw_string(&surf, cx, cy + 200, line, GFX_COLOR_TEXT_MUTED);
+                settings_format_labelled(line, sizeof(line), "Boot Mode: ", info.boot_mode);
+                gfx_draw_string(&surf, cx, cy + 210, line, GFX_COLOR_TEXT_MUTED);
                 if (dawn_decimal_string(info.uptime_seconds, uptime, sizeof(uptime)) != 0U) {
-                    settings_format_labelled(line, sizeof(line), "Uptime: ", uptime);
-                    gfx_draw_string(&surf, cx, cy + 225, line, GFX_COLOR_TEXT_MUTED);
+                    settings_format_labelled(line, sizeof(line), "Uptime (sec): ", uptime);
+                    gfx_draw_string(&surf, cx, cy + 232, line, GFX_COLOR_TEXT_MUTED);
                 }
                 settings_format_labelled(line, sizeof(line), "Storage: ", info.storage_summary);
-                settings_draw_limited(&surf, cx, cy + 250, line, 50U, GFX_COLOR_TEXT_MUTED);
+                settings_draw_limited(&surf, cx, cy + 254, line, 50U, GFX_COLOR_TEXT_MUTED);
                 settings_format_labelled(line, sizeof(line), "Filesystem: ", info.filesystem_summary);
-                gfx_draw_string(&surf, cx, cy + 275, line, GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 276, line, GFX_COLOR_TEXT_MUTED);
             } else {
-                gfx_draw_string(&surf, cx, cy + 125, "System information unavailable", GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 144, "System information unavailable", GFX_COLOR_TEXT_MUTED);
             }
-            settings_add_link(&surf, cx, cy + 305, "Report a problem", meta->bug_report_url);
+            settings_add_link(&surf, cx, cy + 304, "Report a Problem: GitHub Issues", meta->bug_report_url);
             break;
         }
 
@@ -662,20 +699,36 @@ void settings_window_handle_click(int32_t local_x, int32_t local_y) {
             audio_play_tone(880, 50); /* High chime */
         }
     } else if (current_tab == TAB_HELP_SUPPORT) {
-        /* Help navigation buttons are at content y + 180. */
-        if (local_y >= 215 && local_y <= 239) {
+        /* Help navigation buttons are at content y (20) + 215 = 235 (allow 215..260) */
+        if (local_y >= 215 && local_y <= 260) {
             if (local_x >= 160 && local_x <= 230) {
-                help_page = (help_page == 0U) ? 2U : (help_page - 1U);
+                help_page = (help_page == 0U) ? 3U : (help_page - 1U);
                 settings_window_render();
                 return;
             }
-            if (local_x >= 250 && local_x <= 320) {
-                help_page = (help_page + 1U) % 3U;
+            if (local_x >= 240 && local_x <= 310) {
+                help_page = (help_page + 1U) % 4U;
                 settings_window_render();
                 return;
             }
         }
     }
+}
+
+int settings_window_get_id(void) {
+    return settings_window_id;
+}
+
+bool settings_window_open_tab(enum settings_tab tab) {
+    if (tab >= TAB_COUNT) return false;
+    if (settings_window_id >= 0) {
+        wm_focus_window((uint32_t)settings_window_id);
+        settings_window_switch_tab(tab);
+        return true;
+    }
+    if (!settings_window_open()) return false;
+    settings_window_switch_tab(tab);
+    return true;
 }
 
 bool settings_window_open(void) {
@@ -689,6 +742,7 @@ bool settings_window_open(void) {
 
     win->client_buffer = settings_win_buffer;
     win->client_pitch = 560 * sizeof(uint32_t);
+    win->on_click = settings_window_handle_click;
     settings_window_id = (int)win->id;
 
     current_tab = TAB_DISPLAY;
@@ -736,21 +790,23 @@ bool settings_self_test(void) {
 
     /* Window lifecycle test */
     if (!settings_window_open()) return false;
+    if (settings_window_get_id() < 0) return false;
     settings_window_switch_tab(TAB_AUDIO);
     if (current_tab != TAB_AUDIO) return false;
     settings_window_handle_click(30, 20); /* Click Display tab */
     if (current_tab != TAB_DISPLAY) return false;
 
-    settings_window_switch_tab(TAB_ABOUT);
+    if (!settings_window_open_tab(TAB_ABOUT)) return false;
     if (current_tab != TAB_ABOUT || settings_link_count == 0U) return false;
     settings_window_switch_tab(TAB_CREDITS);
     if (current_tab != TAB_CREDITS || settings_link_count == 0U) return false;
     settings_window_switch_tab(TAB_HELP_SUPPORT);
-    settings_window_handle_click(270, 220); /* Next help page */
+    settings_window_handle_click(270, 240); /* Next help page */
     if (current_tab != TAB_HELP_SUPPORT) return false;
     settings_window_switch_tab(TAB_SYSTEM_INFO);
     if (current_tab != TAB_SYSTEM_INFO) return false;
     settings_window_close();
+    if (settings_window_get_id() >= 0) return false;
 
     return true;
 }

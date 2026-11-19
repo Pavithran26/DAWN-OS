@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "desktop.h"
 #include "os_metadata.h"
+#include "settings.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -101,29 +102,47 @@ void desktop_handle_input_event(const struct input_event *event) {
             /* Check Launcher items if launcher open */
             if (state.launcher_open) {
                 int32_t lx = 8;
-                int32_t ly = (int32_t)(tb_y - 240);
+                int32_t ly = (int32_t)(tb_y - 290);
                 if (mevt->x >= lx && mevt->x <= lx + 220 && mevt->y >= ly && mevt->y <= (int32_t)tb_y) {
-                    /* Item 1: Terminal (ly + 40 to ly + 70) */
-                    if (mevt->y >= ly + 40 && mevt->y < ly + 70) {
+                    /* Item 1: Terminal (ly + 40 to ly + 68) */
+                    if (mevt->y >= ly + 40 && mevt->y < ly + 68) {
                         wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 2: File Explorer (ly + 70 to ly + 100) */
-                    if (mevt->y >= ly + 70 && mevt->y < ly + 100) {
+                    /* Item 2: File Explorer (ly + 70 to ly + 98) */
+                    if (mevt->y >= ly + 70 && mevt->y < ly + 98) {
                         wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 3: Task Manager (ly + 100 to ly + 130) */
-                    if (mevt->y >= ly + 100 && mevt->y < ly + 130) {
+                    /* Item 3: Task Manager (ly + 100 to ly + 128) */
+                    if (mevt->y >= ly + 100 && mevt->y < ly + 128) {
                         wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 4: Settings (ly + 130 to ly + 160) */
-                    if (mevt->y >= ly + 130 && mevt->y < ly + 160) {
-                        wm_create_window("Settings", 220, 160, 480, 340, WM_FLAG_NONE);
+                    /* Item 4: Settings (ly + 130 to ly + 158) */
+                    if (mevt->y >= ly + 130 && mevt->y < ly + 158) {
+                        settings_window_open();
+                        state.launcher_open = false;
+                        return;
+                    }
+                    /* Item 5: Help & Support (ly + 160 to ly + 188) */
+                    if (mevt->y >= ly + 160 && mevt->y < ly + 188) {
+                        settings_window_open_tab(TAB_HELP_SUPPORT);
+                        state.launcher_open = false;
+                        return;
+                    }
+                    /* Item 6: About DAWN-OS (ly + 190 to ly + 218) */
+                    if (mevt->y >= ly + 190 && mevt->y < ly + 218) {
+                        settings_window_open_tab(TAB_ABOUT);
+                        state.launcher_open = false;
+                        return;
+                    }
+                    /* Shutdown button (ly + 228 to ly + 280) */
+                    if (mevt->y >= ly + 228 && mevt->y < ly + 280) {
+                        desktop_show_notification("Power", "System Shut Down initiated");
                         state.launcher_open = false;
                         return;
                     }
@@ -172,6 +191,47 @@ void desktop_handle_input_event(const struct input_event *event) {
                 }
                 return;
             }
+
+            /* Check Desktop Icons when click is not captured by a window */
+            if (wm_find_window_at(mevt->x, mevt->y) == NULL && mevt->y < (int32_t)tb_y) {
+                if (mevt->x >= 8 && mevt->x <= 84) {
+                    /* This PC -> System Info */
+                    if (mevt->y >= 16 && mevt->y < 68) {
+                        settings_window_open_tab(TAB_SYSTEM_INFO);
+                        return;
+                    }
+                    /* Files -> File Explorer */
+                    if (mevt->y >= 72 && mevt->y < 124) {
+                        wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
+                        return;
+                    }
+                    /* Terminal */
+                    if (mevt->y >= 128 && mevt->y < 180) {
+                        wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
+                        return;
+                    }
+                    /* Task Mgr */
+                    if (mevt->y >= 184 && mevt->y < 236) {
+                        wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
+                        return;
+                    }
+                    /* Settings */
+                    if (mevt->y >= 240 && mevt->y < 292) {
+                        settings_window_open();
+                        return;
+                    }
+                    /* About OS */
+                    if (mevt->y >= 296 && mevt->y < 348) {
+                        settings_window_open_tab(TAB_ABOUT);
+                        return;
+                    }
+                    /* Help */
+                    if (mevt->y >= 352 && mevt->y < 404) {
+                        settings_window_open_tab(TAB_HELP_SUPPORT);
+                        return;
+                    }
+                }
+            }
         }
 
         /* Forward to window manager */
@@ -186,17 +246,26 @@ void desktop_render(struct gfx_surface *surf) {
     wm_composite(surf, state.mouse_x, state.mouse_y);
 
     /* Render Desktop Icons on left */
-    gfx_draw_icon(surf, 24, 24, GFX_ICON_COMPUTER, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 16, 44, "This PC", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_icon(surf, 24, 20, GFX_ICON_COMPUTER, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 16, 40, "This PC", GFX_COLOR_TEXT_PRIMARY);
 
-    gfx_draw_icon(surf, 24, 94, GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 20, 114, "Files", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_icon(surf, 24, 76, GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 20, 96, "Files", GFX_COLOR_TEXT_PRIMARY);
 
-    gfx_draw_icon(surf, 24, 164, GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 14, 184, "Terminal", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_icon(surf, 24, 132, GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 14, 152, "Terminal", GFX_COLOR_TEXT_PRIMARY);
 
-    gfx_draw_icon(surf, 24, 234, GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 12, 254, "Task Mgr", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_icon(surf, 24, 188, GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 12, 208, "Task Mgr", GFX_COLOR_TEXT_PRIMARY);
+
+    gfx_draw_icon(surf, 24, 244, GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 14, 264, "Settings", GFX_COLOR_TEXT_PRIMARY);
+
+    gfx_draw_icon(surf, 24, 300, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 14, 320, "About OS", GFX_COLOR_TEXT_PRIMARY);
+
+    gfx_draw_icon(surf, 24, 356, GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 16, 376, "Help", GFX_COLOR_TEXT_PRIMARY);
 
     /* Render Taskbar at bottom */
     uint32_t tb_y = surf->height - DESKTOP_TASKBAR_HEIGHT;
@@ -249,31 +318,37 @@ void desktop_render(struct gfx_surface *surf) {
     /* Render Start Menu / App Launcher if open */
     if (state.launcher_open) {
         int32_t lx = 8;
-        int32_t ly = (int32_t)(tb_y - 240);
-        gfx_draw_glass_panel(surf, (uint32_t)lx, (uint32_t)ly, 220, 236, GFX_COLOR_GLASS_PANEL);
+        int32_t ly = (int32_t)(tb_y - 290);
+        gfx_draw_glass_panel(surf, (uint32_t)lx, (uint32_t)ly, 220, 286, GFX_COLOR_GLASS_PANEL);
 
         /* Header */
-        gfx_draw_icon(surf, (uint32_t)(lx + 12), (uint32_t)(ly + 12), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 36), (uint32_t)(ly + 12), "DAWN-OS", GFX_COLOR_TEXT_PRIMARY);
-        gfx_draw_line(surf, lx + 8, ly + 34, lx + 212, ly + 34, GFX_COLOR_GLASS_BORDER);
+        gfx_draw_icon(surf, (uint32_t)(lx + 12), (uint32_t)(ly + 10), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 36), (uint32_t)(ly + 10), "DAWN-OS", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_line(surf, lx + 8, ly + 32, lx + 212, ly + 32, GFX_COLOR_GLASS_BORDER);
 
         /* Menu Items */
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 46), GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 46), "Terminal", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 42), GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 42), "Terminal", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 76), GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 76), "File Explorer", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 72), GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 72), "File Explorer", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 106), GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 106), "Task Manager", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 102), GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 102), "Task Manager", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 136), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 136), "Settings", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 132), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 132), "Settings", GFX_COLOR_TEXT_PRIMARY);
+
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 162), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 162), "Help & Support", GFX_COLOR_TEXT_PRIMARY);
+
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 192), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 192), "About DAWN-OS", GFX_COLOR_TEXT_PRIMARY);
 
         /* Shutdown button at bottom */
-        gfx_draw_line(surf, lx + 8, ly + 180, lx + 212, ly + 180, GFX_COLOR_GLASS_BORDER);
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 194), GFX_ICON_SHUTDOWN, GFX_COLOR_BTN_CLOSE);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 194), "Shut Down", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_line(surf, lx + 8, ly + 224, lx + 212, ly + 224, GFX_COLOR_GLASS_BORDER);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 238), GFX_ICON_SHUTDOWN, GFX_COLOR_BTN_CLOSE);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 238), "Shut Down", GFX_COLOR_TEXT_PRIMARY);
     }
 
     /* Render Notifications in top right */
@@ -308,6 +383,38 @@ bool desktop_self_test(void) {
     if (!state.launcher_open) return false;
     desktop_toggle_launcher();
     if (state.launcher_open) return false;
+
+    /* Input event tests */
+    {
+        uint32_t tb_y = state.screen_height - DESKTOP_TASKBAR_HEIGHT;
+
+        /* Click start button */
+        struct input_event click_start = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = { .x = 20, .y = (int32_t)(tb_y + 16), .left_button = true }
+        };
+        desktop_handle_input_event(&click_start);
+        if (!state.launcher_open) return false;
+
+        /* Click About DAWN-OS launcher item (y = tb_y - 290 + 200 = tb_y - 90) */
+        struct input_event click_about = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = { .x = 50, .y = (int32_t)(tb_y - 90), .left_button = true }
+        };
+        desktop_handle_input_event(&click_about);
+        if (state.launcher_open) return false;
+        if (settings_window_get_id() < 0) return false;
+        settings_window_close();
+
+        /* Click desktop icon "This PC" (x = 30, y = 35) */
+        struct input_event click_thispc = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = { .x = 30, .y = 35, .left_button = true }
+        };
+        desktop_handle_input_event(&click_thispc);
+        if (settings_window_get_id() < 0) return false;
+        settings_window_close();
+    }
 
     /* Render test into a 640x480 test surface */
     struct gfx_surface test_surf = {

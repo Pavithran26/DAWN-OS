@@ -64,7 +64,11 @@ DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop opera
 - Graphical Task Manager with real-time CPU utilization graph, physical RAM gauge, process list with state/memory/CPU metrics, and process termination.
 - Network subsystem with loopback (`lo`) and Ethernet (`eth0`) devices, ARP, IPv4, ICMP Ping, UDP, TCP state machine, and BSD-style Socket API.
 - Audio subsystem with PCI multimedia discovery, multi-stream PCM software mixer with 16-bit signed clipping, master volume/mute controls, and square wave tone synthesis.
-- Central Settings framework with persistent configuration (`/boot/system.cfg`), dynamic hardware reconfiguration, and graphical tabbed Settings application.
+- Central Settings framework with persistent configuration (`/boot/system.cfg`), dynamic hardware reconfiguration, and graphical tabbed Settings application featuring About DAWN-OS, Developer Credits, Help & Support Center, and System Information tabs.
+- Centralized OS metadata (`config/os_metadata.json`, `tools/generate_metadata.py`, `include/os_metadata.h`) delivering non-tamperable runtime identity, developer attribution ("Developed and maintained by Pavithran"), official URLs (`https://pavithran26.net`), repository links, and desktop taskbar footer.
+- Comprehensive Help & Support Center with four categorized documentation sections (Getting Started, Installation & BIOS/UEFI Troubleshooting, Applications & Subsystems, FAQ & Known Issues), GitHub issue links, and clear "Coming Soon" indicators.
+- Live System Information reporting real CPU model via CPUID, architecture (`x86_64`), physical and free memory via kernel allocators, Limine BIOS/UEFI boot mode detection ("UEFI (Limine)" vs "BIOS (Limine)"), LAPIC timer uptime, storage disk counts, and VFS filesystem status.
+- Desktop and Start Menu launcher integration: direct entry points for About DAWN-OS, Help & Support, System Information ("This PC"), and interactive client area mouse dispatch via `win->on_click`.
 - Operating system installer with automated MBR/GPT partitioning, FAT32 formatting, system tree deployment, Limine bootloader installation, and emergency recovery rescue shell.
 - Security subsystem with salted password hashing, user accounts, POSIX file permission checks, user/kernel pointer boundary validation, and audit logging.
 - Application runtime with standalone C library subset (`dlibc`), user heap memory allocator, native application lifecycle management, and DAWN Package Manager (`dpkg`).

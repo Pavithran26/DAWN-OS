@@ -56,6 +56,7 @@ struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_
             win->flags = flags | WM_FLAG_TITLEBAR | WM_FLAG_MOVABLE;
             win->visible = true;
             win->active = true;
+            win->on_click = NULL;
 
             z_order[z_count++] = win;
             wm_focus_window(win->id);
@@ -190,6 +191,19 @@ struct window *wm_get_window_at_z(size_t index) {
     return z_order[index];
 }
 
+struct window *wm_find_window_at(int32_t x, int32_t y) {
+    for (size_t i = z_count; i > 0; i--) {
+        struct window *win = z_order[i - 1];
+        if (win != NULL && win->visible && !win->minimized) {
+            if (x >= win->x && x < win->x + (int32_t)win->width &&
+                y >= win->y && y < win->y + (int32_t)win->height) {
+                return win;
+            }
+        }
+    }
+    return NULL;
+}
+
 size_t wm_get_window_count(void) {
     return z_count;
 }
@@ -238,6 +252,13 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
                     win->dragging = true;
                     win->drag_dx = mevt->x - win->x;
                     win->drag_dy = mevt->y - win->y;
+                } else {
+                    /* Client area click dispatch */
+                    int32_t cx = mevt->x - (win->x + (int32_t)WM_BORDER_WIDTH);
+                    int32_t cy = mevt->y - (win->y + (int32_t)WM_TITLEBAR_HEIGHT);
+                    if (win->on_click != NULL) {
+                        win->on_click(cx, cy);
+                    }
                 }
                 return;
             }

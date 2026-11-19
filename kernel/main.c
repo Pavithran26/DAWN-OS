@@ -131,6 +131,13 @@ volatile struct limine_paging_mode_request limine_paging_mode_request = {
     .min_mode = LIMINE_PAGING_MODE_X86_64_4LVL
 };
 
+__attribute__((used, aligned(8), section(".limine_requests")))
+volatile struct limine_efi_system_table_request limine_efi_system_table_request = {
+    .id = { LIMINE_EFI_SYSTEM_TABLE_REQUEST_ID },
+    .revision = 0,
+    .response = NULL
+};
+
 __attribute__((used, aligned(8), section(".limine_requests_end")))
 volatile uint64_t limine_requests_end[] = {
     LIMINE_REQUESTS_END_MARKER

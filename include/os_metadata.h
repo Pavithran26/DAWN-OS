@@ -34,6 +34,7 @@ struct dawn_metadata_view {
     const char *repository_url;
     const char *issues_url;
     const char *documentation_url;
+    const char *license_name;
 
     const char *support_website;
     const char *bug_report_url;
@@ -74,8 +75,6 @@ size_t dawn_escape_text(const char *src, char *dst, size_t capacity);
 /* Copies a validated URL into dst. Returns false for invalid or oversized URLs. */
 bool dawn_url_copy(const char *url, char *dst, size_t capacity);
 
-#ifdef DAWN_KERNEL_TEST
 bool os_metadata_self_test(void);
-#endif
 
 #endif /* DAWN_OS_METADATA_H */

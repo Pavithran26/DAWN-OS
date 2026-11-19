@@ -10,9 +10,9 @@
 #define DAWN_META_OS_ARCHITECTURE "x86_64"
 #define DAWN_META_OS_VERSION "1.0.0"
 #define DAWN_META_OS_CHANNEL "development"
-#define DAWN_META_BUILD_ID "dee5c5ad28fc4ce27fe6f4500c0053ef2100b930"
-#define DAWN_META_BUILD_DATE "2026-11-18"
-#define DAWN_META_KERNEL_VERSION "dawn-dee5c5a"
+#define DAWN_META_BUILD_ID "c0fe60a120b4736ff734ed1526d45305a1f9ba19"
+#define DAWN_META_BUILD_DATE "2026-11-19"
+#define DAWN_META_KERNEL_VERSION "dawn-c0fe60a-dirty"
 
 #define DAWN_META_DEVELOPER_NAME "Pavithran"
 #define DAWN_META_DEVELOPER_DISPLAY_NAME "Pavithran"
@@ -24,6 +24,7 @@
 #define DAWN_META_PROJECT_NAME "DAWN-OS"
 #define DAWN_META_REPOSITORY_URL "https://github.com/Pavithran26/DAWN-OS"
 #define DAWN_META_ISSUES_URL "https://github.com/Pavithran26/DAWN-OS/issues"
+#define DAWN_META_LICENSE "The Unlicense"
 
 #define DAWN_META_SUPPORT_WEBSITE "https://pavithran26.net"
 #define DAWN_META_BUG_REPORT_URL "https://github.com/Pavithran26/DAWN-OS/issues"
@@ -37,7 +38,7 @@
 #define DAWN_META_COPYRIGHT_NOTICE "Copyright (c) Pavithran. See repository license for terms."
 
 #define DAWN_META_HAS_PROJECT_DOC_URL 0
-#define DAWN_META_HAS_LICENSE 0
+#define DAWN_META_HAS_LICENSE 1
 #define DAWN_META_HAS_SUPPORT_DOC_URL 0
 #define DAWN_META_HAS_COMMUNITY_URL 0
 #define DAWN_META_HAS_SUPPORT_EMAIL 0

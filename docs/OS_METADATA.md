@@ -78,8 +78,8 @@ Make target: `make metadata`. The header is also regenerated automatically when
 
 Current release value is `1.0.0`, matching the existing `uname` and shell version
 strings. `channel` remains `development` because no release channel is configured
-in the repository. The repository uses the Unlicense with no copyright year; the
-`license` and `copyright.year` fields remain `null` deliberately.
+in the repository. The repository uses The Unlicense (`LICENSE`); the `license` field
+is set to `"The Unlicense"`. `copyright.year` remains `null` deliberately.
 
 ## 5. Updating identity
 
@@ -106,24 +106,32 @@ the footer stay consistent.
 `include/system_info.h`:
 
 - `dawn_system_info_refresh()` — CPU model (CPUID 0x80000002–4), physical/free
-  memory, LAPIC ticks/Hz and uptime, boot mode, storage inventory and filesystem
-  summary from real kernel APIs.
+  memory, LAPIC ticks/Hz and uptime, firmware boot mode (detected via Limine EFI
+  system table request: "UEFI (Limine)" vs "BIOS (Limine)"), storage inventory
+  and filesystem summary from real kernel APIs.
 - `dawn_decimal_string()`, `dawn_human_bytes()` — formatting helpers.
 
-Values that cannot be detected (currently boot mode) are reported as
-`Not available`. Nothing is fabricated.
+Values that cannot be detected are reported as `Not available`. Nothing is fabricated.
 
 ## 7. Desktop and Settings integration
 
 Settings tab order: Display, Input, Audio, Network, Time, Appearance, About,
 Credits, Help, Sys Info. The compact 28 px tab stride keeps all ten tabs inside
-the 348 px visible client area. Link rectangles are recorded during render and
-hit-tested on click; only validated URLs become links.
+the 348 px visible client area. Window client area clicks are routed via
+`win->on_click` to `settings_window_handle_click()`, making tabs, buttons, and
+links responsive. Link rectangles are recorded during render and hit-tested on
+click; only validated URLs become links.
 
-Help & Support has three pages (Getting Started, Install & Boot, Reference) with
-working Prev/Next controls. Unfinished capabilities are labelled "Coming Soon".
-The taskbar footer underlines the developer domain and routes clicks through
-`desktop_open_url()`.
+Help & Support is organized into four navigable categories:
+1. Getting Started (Desktop, Start Menu, Terminal, Files, Settings, website, repo)
+2. Installation & BIOS/UEFI Troubleshooting (Limine dual boot, storage controllers, black screen / APIC freeze remediation, rescue shell)
+3. Subsystems & Applications Help (File Explorer, Terminal Ring 3 execution, Task Manager, Storage Manager, audio chime; unimplemented items marked "Coming Soon")
+4. FAQ & Known Issues (Independent custom OS architecture confirmation, VFS filesystems, known limitations marked "Coming Soon", GitHub issue tracker links)
+
+The application launcher and desktop icons provide direct entry points:
+- Desktop icons: "This PC" (opens System Info), "Files", "Terminal", "Task Mgr", "Settings", "About OS", and "Help".
+- Start Menu items: Terminal, File Explorer, Task Manager, Settings, Help & Support, About DAWN-OS, and Shut Down.
+- Taskbar footer: underlines developer domain `pavithran26.net` and routes clicks through `desktop_open_url()`.
 
 **Known limitation:** this build has no system browser and no production
 input/render loop for the desktop; `desktop_render()` is currently exercised by

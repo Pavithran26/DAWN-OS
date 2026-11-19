@@ -175,6 +175,11 @@ bool dawn_metadata_initialize(void) {
     view.project_name = DAWN_META_PROJECT_NAME;
     view.repository_url = DAWN_META_REPOSITORY_URL;
     view.issues_url = DAWN_META_ISSUES_URL;
+#if DAWN_META_HAS_LICENSE
+    view.license_name = DAWN_META_LICENSE;
+#else
+    view.license_name = NULL;
+#endif
 #if DAWN_META_HAS_PROJECT_DOC_URL
     view.documentation_url = DAWN_META_PROJECT_DOC_URL;
 #else
@@ -247,13 +252,14 @@ bool dawn_metadata_is_valid(void) {
     return dawn_metadata_initialize();
 }
 
-#ifdef DAWN_KERNEL_TEST
 bool os_metadata_self_test(void) {
     const struct dawn_metadata_view *meta = NULL;
 
     if (!dawn_metadata_initialize()) return false;
     meta = dawn_metadata_get();
     if (meta == NULL) return false;
+
+    if (meta->license_name == NULL || local_str_len(meta->license_name) == 0U) return false;
 
     if (!local_semver_valid("0.1.0")) return false;
     if (local_semver_valid("0.1")) return false;
@@ -295,4 +301,3 @@ bool os_metadata_self_test(void) {
 
     return true;
 }
-#endif

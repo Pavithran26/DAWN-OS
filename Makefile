@@ -174,7 +174,7 @@ build/advanced.o: kernel/advanced.c include/advanced.h include/vfs.h include/phy
 build/os_metadata.o: kernel/os_metadata.c include/os_metadata.h include/dawn_metadata_generated.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/system_info.o: kernel/system_info.c include/system_info.h include/os_metadata.h include/apic.h include/block_dev.h include/physical_memory.h include/storage_manager.h | build
+build/system_info.o: kernel/system_info.c include/system_info.h include/os_metadata.h include/apic.h include/block_dev.h include/physical_memory.h include/storage_manager.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/page_table.o: kernel/page_table.c include/page_table.h include/physical_memory.h include/limine_requests.h | build
@@ -324,7 +324,7 @@ build/advanced-test.o: kernel/advanced.c include/advanced.h include/vfs.h includ
 build/os-metadata-test.o: kernel/os_metadata.c include/os_metadata.h include/dawn_metadata_generated.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/system-info-test.o: kernel/system_info.c include/system_info.h include/os_metadata.h include/apic.h include/block_dev.h include/physical_memory.h include/storage_manager.h | build
+build/system-info-test.o: kernel/system_info.c include/system_info.h include/os_metadata.h include/apic.h include/block_dev.h include/physical_memory.h include/storage_manager.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o linker.ld

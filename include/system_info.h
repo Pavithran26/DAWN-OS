@@ -30,8 +30,6 @@ bool dawn_system_info_refresh(struct dawn_system_info *out);
 size_t dawn_decimal_string(uint64_t value, char *dst, size_t capacity);
 size_t dawn_human_bytes(uint64_t bytes, char *dst, size_t capacity);
 
-#ifdef DAWN_KERNEL_TEST
 bool system_info_self_test(void);
-#endif
 
 #endif /* DAWN_SYSTEM_INFO_H */
