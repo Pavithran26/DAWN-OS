@@ -495,38 +495,40 @@ void settings_window_render(void) {
         case TAB_ABOUT: {
             const struct dawn_metadata_view *meta = dawn_metadata_get();
             char line[80];
-            gfx_draw_icon(&surf, cx, cy, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
-            gfx_draw_string(&surf, cx + 24U, cy, "About DAWN-OS", GFX_COLOR_EMERALD_NEON);
+            uint32_t ay = cy - 8U;
+            gfx_draw_icon(&surf, cx, ay, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+            gfx_draw_string(&surf, cx + 24U, ay, "About DAWN-OS", GFX_COLOR_EMERALD_NEON);
             if (meta == NULL) {
-                gfx_draw_string(&surf, cx, cy + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, ay + 30, "Metadata unavailable", GFX_COLOR_TEXT_PRIMARY);
                 break;
             }
             settings_format_labelled(line, sizeof(line), "OS: ", meta->os_display_name);
-            gfx_draw_string(&surf, cx, cy + 22, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, ay + 20, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Version: ", meta->version);
-            gfx_draw_string(&surf, cx, cy + 42, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, ay + 38, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Channel: ", meta->channel);
-            gfx_draw_string(&surf, cx, cy + 62, line, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, ay + 56, line, GFX_COLOR_TEXT_MUTED);
             settings_format_labelled(line, sizeof(line), "Developer: ", meta->developer_display_name);
-            gfx_draw_string(&surf, cx, cy + 82, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, ay + 74, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Project Owner: ", meta->developer_username);
-            gfx_draw_string(&surf, cx, cy + 102, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, ay + 92, line, GFX_COLOR_TEXT_PRIMARY);
             settings_format_labelled(line, sizeof(line), "Role: ", meta->developer_role);
-            gfx_draw_string(&surf, cx, cy + 122, line, GFX_COLOR_TEXT_MUTED);
-            settings_add_link(&surf, cx, cy + 144, "Official Website: https://pavithran26.net", meta->developer_website);
-            settings_add_link(&surf, cx, cy + 166, "GitHub Profile: https://github.com/Pavithran26", meta->developer_github);
-            settings_add_link(&surf, cx, cy + 188, "Repository: https://github.com/Pavithran26/DAWN-OS", meta->repository_url);
+            gfx_draw_string(&surf, cx, ay + 110, line, GFX_COLOR_TEXT_MUTED);
+            settings_add_link(&surf, cx, ay + 130, "Official Website: https://pavithran26.net", meta->developer_website);
+            settings_add_link(&surf, cx, ay + 150, "GitHub Profile: https://github.com/Pavithran26", meta->developer_github);
+            settings_add_link(&surf, cx, ay + 170, "Repository: https://github.com/Pavithran26/DAWN-OS", meta->repository_url);
             settings_format_labelled(line, sizeof(line), "Kernel: ", meta->kernel_version);
-            settings_draw_limited(&surf, cx, cy + 210, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_draw_limited(&surf, cx, ay + 192, line, 48U, GFX_COLOR_TEXT_MUTED);
             settings_format_labelled(line, sizeof(line), "Architecture: ", meta->architecture);
-            gfx_draw_string(&surf, cx, cy + 230, line, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, ay + 210, line, GFX_COLOR_TEXT_MUTED);
             settings_format_labelled(line, sizeof(line), "Build: ", meta->build_id);
-            settings_draw_limited(&surf, cx, cy + 250, line, 50U, GFX_COLOR_TEXT_MUTED);
+            settings_draw_limited(&surf, cx, ay + 228, line, 48U, GFX_COLOR_TEXT_MUTED);
             settings_format_labelled(line, sizeof(line), "Date: ", meta->build_date);
-            gfx_draw_string(&surf, cx, cy + 270, line, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, ay + 246, line, GFX_COLOR_TEXT_MUTED);
             settings_format_labelled(line, sizeof(line), "License: ", meta->license_name);
-            gfx_draw_string(&surf, cx, cy + 292, line, GFX_COLOR_TEXT_PRIMARY);
-            settings_draw_limited(&surf, cx, cy + 314, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, ay + 266, line, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, ay + 286, "Copyright (c) Pavithran.", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, ay + 304, "See repository license for terms.", GFX_COLOR_TEXT_MUTED);
             break;
         }
 
@@ -546,12 +548,12 @@ void settings_window_render(void) {
             settings_add_link(&surf, cx, cy + 100, "Official Website: https://pavithran26.net", meta->developer_website);
             settings_add_link(&surf, cx, cy + 124, "GitHub Profile: https://github.com/Pavithran26", meta->developer_github);
             settings_add_link(&surf, cx, cy + 148, "Repository: https://github.com/Pavithran26/DAWN-OS", meta->repository_url);
-            settings_add_link(&surf, cx, cy + 172, "Issue Tracker: https://github.com/Pavithran26/DAWN-OS/issues", meta->issues_url);
+            settings_add_link(&surf, cx, cy + 172, "Issue Tracker: GitHub Issues", meta->issues_url);
             gfx_draw_string(&surf, cx, cy + 204, "Taskbar Footer:", GFX_COLOR_TEXT_MUTED);
-            settings_draw_limited(&surf, cx, cy + 224, meta->footer_text, 50U, GFX_COLOR_TEXT_SECONDARY);
+            settings_draw_limited(&surf, cx, cy + 224, meta->footer_text, 48U, GFX_COLOR_TEXT_SECONDARY);
             settings_format_labelled(line, sizeof(line), "License: ", meta->license_name);
             gfx_draw_string(&surf, cx, cy + 248, line, GFX_COLOR_TEXT_MUTED);
-            settings_draw_limited(&surf, cx, cy + 270, meta->copyright_notice, 50U, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx, cy + 270, "Copyright (c) Pavithran. See license terms.", GFX_COLOR_TEXT_MUTED);
             break;
         }
 
@@ -579,7 +581,7 @@ void settings_window_render(void) {
                 gfx_draw_string(&surf, cx, cy + 94, "Boot Freeze: Verify APIC & IOAPIC routing", GFX_COLOR_TEXT_MUTED);
                 gfx_draw_string(&surf, cx, cy + 116, "Recovery Shell: Boot with safe-mode flag", GFX_COLOR_TEXT_MUTED);
                 settings_add_link(&surf, cx, cy + 144, "Bug Reports: GitHub Issues", meta->bug_report_url);
-                settings_add_link(&surf, cx, cy + 168, "Documentation: pavithran26.net", meta->support_website);
+                settings_add_link(&surf, cx, cy + 168, "Documentation: pavithran26.net", meta->documentation_url ? meta->documentation_url : meta->support_website);
             } else if (help_page == 2U) {
                 gfx_draw_string(&surf, cx, cy, "Help - 3. Applications & Subsystems", GFX_COLOR_EMERALD_NEON);
                 gfx_draw_string(&surf, cx, cy + 28, "File Explorer: Copy, move, create dir, FAT32", GFX_COLOR_TEXT_PRIMARY);
@@ -598,8 +600,8 @@ void settings_window_render(void) {
                 gfx_draw_string(&surf, cx, cy + 90, "A: VFS with FAT32 read/write & ISO9660.", GFX_COLOR_TEXT_MUTED);
                 gfx_draw_string(&surf, cx, cy + 112, "Known Issue: DHCP client: Coming Soon", GFX_COLOR_TEXT_MUTED);
                 gfx_draw_string(&surf, cx, cy + 132, "Known Issue: Web browser: Coming Soon", GFX_COLOR_TEXT_MUTED);
-                settings_add_link(&surf, cx, cy + 156, "Bug Reports: https://github.com/Pavithran26/DAWN-OS/issues", meta->bug_report_url);
-                settings_add_link(&surf, cx, cy + 180, "Feature Requests: https://github.com/Pavithran26/DAWN-OS/issues", meta->feature_request_url);
+                settings_add_link(&surf, cx, cy + 156, "Bug Reports: GitHub Issues", meta->bug_report_url);
+                settings_add_link(&surf, cx, cy + 180, "Feature Requests: GitHub Issues", meta->feature_request_url);
             }
             /* Prev / Next buttons and category indicator */
             gfx_draw_rect(&surf, cx, cy + 215, 70U, 24U, GFX_COLOR_GLASS_BORDER);
@@ -699,8 +701,8 @@ void settings_window_handle_click(int32_t local_x, int32_t local_y) {
             audio_play_tone(880, 50); /* High chime */
         }
     } else if (current_tab == TAB_HELP_SUPPORT) {
-        /* Help navigation buttons are at content y (20) + 215 = 235 (allow 215..260) */
-        if (local_y >= 215 && local_y <= 260) {
+        /* Help navigation buttons are at content cy (20) + 215 = 235..259 */
+        if (local_y >= 235 && local_y <= 259) {
             if (local_x >= 160 && local_x <= 230) {
                 help_page = (help_page == 0U) ? 3U : (help_page - 1U);
                 settings_window_render();
@@ -715,6 +717,11 @@ void settings_window_handle_click(int32_t local_x, int32_t local_y) {
     }
 }
 
+static void settings_on_window_close(struct window *win) {
+    (void)win;
+    settings_window_id = -1;
+}
+
 int settings_window_get_id(void) {
     return settings_window_id;
 }
@@ -722,9 +729,12 @@ int settings_window_get_id(void) {
 bool settings_window_open_tab(enum settings_tab tab) {
     if (tab >= TAB_COUNT) return false;
     if (settings_window_id >= 0) {
-        wm_focus_window((uint32_t)settings_window_id);
-        settings_window_switch_tab(tab);
-        return true;
+        if (wm_get_window_by_id((uint32_t)settings_window_id) != NULL) {
+            wm_focus_window((uint32_t)settings_window_id);
+            settings_window_switch_tab(tab);
+            return true;
+        }
+        settings_window_id = -1;
     }
     if (!settings_window_open()) return false;
     settings_window_switch_tab(tab);
@@ -733,8 +743,11 @@ bool settings_window_open_tab(enum settings_tab tab) {
 
 bool settings_window_open(void) {
     if (settings_window_id >= 0) {
-        wm_focus_window((uint32_t)settings_window_id);
-        return true;
+        if (wm_get_window_by_id((uint32_t)settings_window_id) != NULL) {
+            wm_focus_window((uint32_t)settings_window_id);
+            return true;
+        }
+        settings_window_id = -1;
     }
 
     struct window *win = wm_create_window("Settings", 120, 80, 560, 380, WM_FLAG_MOVABLE | WM_FLAG_TITLEBAR);
@@ -743,6 +756,7 @@ bool settings_window_open(void) {
     win->client_buffer = settings_win_buffer;
     win->client_pitch = 560 * sizeof(uint32_t);
     win->on_click = settings_window_handle_click;
+    win->on_close = settings_on_window_close;
     settings_window_id = (int)win->id;
 
     current_tab = TAB_DISPLAY;

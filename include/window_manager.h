@@ -44,6 +44,7 @@ struct window {
     uint32_t *client_buffer;
     uint32_t client_pitch;
     void (*on_click)(int32_t local_x, int32_t local_y);
+    void (*on_close)(struct window *win);
     bool active;
 };
 
@@ -57,6 +58,7 @@ int wm_minimize_window(uint32_t id);
 int wm_maximize_window(uint32_t id);
 
 struct window *wm_get_window_by_id(uint32_t id);
+struct window *wm_find_window_by_title(const char *title);
 struct window *wm_get_top_window(void);
 struct window *wm_get_window_at_z(size_t index);
 struct window *wm_find_window_at(int32_t x, int32_t y);

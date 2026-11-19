@@ -29,7 +29,7 @@ KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o b
 
 metadata: include/dawn_metadata_generated.h
 
-include/dawn_metadata_generated.h: config/os_metadata.json tools/generate_metadata.py
+include/dawn_metadata_generated.h: config/os_metadata.json tools/generate_metadata.py $(wildcard .git/HEAD .git/index)
 	python3 tools/generate_metadata.py --input config/os_metadata.json --output include/dawn_metadata_generated.h
 
 all: kernel
@@ -129,10 +129,10 @@ build/gfx.o: kernel/gfx.c include/gfx.h include/limine_requests.h | build
 build/window_manager.o: kernel/window_manager.c include/window_manager.h include/gfx.h include/input.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/desktop.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h | build
+build/desktop.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h include/settings.h include/power.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/shell.o: kernel/shell.c include/shell.h include/vfs.h include/process.h include/storage_manager.h include/physical_memory.h include/file_explorer.h | build
+build/shell.o: kernel/shell.c include/shell.h include/vfs.h include/process.h include/storage_manager.h include/physical_memory.h include/file_explorer.h include/os_metadata.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/terminal.o: kernel/terminal.c include/terminal.h include/shell.h include/gfx.h include/window_manager.h include/input.h | build
@@ -279,10 +279,10 @@ build/gfx-test.o: kernel/gfx.c include/gfx.h include/limine_requests.h | build
 build/window-manager-test.o: kernel/window_manager.c include/window_manager.h include/gfx.h include/input.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/desktop-test.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h | build
+build/desktop-test.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h include/settings.h include/power.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/shell-test.o: kernel/shell.c include/shell.h include/vfs.h include/process.h include/storage_manager.h include/physical_memory.h include/file_explorer.h | build
+build/shell-test.o: kernel/shell.c include/shell.h include/vfs.h include/process.h include/storage_manager.h include/physical_memory.h include/file_explorer.h include/os_metadata.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/terminal-test.o: kernel/terminal.c include/terminal.h include/shell.h include/gfx.h include/window_manager.h include/input.h | build

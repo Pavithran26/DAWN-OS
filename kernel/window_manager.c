@@ -57,6 +57,7 @@ struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_
             win->visible = true;
             win->active = true;
             win->on_click = NULL;
+            win->on_close = NULL;
 
             z_order[z_count++] = win;
             wm_focus_window(win->id);
@@ -69,6 +70,9 @@ struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_
 int wm_destroy_window(uint32_t id) {
     for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
         if (window_pool[i].active && window_pool[i].id == id) {
+            if (window_pool[i].on_close != NULL) {
+                window_pool[i].on_close(&window_pool[i]);
+            }
             window_pool[i].active = false;
 
             /* Remove from Z-order */
@@ -181,6 +185,16 @@ struct window *wm_get_window_by_id(uint32_t id) {
     return NULL;
 }
 
+struct window *wm_find_window_by_title(const char *title) {
+    if (!wm_initialized || title == NULL) return NULL;
+    for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
+        if (window_pool[i].active && str_equal(window_pool[i].title, title)) {
+            return &window_pool[i];
+        }
+    }
+    return NULL;
+}
+
 struct window *wm_get_top_window(void) {
     if (z_count == 0) return NULL;
     return z_order[z_count - 1];
@@ -211,12 +225,21 @@ size_t wm_get_window_count(void) {
 void wm_handle_mouse(const struct mouse_event *mevt) {
     if (mevt == NULL || z_count == 0) return;
 
+    static bool prev_left_button = false;
+    bool is_press_edge = mevt->left_button && !prev_left_button;
+    prev_left_button = mevt->left_button;
+
     if (mevt->left_button) {
         /* Check if dragging already */
         struct window *top = wm_get_top_window();
         if (top != NULL && top->dragging) {
             top->x = mevt->x - top->drag_dx;
             top->y = mevt->y - top->drag_dy;
+            return;
+        }
+
+        if (!is_press_edge) {
+            /* Held-down mouse button: do not repeat clicks or window actions */
             return;
         }
 

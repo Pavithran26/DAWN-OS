@@ -259,7 +259,11 @@ bool os_metadata_self_test(void) {
     meta = dawn_metadata_get();
     if (meta == NULL) return false;
 
+#if DAWN_META_HAS_LICENSE
     if (meta->license_name == NULL || local_str_len(meta->license_name) == 0U) return false;
+#else
+    if (meta->license_name != NULL) return false;
+#endif
 
     if (!local_semver_valid("0.1.0")) return false;
     if (local_semver_valid("0.1")) return false;

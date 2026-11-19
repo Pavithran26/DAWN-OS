@@ -2,6 +2,7 @@
 #include "desktop.h"
 #include "os_metadata.h"
 #include "settings.h"
+#include "power.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -31,7 +32,13 @@ static size_t str_length(const char *text) {
 }
 
 static uint32_t footer_x(uint32_t screen_width) {
-    return (screen_width > 500U) ? (screen_width - 460U) : 56U;
+    const struct dawn_metadata_view *meta = dawn_metadata_get();
+    if (meta == NULL) return 56U;
+    uint32_t total_w = (uint32_t)(str_length(meta->footer_text) * 8U);
+    if (screen_width > total_w + 200U) {
+        return (screen_width / 2U) - (total_w / 2U);
+    }
+    return 56U;
 }
 
 bool desktop_open_url(const char *url) {
@@ -91,8 +98,11 @@ void desktop_handle_input_event(const struct input_event *event) {
         state.mouse_y = mevt->y;
 
         uint32_t tb_y = state.screen_height - DESKTOP_TASKBAR_HEIGHT;
+        static bool prev_left_button = false;
+        bool is_press_edge = mevt->left_button && !prev_left_button;
+        prev_left_button = mevt->left_button;
 
-        if (mevt->left_button) {
+        if (is_press_edge) {
             /* Check Start Button: x in [8, 44], y in [tb_y + 8, tb_y + 40] */
             if (mevt->x >= 8 && mevt->x <= 44 && mevt->y >= (int32_t)(tb_y + 8)) {
                 desktop_toggle_launcher();
@@ -106,19 +116,37 @@ void desktop_handle_input_event(const struct input_event *event) {
                 if (mevt->x >= lx && mevt->x <= lx + 220 && mevt->y >= ly && mevt->y <= (int32_t)tb_y) {
                     /* Item 1: Terminal (ly + 40 to ly + 68) */
                     if (mevt->y >= ly + 40 && mevt->y < ly + 68) {
-                        wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
+                        struct window *existing = wm_find_window_by_title("Terminal");
+                        if (existing != NULL) {
+                            if (existing->minimized) wm_minimize_window(existing->id);
+                            wm_focus_window(existing->id);
+                        } else {
+                            wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
+                        }
                         state.launcher_open = false;
                         return;
                     }
                     /* Item 2: File Explorer (ly + 70 to ly + 98) */
                     if (mevt->y >= ly + 70 && mevt->y < ly + 98) {
-                        wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
+                        struct window *existing = wm_find_window_by_title("File Explorer");
+                        if (existing != NULL) {
+                            if (existing->minimized) wm_minimize_window(existing->id);
+                            wm_focus_window(existing->id);
+                        } else {
+                            wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
+                        }
                         state.launcher_open = false;
                         return;
                     }
                     /* Item 3: Task Manager (ly + 100 to ly + 128) */
                     if (mevt->y >= ly + 100 && mevt->y < ly + 128) {
-                        wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
+                        struct window *existing = wm_find_window_by_title("Task Manager");
+                        if (existing != NULL) {
+                            if (existing->minimized) wm_minimize_window(existing->id);
+                            wm_focus_window(existing->id);
+                        } else {
+                            wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
+                        }
                         state.launcher_open = false;
                         return;
                     }
@@ -144,6 +172,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                     if (mevt->y >= ly + 228 && mevt->y < ly + 280) {
                         desktop_show_notification("Power", "System Shut Down initiated");
                         state.launcher_open = false;
+                        power_shutdown();
                         return;
                     }
                 } else {
@@ -152,26 +181,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                 }
             }
 
-            /* Clickable developer domain in the taskbar footer */
-            {
-                const struct dawn_metadata_view *meta = dawn_metadata_get();
-                if (meta != NULL && mevt->y >= (int32_t)(tb_y + 30U) &&
-                    mevt->y <= (int32_t)(tb_y + 46U)) {
-                    size_t total = str_length(meta->footer_text);
-                    size_t domain = str_length(meta->footer_domain);
-                    if (total > domain) {
-                        uint32_t domain_x = footer_x(state.screen_width) +
-                                            (uint32_t)((total - domain) * 8U);
-                        if (mevt->x >= (int32_t)domain_x &&
-                            mevt->x <= (int32_t)(domain_x + (domain * 8U))) {
-                            (void)desktop_open_url(meta->developer_website);
-                            return;
-                        }
-                    }
-                }
-            }
-
-            /* Check Taskbar Window Tabs */
+            /* Check Taskbar Window Tabs BEFORE Taskbar footer */
             if (mevt->y >= (int32_t)tb_y) {
                 uint32_t tab_x = 60;
                 size_t wcount = wm_get_window_count();
@@ -189,7 +199,25 @@ void desktop_handle_input_event(const struct input_event *event) {
                     }
                     tab_x += 128;
                 }
-                return;
+            }
+
+            /* Clickable developer domain in the taskbar footer */
+            {
+                const struct dawn_metadata_view *meta = dawn_metadata_get();
+                if (meta != NULL && mevt->y >= (int32_t)(tb_y + 16U) &&
+                    mevt->y <= (int32_t)(tb_y + 32U)) {
+                    size_t total = str_length(meta->footer_text);
+                    size_t domain = str_length(meta->footer_domain);
+                    if (total > domain) {
+                        uint32_t domain_x = footer_x(state.screen_width) +
+                                            (uint32_t)((total - domain) * 8U);
+                        if (mevt->x >= (int32_t)domain_x &&
+                            mevt->x <= (int32_t)(domain_x + (domain * 8U))) {
+                            (void)desktop_open_url(meta->developer_website);
+                            return;
+                        }
+                    }
+                }
             }
 
             /* Check Desktop Icons when click is not captured by a window */
@@ -202,17 +230,35 @@ void desktop_handle_input_event(const struct input_event *event) {
                     }
                     /* Files -> File Explorer */
                     if (mevt->y >= 72 && mevt->y < 124) {
-                        wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
+                        struct window *existing = wm_find_window_by_title("File Explorer");
+                        if (existing != NULL) {
+                            if (existing->minimized) wm_minimize_window(existing->id);
+                            wm_focus_window(existing->id);
+                        } else {
+                            wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
+                        }
                         return;
                     }
                     /* Terminal */
                     if (mevt->y >= 128 && mevt->y < 180) {
-                        wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
+                        struct window *existing = wm_find_window_by_title("Terminal");
+                        if (existing != NULL) {
+                            if (existing->minimized) wm_minimize_window(existing->id);
+                            wm_focus_window(existing->id);
+                        } else {
+                            wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
+                        }
                         return;
                     }
                     /* Task Mgr */
                     if (mevt->y >= 184 && mevt->y < 236) {
-                        wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
+                        struct window *existing = wm_find_window_by_title("Task Manager");
+                        if (existing != NULL) {
+                            if (existing->minimized) wm_minimize_window(existing->id);
+                            wm_focus_window(existing->id);
+                        } else {
+                            wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
+                        }
                         return;
                     }
                     /* Settings */
@@ -302,7 +348,7 @@ void desktop_render(struct gfx_surface *surf) {
         const struct dawn_metadata_view *meta = dawn_metadata_get();
         if (meta != NULL) {
             uint32_t fx = footer_x(surf->width);
-            uint32_t fy = tb_y + 30U;
+            uint32_t fy = tb_y + 16U;
             size_t total = str_length(meta->footer_text);
             size_t domain = str_length(meta->footer_domain);
             gfx_draw_string(surf, fx, fy, meta->footer_text, GFX_COLOR_TEXT_MUTED);
@@ -355,6 +401,13 @@ void desktop_render(struct gfx_surface *surf) {
     uint32_t notif_y = 16;
     for (size_t i = 0; i < DESKTOP_MAX_NOTIFICATIONS; i++) {
         if (state.notifications[i].active) {
+            if (state.notifications[i].ticks_remaining > 0) {
+                state.notifications[i].ticks_remaining--;
+                if (state.notifications[i].ticks_remaining == 0) {
+                    state.notifications[i].active = false;
+                    continue;
+                }
+            }
             uint32_t notif_x = surf->width - 260;
             gfx_draw_glass_panel(surf, notif_x, notif_y, 244, 52, GFX_COLOR_GLASS_PANEL);
             gfx_draw_icon(surf, notif_x + 8, notif_y + 10, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);

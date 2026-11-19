@@ -1006,18 +1006,24 @@ void kernel_main(void) {
                 cpu_halt_forever();
             }
             serial_write("DAWN-TEST: PASS: Local APIC one-shot timer interrupt\n");
-            if (!apic_local_timer_calibrate(100U)) {
+#endif
+            if (apic_local_timer_calibrate(100U)) {
+                serial_write("DAWN-OS: Local APIC timer calibrated for ");
+                serial_write_u64(apic_local_timer_calibrated_hz());
+                serial_write(" Hz; initial count ");
+                serial_write_u64(apic_local_timer_calibrated_period_count());
+                serial_write("\n");
+#ifdef DAWN_KERNEL_TEST
+                serial_write("DAWN-TEST: PASS: Local APIC timer calibration\n");
+#endif
+            } else {
+                serial_write("DAWN-OS: WARNING: Local APIC timer calibration failed\n");
+#ifdef DAWN_KERNEL_TEST
                 serial_write("DAWN-TEST: FAIL: Local APIC timer calibration against PIT channel 2\n");
                 qemu_debug_exit(QEMU_TEST_FAIL);
                 cpu_halt_forever();
-            }
-            serial_write("DAWN-OS: Local APIC timer calibrated for ");
-            serial_write_u64(apic_local_timer_calibrated_hz());
-            serial_write(" Hz; initial count ");
-            serial_write_u64(apic_local_timer_calibrated_period_count());
-            serial_write("\n");
-            serial_write("DAWN-TEST: PASS: Local APIC timer calibration\n");
 #endif
+            }
         }
     }
 
@@ -1373,6 +1379,26 @@ void kernel_main(void) {
     }
 
     serial_write("DAWN-OS: Phase C process management, file descriptors, wait/exec and init process complete\n");
+
+    /* Start production periodic LAPIC timer for preemption, uptime, and system clock */
+    (void)apic_local_timer_start_calibrated_periodic();
+
+    /* Initialize Desktop and Compositor environment */
+    (void)desktop_initialize();
+    struct gfx_surface *fb = gfx_get_framebuffer();
+    serial_write("DAWN-OS: Entering production desktop event and scheduler loop\n");
+
+    while (1) {
+        input_poll_hardware();
+        struct input_event ev;
+        while (input_poll_event(&ev)) {
+            desktop_handle_input_event(&ev);
+        }
+        if (fb != NULL) {
+            desktop_render(fb);
+        }
+        scheduler_run_until_idle();
+    }
 #endif
     cpu_halt_forever();
 }

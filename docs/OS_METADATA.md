@@ -133,11 +133,18 @@ The application launcher and desktop icons provide direct entry points:
 - Start Menu items: Terminal, File Explorer, Task Manager, Settings, Help & Support, About DAWN-OS, and Shut Down.
 - Taskbar footer: underlines developer domain `pavithran26.net` and routes clicks through `desktop_open_url()`.
 
-**Known limitation:** this build has no system browser and no production
-input/render loop for the desktop; `desktop_render()` is currently exercised by
-the test harness. A click on a link validates the URL and shows a notification
-with the target rather than claiming a page was opened. Wiring a browser and a
-production event loop remains future work.
+**Production loop integration:**
+The production kernel path in `kernel/main.c` executes an active event loop:
+1. Calibrates and starts the LAPIC periodic timer unconditionally (`apic_local_timer_calibrate` and `apic_local_timer_start_calibrated_periodic`).
+2. Polls hardware input devices via `input_poll_hardware()`.
+3. Processes all queued events through `desktop_handle_input_event()` with press-edge detection (`mevt->left_button && !prev_left_button`).
+4. Composites the desktop and window tree to the hardware framebuffer using `desktop_render(fb)`.
+5. Advances kernel threads and userspace tasks via `scheduler_run_until_idle()`.
+6. Decrements notification TTL (`ticks_remaining`) on each render tick, clearing expired toasts.
+7. Routes Start Menu "Shut Down" directly to `power_shutdown()`.
+8. Enforces window single-instance focus (`wm_find_window_by_title`) and cleans up window lifecycle references via `win->on_close`.
+
+**Known limitation:** this build has no system web browser yet. A click on a web link validates the URL and displays a notification with the target address rather than claiming a page was opened. Wiring an embedded web browser remains future work.
 
 ## 8. Source-level validation (not executed in this phase)
 

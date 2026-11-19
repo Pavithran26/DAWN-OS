@@ -22,6 +22,7 @@ size_t dawn_decimal_string(uint64_t value, char *dst, size_t capacity) {
     size_t index = 0U;
     if (dst == NULL || capacity == 0U) return 0U;
     if (value == 0ULL) {
+        if (capacity < 2U) return 0U;
         dst[0] = '0';
         dst[1] = '\0';
         return 1U;

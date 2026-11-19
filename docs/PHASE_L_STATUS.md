@@ -58,6 +58,7 @@ Phase L implements the central System Settings framework, hardware profile confi
 - Added `tools/generate_metadata.py` (schema/URL/semver validation and dynamic build metadata) and generated `include/dawn_metadata_generated.h`.
 - Added `include/os_metadata.h` / `kernel/os_metadata.c`: read-only runtime view, URL validation, optional-field handling and safe text escaping.
 - Added `include/system_info.h` / `kernel/system_info.c`: CPUID model, memory, LAPIC uptime, storage and filesystem data from real kernel APIs; undetectable values show "Not available".
-- Added a clickable developer footer to the desktop and a validated `desktop_open_url()` link handler.
+- Added a clickable developer footer to the desktop, centered to avoid collision with the tray, and a validated `desktop_open_url()` link handler.
+- Integrated the continuous production compositor/event loop (`input_poll_hardware`, `input_poll_event`, `desktop_handle_input_event`, `desktop_render`), unconditional LAPIC calibration, single-instance window focusing, and notification TTL expiration.
 - Registered `os_metadata_self_test()` and `system_info_self_test()` in the kernel test harness (source-level only; not executed during implementation).
 - See `docs/OS_METADATA.md` for schema, update instructions and known limitations.

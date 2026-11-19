@@ -4,6 +4,7 @@
 #include "storage_manager.h"
 #include "physical_memory.h"
 #include "file_explorer.h"
+#include "os_metadata.h"
 
 static inline void str_copy(char *dest, const char *src, size_t max_len) {
     size_t i = 0;
@@ -328,7 +329,19 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
 
     /* Built-in: uname */
     if (str_equal(cmd, "uname")) {
-        shell_output_write(ctx, "DAWN-OS 1.0.0-release x86_64 Bare-Metal (Emerald Green Edition)\n");
+        const struct dawn_metadata_view *meta = dawn_metadata_get();
+        if (meta != NULL) {
+            shell_output_write(ctx, meta->os_display_name);
+            shell_output_write(ctx, " ");
+            shell_output_write(ctx, meta->version);
+            shell_output_write(ctx, " ");
+            shell_output_write(ctx, meta->architecture);
+            shell_output_write(ctx, " Bare-Metal (");
+            shell_output_write(ctx, meta->design_language);
+            shell_output_write(ctx, ")\n");
+        } else {
+            shell_output_write(ctx, "DAWN-OS 1.0.0 x86_64 Bare-Metal\n");
+        }
         ctx->last_exit_code = 0;
         return 0;
     }

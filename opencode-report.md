@@ -274,3 +274,147 @@ Caveat: several of these are unreachable until the P0 build blockers are fixed, 
 - This report reviews the diff from `1629a1f3e` to `951912e`. It does not re-review earlier Phase A/B code except where the new code calls into it.
 - No files were modified and no commits were created while producing this report.
 - Severity reflects real-world impact: P0 means the tree cannot produce a bootable image, P1 means boot failure or memory corruption/security exposure on a realistic input, P2 means incorrect behavior under specific inputs, P3 means hardening/robustness gaps.
+
+---
+
+## 9. Addendum — review of `dee5c5a..7cdf945` (OS metadata, About/Credits/Help/System Info, desktop footer, click dispatch)
+
+- **Reviewed range:** `dee5c5a` (baseline before the metadata feature) through `HEAD` = `7cdf945` — 2 commits, 20 files, ~1.9k insertions.
+- **Method:** static review of `git diff dee5c5a..HEAD`, the tracked generated header, and `config/os_metadata.json`. No compilation, QEMU boot, or test run was performed; nothing below is execution-verified.
+- Sections 1–8 above review `1629a1f3e..951912e` and are unchanged. This addendum covers only the later feature range.
+
+### 9.1 P1 — High severity
+
+**1. The new desktop UI is unreachable in production.**
+`desktop_render()` and `desktop_handle_input_event()` are called only from `desktop_self_test()` (`kernel/desktop.c:396,404,414,427`). `wm_handle_mouse()` is reached only through `desktop_handle_input_event()`, and `input_poll_hardware()` (`kernel/input.c:59`) has no callers. `main()` initializes everything, spawns init, and halts (`kernel/main.c:1371-1377`).
+
+**Trigger:** boot the production image — no footer, launcher entry, desktop icon, or new Settings tab is rendered or clickable, so the feature is not actually integrated. `docs/OS_METADATA.md:137` acknowledges the missing loop, but `README.md:70-71,170` still claims desktop integration.
+
+**Fix:** add a production loop (poll input → `desktop_handle_input_event()` → `desktop_render()` → present), or equivalent IRQ-driven input plus a render tick. Until then, stop claiming the feature is integrated.
+
+**2. `LIMINE_EFI_SYSTEM_TABLE_REQUEST_ID` is wrong, so UEFI is reported as BIOS.**
+`include/limine_requests.h:47-48` uses `0x5ceba5163ea08d27, 0xb64052b7107e39da`; the published `limine-protocol` header uses `0x5ceba5163eaaf6d6, 0x0a6981610cf65fcc`. Limine matches requests by exact 128-bit ID, so this request is ignored and `response` stays `NULL`.
+
+**Trigger:** boot under UEFI — `kernel/system_info.c:117-125` falls back to `"BIOS (Limine)"`. `system_info_self_test()` only checks `boot_mode != NULL`, so `qemu-uefi-test` cannot catch it.
+
+**Fix:** correct the ID and assert `boot_mode == "UEFI (Limine)"` in the UEFI test path.
+
+**3. The committed build metadata is stale.**
+`include/dawn_metadata_generated.h:13-15` contains build `c0fe60a120b4...` and `dawn-c0fe60a-dirty`, while HEAD is `7cdf94567f2c...`. The header is tracked, and the `Makefile:32-33` rule depends only on `config/os_metadata.json` and `tools/generate_metadata.py`, not on Git HEAD. The header is newer than the JSON, so it never regenerates.
+
+**Trigger:** build at HEAD without deleting the header — About and System Info report a false commit and a false `-dirty` suffix.
+
+**Fix:** generate into `build/` as a normal build artifact, depend on `git rev-parse HEAD` / `SOURCE_DATE_EPOCH`, and stop tracking the generated file.
+
+**4. Uptime can never advance in production.**
+LAPIC timer calibration and start/stop are inside `DAWN_KERNEL_TEST` (`kernel/main.c:1009,1040-1047`), and the timer is stopped afterward. No production calibration/start exists, so `apic_local_timer_calibrated_hz()` returns 0 and `kernel/system_info.c:104` pins `uptime_seconds = 0`.
+
+**Trigger:** boot production and open System Info — `Uptime (sec): 0` permanently, despite `README.md:70,171` claiming live LAPIC uptime.
+
+**Fix:** calibrate and start the periodic timer on the production path, or display "Not available" when the frequency is 0.
+
+**5. "Shut Down" does not shut down.**
+`kernel/desktop.c:143-147` shows `"Power" / "System Shut Down initiated"` and returns. `power_shutdown()` exists (`include/power.h:35`, `kernel/power.c:79`) and is never called.
+
+**Trigger:** Start menu → Shut Down — the machine keeps running and the toast stays (notifications never expire; see 9.3-5).
+
+**Fix:** call `power_shutdown()`; if it must remain a stub, remove "initiated" from the message.
+
+### 9.2 P2 — Medium severity
+
+**6. New Terminal / Task Manager icons open blank duplicate windows.**
+`kernel/desktop.c:205,210,215` call `wm_create_window(...)` directly, but `main.c:820,829` already run `terminal_initialize()` and `task_manager_initialize()`, which create and bind their own windows (`kernel/terminal.c:227-234`, `kernel/task_manager.c:243-250`). The icons add empty client areas on top of the real apps; the Files icon has no application window at all.
+
+**Fix:** focus `terminal_get_instance()->win` / `task_manager_get_instance()->win`; implement or drop the Files icon until an explorer window exists.
+
+**7. Settings cannot be reopened after closing it with the titlebar X.**
+The X path calls `wm_destroy_window()` (`kernel/window_manager.c:237-239`) without clearing `settings_window_id`. Both `settings_window_open_tab()` (`kernel/settings.c:724-726`) and `settings_window_open()` (`:735-737`) short-circuit on `settings_window_id >= 0`, focus a dead ID, and return `true`.
+
+**Trigger:** open Settings, click X, then click About OS / Help / This PC — nothing opens for the rest of the boot. `settings_self_test()` closes via `settings_window_close()`, so the X path is never exercised.
+
+**Fix:** verify `wm_get_window_by_id((uint32_t)settings_window_id)` before focusing, or reset the ID from a close callback.
+
+**8. A documented null license fails the metadata self-test.**
+`docs/OS_METADATA.md:31` says `project.license` may be `null`. The generator emits `DAWN_META_HAS_LICENSE 0`, and `kernel/os_metadata.c:178-182` sets `view.license_name = NULL`, but `os_metadata_self_test()` rejects exactly that (`kernel/os_metadata.c:262`).
+
+**Trigger:** set `"license": null`, run `qemu-test` — boot fails on a configuration the docs call valid.
+
+**Fix:** accept a null license and assert the UI renders "Not available".
+
+**9. Help advertises commands and flags that do not exist.**
+`kernel/settings.c:569` lists `sysinfo` (no shell command) and `ps` (listed in `shell.c:186` but has no dispatcher); `:580` says "Boot with safe-mode flag" — no such flag exists; `:586` says "Ring 3 ELF execution & pipes" — no pipe support exists.
+
+**Trigger:** follow the Help instructions — "command not found" or no effect. This is new user-facing content in the changed Help tab.
+
+**Fix:** implement the features or remove the claims.
+
+**10. Attribution and URLs are hardcoded instead of read from metadata.**
+`kernel/settings.c:499` hardcodes "About DAWN-OS"; `:541` hardcodes "Developed and maintained by Pavithran"; `:516-518,546-549,572-573,601-602` embed URLs in visible labels while the clicks use `meta->...`. `meta->credits_line` is built in `kernel/os_metadata.c:230-235` but never used. `:582` labels `support_website` as "Documentation" while `documentation_url` is null.
+
+**Trigger:** change `developer.display_name` or `repository` and rebuild — About updates, but Credits and link labels disagree with the actual destinations.
+
+**Fix:** format labels from `meta` / `credits_line`; use `documentation_url` or omit the Documentation link.
+
+**11. About and Help content is clipped by the client area.**
+The Settings buffer is 560×380, but `wm_composite()` copies only `width-4` × `height-titlebar-4` = 556×348 (`kernel/window_manager.c:313-321`). About's copyright at y 334..349 loses its bottom rows; `settings_draw_limited(..., 50)` truncates the 58-character notice mid-word (`kernel/settings.c:529`); Help page-4 labels from x=160 run to x≈664 and lose roughly 13 characters (`:601-602`).
+
+**Fix:** render at the actual 556×348 client size, wrap or ellipsize long labels, and move the copyright line up.
+
+**12. Taskbar footer overlaps the tray and the window-tab strip, and intercepts clicks.**
+Tray text is drawn at `tb_y+16..31` (`kernel/desktop.c:296-297`); footer text at `tb_y+30..45` (`:305`), so the bottom two rows collide. The footer starts at `width-460` and the domain at `width-172`, while the tray starts at `width-180`, so they overwrite each other horizontally. The footer hit test (`:158-167`) also runs before the window-tab test (`:175`), so a click in the lower part of an overlapping tab opens the URL instead of focusing the tab.
+
+**Fix:** separate the footer and tray vertically; hit-test tabs before the footer.
+
+**13. Help Prev/Next hitbox is 20 px taller than the buttons.**
+Buttons are drawn at y 235..258 (`kernel/settings.c:605-608`), but the handler accepts y 215..260 (`:703`), so clicking empty space above a button changes the page.
+
+**Fix:** use identical geometry for rendering and hit-testing.
+
+**14. Clicks repeat while the left button is held.**
+`wm_handle_mouse()` dispatches `on_click` on every packet where `left_button` is set (`kernel/window_manager.c:214-261`); PS/2 motion packets carry the current button state (`kernel/ps2.c:99-126`). Once a production input loop exists, holding the button and moving re-fires tab switches, URL notifications, and icon actions.
+
+**Fix:** track the previous button state and dispatch on the press edge only.
+
+### 9.3 P3 — Low severity
+
+**15. `dawn_decimal_string()` writes past a 1-byte buffer for zero.**
+`kernel/system_info.c:24-27` writes `dst[0]` and `dst[1]` without checking `capacity >= 2`. Current callers pass 24/32 bytes, but the API contract is broken.
+
+**Fix:** return 0 when `capacity < 2`.
+
+**16. Desktop object dependencies omit `include/settings.h`.**
+`Makefile:132` and `:282` do not list the header, although `kernel/desktop.c` includes it and uses `TAB_*` constants. Changing the enum rebuilds `settings.o` but leaves `desktop.o` with stale values.
+
+**Fix:** add the header to both rules.
+
+**17. Non-ASCII metadata can break the generated header.**
+`tools/generate_metadata.py:248-249` emits non-ASCII code points as `\xNN`. C hex escapes are greedy, so `©2026` becomes `\xa92026` (out of range / `-Werror` failure), and the bytes are Latin-1 rather than UTF-8. The 8×16 font maps anything outside 32..126 to a space anyway.
+
+**Fix:** emit UTF-8 bytes with separated escapes, or reject non-ASCII at generation time.
+
+**18. Documentation overstates metadata adoption.**
+`docs/OS_METADATA.md:77` says the release version is "never hardcoded in the UI", but `uname` still prints `DAWN-OS 1.0.0-release` (`kernel/shell.c:331`, pre-existing). Either route it through `meta->version` or soften the claim.
+
+**19. Notification TTL is never decremented (pre-existing mechanism, new callers).**
+`kernel/desktop.c:78` sets `ticks_remaining = 300`, but nothing decrements it. The new link clicks and the fake shutdown leave permanent toasts; after four notifications, new feedback is dropped.
+
+**Fix:** decrement in the render/tick path and clear expired entries.
+
+### 9.4 Suggested fix order for this range
+
+1. Production input/render loop and press-edge dispatch (9.1-1, 9.2-14).
+2. EFI request ID and build-metadata generation (9.1-2, 9.1-3).
+3. LAPIC timer on the production path (9.1-4).
+4. Shut Down wiring, app-window wiring, and Settings lifecycle (9.1-5, 9.2-6, 9.2-7).
+5. Metadata null handling, Help accuracy, hardcoded labels, and layout/hitbox fixes (9.2-8 … 9.2-13).
+6. Build/regen and generator hardening (9.3-15 … 9.3-19).
+
+### 9.5 Checked and found sound
+
+- `gfx_put_pixel`, `gfx_blend_pixel`, `gfx_draw_char`, and `gfx_draw_line` all bounds-check, so overlong link labels clip visually instead of writing out of bounds.
+- Help page wrap arithmetic (`>3` / `%4`) is correct apart from the hitbox noted in 9.2-13.
+- `desktop_open_url()` validates the URL through `dawn_url_is_valid()` before acting; the URL copy path rejects truncation and invalid input.
+- Settings tab hit-testing matches the drawn tab bounds after the change.
+- `config/os_metadata.json` values (version, URLs, license) are internally consistent with the generated header.
+
+*End of addendum. No files outside this report were modified, and no commits were created.*

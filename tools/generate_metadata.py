@@ -234,21 +234,21 @@ def build_values(meta: Dict[str, Any], repo_root: Path) -> Dict[str, Any]:
 
 def _c_string(value: str) -> str:
     out = ['"']
-    for ch in value:
-        if ch == "\\":
+    for b in value.encode("utf-8"):
+        if b == ord("\\"):
             out.append("\\\\")
-        elif ch == '"':
+        elif b == ord('"'):
             out.append('\\"')
-        elif ch == "\n":
+        elif b == ord("\n"):
             out.append("\\n")
-        elif ch == "\r":
+        elif b == ord("\r"):
             out.append("\\r")
-        elif ch == "\t":
+        elif b == ord("\t"):
             out.append("\\t")
-        elif ord(ch) < 32 or ord(ch) > 126:
-            out.append(f"\\x{ord(ch):02x}")
+        elif 32 <= b <= 126:
+            out.append(chr(b))
         else:
-            out.append(ch)
+            out.append(f"\\{b:03o}")
     out.append('"')
     return "".join(out)
 
