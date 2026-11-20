@@ -469,3 +469,10 @@ size_t dawn_readline(char *buf, size_t max_len) {
     buf[idx] = '\0';
     return idx;
 }
+
+_Noreturn void dawn_exit(int64_t status) {
+    dawn_syscall1(DAWN_SYS_EXIT, (uint64_t)status);
+    for (;;) {
+        __asm__ volatile ("pause");
+    }
+}

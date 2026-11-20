@@ -140,10 +140,7 @@ static inline int64_t dawn_read(uint64_t fd, void *buf, uint64_t count) {
     return dawn_syscall3(DAWN_SYS_READ, fd, (uint64_t)(uintptr_t)buf, count);
 }
 
-static inline _Noreturn void dawn_exit(int64_t status) {
-    dawn_syscall1(DAWN_SYS_EXIT, (uint64_t)status);
-    for (;;) __asm__ volatile ("pause");
-}
+_Noreturn void dawn_exit(int64_t status);
 
 static inline uint64_t dawn_getpid(void) {
     return (uint64_t)dawn_syscall0(DAWN_SYS_GETPID);
