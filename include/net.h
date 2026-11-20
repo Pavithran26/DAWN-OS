@@ -153,6 +153,10 @@ struct net_device {
     uint32_t netmask;
     uint32_t gateway;
     int (*send_packet)(struct net_device *dev, const void *buf, size_t len);
+    uint64_t rx_packets;
+    uint64_t rx_bytes;
+    uint64_t tx_packets;
+    uint64_t tx_bytes;
     bool up;
     bool active;
 };
@@ -171,6 +175,8 @@ int net_socket_close(int sock_id);
 
 /* Packet injection / dispatch */
 int net_receive_packet(struct net_device *dev, const void *buf, size_t len);
+int net_transmit_packet(struct net_device *dev, const void *buf, size_t len);
+int net_send_icmp_echo(struct net_device *dev, uint32_t dest_ip, uint16_t seq, const void *payload, size_t payload_len);
 
 bool net_self_test(void);
 

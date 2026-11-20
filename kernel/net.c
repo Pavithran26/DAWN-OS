@@ -106,8 +106,66 @@ struct net_device *net_get_device(const char *name) {
     return NULL;
 }
 
+int net_transmit_packet(struct net_device *dev, const void *buf, size_t len) {
+    if (dev == NULL || buf == NULL || len == 0 || !dev->up) return -1;
+    dev->tx_packets++;
+    dev->tx_bytes += (uint64_t)len;
+    if (dev->send_packet) {
+        return dev->send_packet(dev, buf, len);
+    }
+    return 0;
+}
+
+int net_send_icmp_echo(struct net_device *dev, uint32_t dest_ip, uint16_t seq, const void *payload, size_t payload_len) {
+    if (dev == NULL || !dev->up) return -1;
+    if (payload_len > 1400) payload_len = 1400;
+
+    uint8_t pkt[1500] = {0};
+    struct eth_header *eh = (struct eth_header *)pkt;
+    struct ipv4_header *ih = (struct ipv4_header *)(pkt + sizeof(struct eth_header));
+    struct icmp_header *ich = (struct icmp_header *)(pkt + sizeof(struct eth_header) + sizeof(struct ipv4_header));
+    uint8_t *data = pkt + sizeof(struct eth_header) + sizeof(struct ipv4_header) + sizeof(struct icmp_header);
+
+    for (int i = 0; i < 6; i++) {
+        eh->dest[i] = 0xFF;
+        eh->src[i] = dev->mac[i];
+    }
+    eh->type = htons(ETHERTYPE_IPV4);
+
+    size_t ip_total = sizeof(struct ipv4_header) + sizeof(struct icmp_header) + payload_len;
+    ih->ver_ihl = 0x45;
+    ih->tos = 0;
+    ih->total_length = htons((uint16_t)ip_total);
+    ih->id = htons(seq);
+    ih->flags_frag = 0;
+    ih->ttl = 64;
+    ih->protocol = IPPROTO_ICMP;
+    ih->src_ip = dev->ip;
+    ih->dest_ip = dest_ip;
+    ih->checksum = 0;
+    ih->checksum = net_checksum(ih, sizeof(struct ipv4_header));
+
+    size_t icmp_len = sizeof(struct icmp_header) + payload_len;
+    ich->type = 8; /* Echo Request */
+    ich->code = 0;
+    ich->id = htons(1);
+    ich->sequence = htons(seq);
+    ich->checksum = 0;
+
+    if (payload != NULL && payload_len > 0) {
+        const uint8_t *src_p = (const uint8_t *)payload;
+        for (size_t i = 0; i < payload_len; i++) data[i] = src_p[i];
+    }
+    ich->checksum = net_checksum(ich, icmp_len);
+
+    size_t total_len = sizeof(struct eth_header) + ip_total;
+    return net_transmit_packet(dev, pkt, total_len);
+}
+
 int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
     if (dev == NULL || buf == NULL || len < sizeof(struct eth_header)) return -1;
+    dev->rx_packets++;
+    dev->rx_bytes += (uint64_t)len;
     const uint8_t *packet = (const uint8_t *)buf;
     const struct eth_header *eth = (const struct eth_header *)packet;
 
@@ -140,9 +198,7 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
             rarp->spa = dev->ip;
             rarp->tpa = arp->spa;
 
-            if (dev->send_packet) {
-                dev->send_packet(dev, reply_buf, sizeof(reply_buf));
-            }
+            net_transmit_packet(dev, reply_buf, sizeof(reply_buf));
             return 0;
         }
     }
@@ -194,9 +250,7 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
                 ricmp->checksum = net_checksum(ricmp, icmp_data_len);
 
                 size_t total_reply_len = sizeof(struct eth_header) + sizeof(struct ipv4_header) + icmp_data_len;
-                if (dev->send_packet) {
-                    dev->send_packet(dev, reply_buf, total_reply_len);
-                }
+                net_transmit_packet(dev, reply_buf, total_reply_len);
                 return 0;
             }
         }
@@ -382,5 +436,12 @@ bool net_self_test(void) {
     if (recv_buf[0] != 'D' || recv_buf[1] != 'A' || recv_buf[2] != 'W' || recv_buf[3] != 'N') return false;
 
     net_socket_close(sock);
+
+    /* ICMP Echo Ping test over loopback */
+    uint64_t prev_tx = lo->tx_packets;
+    uint64_t prev_rx = lo->rx_packets;
+    if (net_send_icmp_echo(lo, lo->ip, 42, "PING", 4) != 0) return false;
+    if (lo->tx_packets < prev_tx + 2 || lo->rx_packets < prev_rx + 2) return false;
+
     return true;
 }
