@@ -104,6 +104,14 @@ bool partition_initialize(void) {
 }
 
 static int register_partition_slice(struct partition_info *part) {
+    if (part == NULL || part->parent_disk == NULL) return -1;
+
+    for (size_t i = 0; i < active_slice_count; i++) {
+        if (active_slices[i].active && active_slices[i].parent_disk == part->parent_disk && active_slices[i].index == part->index) {
+            return (int)active_slices[i].slice_dev.id;
+        }
+    }
+
     if (active_slice_count >= PARTITION_MAX_SLICES) return -1;
     struct partition_info *slot = &active_slices[active_slice_count];
     *slot = *part;
@@ -123,7 +131,10 @@ static int register_partition_slice(struct partition_info *part) {
     slot->slice_dev.ops.flush = slice_flush;
 
     int id = block_dev_register(&slot->slice_dev);
-    if (id < 0) return -1;
+    if (id < 0) {
+        slot->active = false;
+        return -1;
+    }
     active_slice_count++;
     return id;
 }
@@ -420,6 +431,9 @@ bool partition_self_test(void) {
 
     /* Delete partition 2 */
     if (partition_delete(disk, 2) != 0) return false;
+
+    /* Delete partition 1 */
+    if (partition_delete(disk, 1) != 0) return false;
 
     /* CRC32 test */
     const char *test_str = "123456789";

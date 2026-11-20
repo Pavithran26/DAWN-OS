@@ -254,33 +254,18 @@ int storage_automount_filesystems(void) {
     return mounted_count;
 }
 
-static void test_serial(const char *s) {
-    while (*s) {
-        __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)*s), "Nd"((uint16_t)0x3F8));
-        s++;
-    }
-}
-
 /* Self-test */
 static uint8_t test_mgr_disk_storage[512 * 8192]; /* 4MB RAM disk */
 
 bool storage_manager_self_test(void) {
-    test_serial("SMST: 1\n");
-    if (!storage_manager_initialize()) {
-        test_serial("SMST: fail init\n");
-        return false;
-    }
+    if (!storage_manager_initialize()) return false;
     for (size_t i = 0; i < sizeof(test_mgr_disk_storage); i++) {
         test_mgr_disk_storage[i] = 0;
     }
 
     struct block_device *disk = ramdisk_create("test_sdisk", 512, 8192, test_mgr_disk_storage);
-    if (disk == NULL) {
-        test_serial("SMST: fail ramdisk_create\n");
-        return false;
-    }
+    if (disk == NULL) return false;
     disk->type = BLOCK_DEV_TYPE_SATA;
-    test_serial("SMST: 2 ramdisk created\n");
 
     /* Add disk to discovered list for test */
     size_t prev_count = discovered_disk_count;
@@ -296,60 +281,24 @@ bool storage_manager_self_test(void) {
 
         /* Create partition on test_sdisk */
         char slice_name[BLOCK_DEV_NAME_MAX] = {0};
-        test_serial("SMST: 3 before create partition\n");
         int res = storage_create_partition("test_sdisk", 2048, MBR_TYPE_FAT32_LBA, slice_name);
-        if (res != 0) {
-            test_serial("SMST: fail create partition res != 0\n");
-            return false;
-        }
-        test_serial("SMST: 4 created partition\n");
-        test_serial("SMST slice: ");
-        test_serial(slice_name);
-        test_serial("\n");
-        if (!str_equal(slice_name, "test_sdisk1")) {
-            test_serial("SMST: fail slice_name mismatch\n");
-            return false;
-        }
+        if (res != 0) return false;
+        if (!str_equal(slice_name, "test_sdisk1")) return false;
 
         /* Query disk info */
         const struct storage_disk_desc *qdisk = storage_find_disk("test_sdisk");
-        if (qdisk == NULL) {
-            test_serial("SMST: fail qdisk NULL\n");
-            return false;
-        }
-        if (qdisk->partition_count != 1) {
-            test_serial("SMST: fail partition_count != 1\n");
-            return false;
-        }
-        if (!str_equal(qdisk->partitions[0].slice_name, "test_sdisk1")) {
-            test_serial("SMST: fail part slice_name\n");
-            return false;
-        }
-        if (qdisk->partitions[0].capacity_bytes != 1048576) {
-            test_serial("SMST: fail capacity_bytes\n");
-            return false;
-        }
+        if (qdisk == NULL || qdisk->partition_count != 1) return false;
+        if (!str_equal(qdisk->partitions[0].slice_name, "test_sdisk1")) return false;
+        if (qdisk->partitions[0].capacity_bytes != 1048576) return false;
 
         /* Delete partition */
-        test_serial("SMST: 5 before delete partition\n");
-        if (storage_delete_partition("test_sdisk", 1) != 0) {
-            test_serial("SMST: fail delete partition\n");
-            return false;
-        }
-        if (qdisk->partition_count != 0) {
-            test_serial("SMST: fail delete part count != 0\n");
-            return false;
-        }
+        if (storage_delete_partition("test_sdisk", 1) != 0) return false;
+        if (qdisk->partition_count != 0) return false;
 
         /* Restore discovered count */
         discovered_disk_count = prev_count;
-    } else {
-        test_serial("SMST: fail discovered_disk_count >= max\n");
-        return false;
     }
 
-    test_serial("SMST: 6 unregistering\n");
     block_dev_unregister(disk->id);
-    test_serial("SMST: PASS\n");
     return true;
 }
