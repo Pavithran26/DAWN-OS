@@ -801,7 +801,145 @@ bool fat32_self_test(void) {
     if (fat32_unlink(root, "NEW.TXT") != 0) return false;
     if (fat0[new_fc] != 0x00000000U || fat1[new_fc] != 0x00000000U) return false;
 
-    /* 12. Malformed BPB rejection test matrix */
+    /* 12. Boundary write: write at exact cluster boundary (512 bytes, then at offset 512) */
+    {
+        struct vfs_node *bound_node = NULL;
+        if (fat32_create(root, "BOUND.TXT", VFS_FLAG_READ | VFS_FLAG_WRITE, &bound_node) != 0 || bound_node == NULL)
+            return false;
+        uint8_t boundary_data[512];
+        for (size_t i = 0; i < sizeof(boundary_data); i++) boundary_data[i] = 0xAAU;
+        if (fat32_write(bound_node, 0, sizeof(boundary_data), boundary_data) != (int64_t)sizeof(boundary_data))
+            return false;
+        if (bound_node->size != 512U) return false;
+        uint32_t c1 = (uint32_t)bound_node->inode;
+        if (c1 < 2U || fat0[c1] < 0x0ffffff8U) return false;
+
+        for (size_t i = 0; i < sizeof(boundary_data); i++) boundary_data[i] = 0xBBU;
+        if (fat32_write(bound_node, 512, sizeof(boundary_data), boundary_data) != (int64_t)sizeof(boundary_data))
+            return false;
+        if (bound_node->size != 1024U) return false;
+        uint32_t c2 = fat0[c1];
+        if (c2 < 2U || c2 >= 0x0ffffff8U || fat0[c2] < 0x0ffffff8U) return false;
+        if (fat1[c1] != fat0[c1] || fat1[c2] != fat0[c2]) return false;
+
+        uint8_t verify_buf[1024] = {0};
+        if (fat32_read(bound_node, 0, sizeof(verify_buf), verify_buf) != (int64_t)sizeof(verify_buf))
+            return false;
+        for (size_t i = 0; i < 512; i++) {
+            if (verify_buf[i] != 0xAAU) return false;
+        }
+        for (size_t i = 512; i < 1024; i++) {
+            if (verify_buf[i] != 0xBBU) return false;
+        }
+        if (fat32_unlink(root, "BOUND.TXT") != 0) return false;
+        if (fat0[c1] != 0x00000000U || fat0[c2] != 0x00000000U) return false;
+    }
+
+    /* 13. File extension across clusters, truncate, delete and reuse */
+    {
+        struct vfs_node *ext_node = NULL;
+        if (fat32_create(root, "EXTEND.TXT", VFS_FLAG_READ | VFS_FLAG_WRITE, &ext_node) != 0 || ext_node == NULL)
+            return false;
+        uint8_t ext_data[1500];
+        for (size_t i = 0; i < sizeof(ext_data); i++) ext_data[i] = (uint8_t)(i & 0xFFU);
+        if (fat32_write(ext_node, 0, sizeof(ext_data), ext_data) != (int64_t)sizeof(ext_data))
+            return false;
+        if (ext_node->size != 1500U) return false;
+
+        uint32_t e1 = (uint32_t)ext_node->inode;
+        uint32_t e2 = fat0[e1];
+        uint32_t e3 = (e2 >= 2U && e2 < 0x0ffffff8U) ? fat0[e2] : 0U;
+        if (e1 < 2U || e2 < 2U || e3 < 2U || fat0[e3] < 0x0ffffff8U) return false;
+        if (fat1[e1] != fat0[e1] || fat1[e2] != fat0[e2] || fat1[e3] != fat0[e3]) return false;
+
+        /* Truncate from 1500 down to 600 bytes (fits in 2 clusters: e1 and e2; e3 freed) */
+        if (fat32_truncate(ext_node, 600) != 0) return false;
+        if (ext_node->size != 600U) return false;
+        if (fat0[e2] < 0x0ffffff8U) return false;
+        if (fat0[e3] != 0x00000000U || fat1[e3] != 0x00000000U) return false;
+
+        /* Truncate to 0 bytes: all clusters freed */
+        if (fat32_truncate(ext_node, 0) != 0) return false;
+        if (ext_node->size != 0U || ext_node->inode != 0ULL) return false;
+        if (fat0[e1] != 0x00000000U || fat0[e2] != 0x00000000U) return false;
+
+        if (fat32_unlink(root, "EXTEND.TXT") != 0) return false;
+
+        /* Delete then reuse of freed clusters */
+        struct vfs_node *reuse_node = NULL;
+        if (fat32_create(root, "REUSE.TXT", VFS_FLAG_READ | VFS_FLAG_WRITE, &reuse_node) != 0 || reuse_node == NULL)
+            return false;
+        uint8_t reuse_data[512];
+        for (size_t i = 0; i < sizeof(reuse_data); i++) reuse_data[i] = 0x55U;
+        if (fat32_write(reuse_node, 0, sizeof(reuse_data), reuse_data) != (int64_t)sizeof(reuse_data))
+            return false;
+        uint32_t r_clust = (uint32_t)reuse_node->inode;
+        /* Newly allocated cluster must reuse one of the recently freed cluster slots */
+        if (r_clust != e1 && r_clust != e2 && r_clust != e3) return false;
+
+        uint8_t reuse_check[512] = {0};
+        if (fat32_read(reuse_node, 0, sizeof(reuse_check), reuse_check) != (int64_t)sizeof(reuse_check))
+            return false;
+        for (size_t i = 0; i < sizeof(reuse_check); i++) {
+            if (reuse_check[i] != 0x55U) return false;
+        }
+        if (fat32_unlink(root, "REUSE.TXT") != 0) return false;
+        if (fat0[r_clust] != 0x00000000U || fat1[r_clust] != 0x00000000U) return false;
+    }
+
+    /* 14. Simulated interrupted write: device out of space / mid-operation failure leaves FAT consistent */
+    {
+        struct vfs_node *intr_node = NULL;
+        if (fat32_create(root, "INTR.TXT", VFS_FLAG_READ | VFS_FLAG_WRITE, &intr_node) != 0 || intr_node == NULL)
+            return false;
+        uint8_t base_data[512];
+        for (size_t i = 0; i < sizeof(base_data); i++) base_data[i] = 0x33U;
+        if (fat32_write(intr_node, 0, sizeof(base_data), base_data) != (int64_t)sizeof(base_data))
+            return false;
+        uint32_t ic1 = (uint32_t)intr_node->inode;
+        if (ic1 < 2U || fat0[ic1] < 0x0ffffff8U) return false;
+
+        /* Simulate failure: mark all other free FAT entries as bad (0x0FFFFFF7) to simulate no available sectors */
+        uint32_t saved_fats[128] = {0};
+        for (uint32_t k = 2U; k <= global_fat32_state.cluster_count + 1U && k < 128U; k++) {
+            saved_fats[k] = fat0[k];
+            if (k != ic1 && fat0[k] == 0x00000000U) {
+                fat0[k] = 0x0ffffff7U;
+                fat1[k] = 0x0ffffff7U;
+            }
+        }
+
+        /* Attempt to extend by 1024 bytes: allocation must fail safely without corrupting existing cluster */
+        uint8_t fail_data[1024];
+        for (size_t i = 0; i < sizeof(fail_data); i++) fail_data[i] = 0x77U;
+        int64_t written_intr = fat32_write(intr_node, 512, sizeof(fail_data), fail_data);
+        /* Write could not extend chain, so wrote 0 new bytes */
+        if (written_intr != 0) return false;
+
+        /* Verify FAT consistency: ic1 is still intact and properly terminated with EOC */
+        if (fat0[ic1] < 0x0ffffff8U) return false;
+        if (fat1[ic1] != fat0[ic1]) return false;
+        if (intr_node->size != 512U) return false;
+
+        /* Restore saved FAT table */
+        for (uint32_t k = 2U; k <= global_fat32_state.cluster_count + 1U && k < 128U; k++) {
+            fat0[k] = saved_fats[k];
+            fat1[k] = saved_fats[k];
+        }
+
+        /* Read back original data to verify it was uncorrupted */
+        uint8_t read_back[512] = {0};
+        if (fat32_read(intr_node, 0, sizeof(read_back), read_back) != (int64_t)sizeof(read_back))
+            return false;
+        for (size_t i = 0; i < sizeof(read_back); i++) {
+            if (read_back[i] != 0x33U) return false;
+        }
+
+        if (fat32_unlink(root, "INTR.TXT") != 0) return false;
+        if (fat0[ic1] != 0x00000000U || fat1[ic1] != 0x00000000U) return false;
+    }
+
+    /* 15. Malformed BPB rejection test matrix */
     if (fat32_mount_image(NULL, sizeof(image)) != NULL) return false;
     if (fat32_mount_image(image, 256) != NULL) return false;
 
