@@ -310,7 +310,6 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
             net_arp_cache_insert(arp->spa, arp->sha);
             return 0;
         }
-        }
     }
 
     /* IPv4 Handler */
@@ -365,7 +364,6 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
             } else if (icmp->type == 0) {
                 icmp_reply_count++;
                 return 0;
-            }
             }
         }
 
