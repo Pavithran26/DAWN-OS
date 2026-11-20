@@ -10,8 +10,8 @@ LIMINE_BIOS_SYS ?= $(LIMINE_DIR)/limine-bios.sys
 LIMINE_BIOS_CD ?= $(LIMINE_DIR)/limine-bios-cd.bin
 LIMINE_UEFI_CD ?= $(LIMINE_DIR)/limine-uefi-cd.bin
 LIMINE_EFI ?= $(LIMINE_DIR)/BOOTX64.EFI
-OVMF_CODE ?= $(shell if [ -f /usr/share/OVMF/OVMF_CODE_4M.fd ]; then echo /usr/share/OVMF/OVMF_CODE_4M.fd; elif [ -f /usr/share/OVMF/OVMF_CODE.fd ]; then echo /usr/share/OVMF/OVMF_CODE.fd; else echo /usr/share/OVMF/OVMF_CODE.fd; fi)
-OVMF_VARS ?= $(shell if [ -f /usr/share/OVMF/OVMF_VARS_4M.fd ]; then echo /usr/share/OVMF/OVMF_VARS_4M.fd; elif [ -f /usr/share/OVMF/OVMF_VARS.fd ]; then echo /usr/share/OVMF/OVMF_VARS.fd; else echo /usr/share/OVMF/OVMF_VARS.fd; fi)
+OVMF_CODE ?= $(shell if [ -f /usr/share/OVMF/OVMF_CODE.fd ]; then echo /usr/share/OVMF/OVMF_CODE.fd; elif [ -f /usr/share/OVMF/OVMF_CODE_4M.fd ]; then echo /usr/share/OVMF/OVMF_CODE_4M.fd; elif [ -f /usr/share/qemu/OVMF_CODE.fd ]; then echo /usr/share/qemu/OVMF_CODE.fd; elif [ -f /usr/share/ovmf/OVMF.fd ]; then echo /usr/share/ovmf/OVMF.fd; else echo /usr/share/OVMF/OVMF_CODE.fd; fi)
+OVMF_VARS ?= $(shell if [ -f /usr/share/OVMF/OVMF_VARS.fd ]; then echo /usr/share/OVMF/OVMF_VARS.fd; elif [ -f /usr/share/OVMF/OVMF_VARS_4M.fd ]; then echo /usr/share/OVMF/OVMF_VARS_4M.fd; elif [ -f /usr/share/qemu/OVMF_VARS.fd ]; then echo /usr/share/qemu/OVMF_VARS.fd; elif [ -f /usr/share/ovmf/OVMF.fd ]; then echo /usr/share/ovmf/OVMF.fd; else echo /usr/share/OVMF/OVMF_VARS.fd; fi)
 ISO ?= build/dawn-os.iso
 KERNEL_ELF ?= build/dawn-kernel.elf
 

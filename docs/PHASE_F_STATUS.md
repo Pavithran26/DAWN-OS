@@ -52,6 +52,7 @@ Phase F implements the unified hardware and device management architecture, dyna
 - Root Hub port enumeration and status checking (Full Speed, Low Speed, High Speed, SuperSpeed).
 - Automatic registration of `xhci0` into the Device Manager.
 - Self-test (`xhci_self_test`) validating TRB 16-byte packing, Enable Slot command TRB construction, cycle bit setting, and Transfer Event TRB status parsing.
+- **Current Limitation**: Register mapping and TRB parsing only. Live device enumeration (Enable Slot handshake, Address Device, GET_DESCRIPTOR, and live control/interrupt transfers) is not yet implemented; live VM input relies on the 8042 PS/2 controller driver.
 
 ### USB HID Class Driver (`include/usb_hid.h`, `kernel/usb_hid.c`)
 - USB Human Interface Device (HID 1.11) boot protocol class driver:

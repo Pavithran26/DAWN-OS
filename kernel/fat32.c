@@ -913,8 +913,8 @@ bool fat32_self_test(void) {
         uint8_t fail_data[1024];
         for (size_t i = 0; i < sizeof(fail_data); i++) fail_data[i] = 0x77U;
         int64_t written_intr = fat32_write(intr_node, 512, sizeof(fail_data), fail_data);
-        /* Write could not extend chain, so wrote 0 new bytes */
-        if (written_intr != 0) return false;
+        /* Write could not extend chain due to no space, must return -1 error */
+        if (written_intr != -1) return false;
 
         /* Verify FAT consistency: ic1 is still intact and properly terminated with EOC */
         if (fat0[ic1] < 0x0ffffff8U) return false;

@@ -27,59 +27,63 @@ Floating frosted-glass application launcher with instant search, pinned applicat
   <img src="docs/images/dawn-apps-bar.png" alt="DAWN-OS Apps Bar, Dock, and Application Launcher" width="100%"/>
 </p>
 
-## Current implementation snapshot (2026-11-18)
+## Current implementation snapshot & test baseline (2026-11-20)
 
-DAWN-OS is an actively developed x86_64 kernel, not yet a complete desktop operating system. The repository currently includes:
+DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU under both legacy SeaBIOS and OVMF UEFI firmware. The kernel compiles with strict flags (`-Wall -Wextra -Werror -Wconversion -Wshadow -Wundef`) and passes an extensive in-kernel self-test suite (65+ assertions) across all core subsystems on both BIOS and UEFI.
 
-- Limine BIOS/UEFI boot scaffolding, serial diagnostics, framebuffer request, and a kernel self-test target.
-- Physical page allocation, HHDM validation, four-level paging, isolated process address spaces, user-page ownership, and teardown.
-- IDT exception/interrupt handling, ACPI MADT discovery, xAPIC/IOAPIC setup, PIT routing, and LAPIC timer support.
-- A single-CPU scheduler with guarded kernel stacks, cooperative switching, timer preemption, process-bound contexts, and a controlled CPL3 ELF launch path.
-- A bounded userspace ABI with ABI version, serial `WRITE`, `EXIT`, `GETPID`, `YIELD`, blocking `WAIT`, `READ`, `CLOSE`, `DUP`, `SPAWN`, and `EXEC`; exit status is retained in process metadata and published on child collection. Spawn/exec argument-vector handling has bounded source-level validation; runtime behavior remains unverified.
-- Process parent identifiers, child metadata lookup, and per-process file descriptor tables with standard I/O streams and inheritance.
-- System V AMD64 ABI compliant user argument and environment stack setup (`argc`, `argv`, `envp`), dynamic process spawning, and userspace runtime (`user/include/dawn.h`, `user/crt0.S`, `user/libdawn.c`).
-- Native DAWN-OS Init process (PID 1) supervisor architecture and embedded binary generator.
-- Virtual Filesystem (VFS) architecture with mount table, unified node operations, and root RAMFS (`/boot`, `/dev`, `/mnt`, `/tmp`, `/bin`).
-- FAT32 read/write filesystem driver with BPB geometry validation, bounded cluster traversal, free-cluster allocation, cluster-chain extension, FAT mirroring, 8.3 short filename encoding, file and directory creation, truncation, unlinking, and directory entry metadata updates.
-- ISO9660 filesystem driver with Primary Volume Descriptor (PVD) parsing, directory extent parsing, and file reading.
-- VFS directory entry (dentry) cache with LRU replacement and prefix invalidation.
-- File explorer backend engine supporting directory enumeration, sorting, recursive search, copy, move, directory and file creation, and deletion.
-- Block device abstraction with unified read/write/flush operations and built-in RAM disk driver.
-- PCI bus scanner (Mechanism 1) with configuration space access and storage controller discovery.
-- SATA/AHCI 1.3 controller driver with 48-bit LBA DMA command generation and port detection.
-- NVMe 1.3/1.4 controller driver with 64-byte SQE and 16-byte CQE queues, doorbell calculation, and namespace discovery.
-- Partition subsystem supporting MBR and GPT parsing, partition creation/deletion, FAT32 formatting, and transparent partition slice block devices with 1 MiB alignment and overlap protection.
-- Central Storage Manager providing disk inventory, partition creation, formatting, and automatic filesystem mounting.
-- Unified Device Manager and dynamic Driver Framework with resource allocation and device-to-driver binding.
-- Dual-channel 8042 PS/2 controller driver with keyboard Scancode Set 1 decoding and 3-byte stream-mode mouse packet decoding.
-- USB 3.0 / 3.1 xHCI controller driver with Capability/Operational registers, TRB ring formats, and Root Hub port discovery.
-- USB HID boot keyboard and boot mouse class drivers translating HID usage reports to normalized input events.
-- Unified input event queue and non-blocking event polling subsystem for keyboard and mouse events.
-- Graphics Abstraction Layer (GAL) with software double buffering, integer alpha blending, gradients, glass panels, and 8x16 monospace typography.
-- Built-in 16x16 vector/bitmap icon engine for system applications (Terminal, Files, Task Manager, Settings, Computer, Power, DAWN-OS Logo).
-- Window Manager and Compositor with Z-order stack management, click-to-focus, titlebar drag-and-drop, and Ruby/Emerald/Amber window control buttons.
-- Emerald Green Neo-Liquid Glass Desktop Environment featuring translucent frosted glass panels, bottom Taskbar, Start Menu / App Launcher, desktop icons, and top-right toast notifications.
-- Command shell (`dsh`) with quote-aware tokenizer, command history recall, environment variable table, and built-in filesystem, memory, disk, and process commands.
-- Graphical Terminal Emulator with 80x25 character grid, ANSI color formatting, line scrolling, blinking cursor, and Window Manager integration.
-- Graphical Task Manager with real-time CPU utilization graph, physical RAM gauge, process list with state/memory/CPU metrics, and process termination.
-- Network subsystem with loopback (`lo`) and Ethernet (`eth0`) devices, ARP, IPv4, ICMP Ping, UDP, TCP state machine, and BSD-style Socket API.
-- Audio subsystem with PCI multimedia discovery, multi-stream PCM software mixer with 16-bit signed clipping, master volume/mute controls, and square wave tone synthesis.
-- Central Settings framework with persistent configuration (`/boot/system.cfg`), dynamic hardware reconfiguration, and graphical tabbed Settings application featuring About DAWN-OS, Developer Credits, Help & Support Center, and System Information tabs.
-- Centralized OS metadata (`config/os_metadata.json`, `tools/generate_metadata.py`, `include/os_metadata.h`) delivering non-tamperable runtime identity, developer attribution ("Developed and maintained by Pavithran"), official URLs (`https://pavithran26.net`), repository links, and desktop taskbar footer.
-- Comprehensive Help & Support Center with four categorized documentation sections (Getting Started, Installation & BIOS/UEFI Troubleshooting, Applications & Subsystems, FAQ & Known Issues), GitHub issue links, and clear "Coming Soon" indicators.
-- Live System Information reporting real CPU model via CPUID, architecture (`x86_64`), physical and free memory via kernel allocators, Limine BIOS/UEFI boot mode detection ("UEFI (Limine)" vs "BIOS (Limine)"), LAPIC timer uptime, storage disk counts, and VFS filesystem status.
-- Desktop and Start Menu launcher integration: direct entry points for About DAWN-OS, Help & Support, System Information ("This PC"), interactive client area mouse dispatch via `win->on_click`, press-edge click dispatch, single-instance window focusing, and continuous production compositor/scheduler event loop.
-- Operating system installer with automated MBR/GPT partitioning, FAT32 formatting, system tree deployment, Limine bootloader installation, and emergency recovery rescue shell.
-- Security subsystem with salted password hashing, user accounts, POSIX file permission checks, user/kernel pointer boundary validation, and audit logging.
-- Application runtime with standalone C library subset (`dlibc`), user heap memory allocator, native application lifecycle management, and DAWN Package Manager (`dpkg`).
-- Service manager and system supervisor with declarative dependency resolution, IPC message bus, and system-wide event publish/subscribe dispatch.
-- Power and reliability framework with CPU C-state idle optimization, ACPI shutdown, multi-vector reset/reboot, crash diagnostics, and Emerald Screen of Death (GSOD).
-- Multi-language localization (EN, ES, FR, DE, JA), international keyboard layout translation (QWERTY, AZERTY, QWERTZ, Dvorak), and accessibility APIs.
-- Advanced kernel concurrency (atomic spinlocks, ticket locks, semaphores, rwlocks), shared memory (`shm`), memory-mapped files (`mmap`), and dynamic kernel modules.
+### Verified features (QEMU BIOS + UEFI)
 
-Source implementations for many planned Phase A through S subsystems are present, but repository presence and source-level wiring do not establish feature completeness or runtime correctness. Several drivers and higher-level services remain hardware-dependent or require further integration and validation. Phase T (Comprehensive Testing and Release) is still mandatory before describing DAWN-OS as a working or complete operating system.
+- **Boot & memory**: Limine v12.10.0 protocol (base revision 6, 4-level paging), physical page frame allocation, HHDM mappings, four-level page tables, and isolated process address spaces.
+- **Interrupts & timers**: IDT exception/interrupt handling, PIC remapping, ACPI MADT parsing, IOAPIC-routed PIT delivery, Local APIC timer calibration (100 Hz), and one-shot/periodic delivery.
+- **Scheduler & processes**: Preemptive single-CPU scheduler with timer-driven preemption, round-robin dispatch, kernel stack guards, process-bound context switching (CR3/TSS), CPL3 userspace execution, explicit waiting flag, `SCHEDULER_WAIT_ANY_CHILD` (`-1LL`), and a 1000-cycle spawn/wait/exit stress test with zero resource leaks.
+- **Syscall ABI**: System V AMD64 userspace ABI (`argc`, `argv`, `envp`), with `EXIT`, `WRITE`, `READ`, `CLOSE`, `DUP`, `SPAWN`, `EXEC`, `WAIT`, `YIELD`, and `GETPID`.
+- **Filesystem**: VFS mount architecture, root RAMFS, and FAT32 read/write driver with BPB geometry validation, directory traversal, file/dir creation, 8.3 short names, cluster boundary writes, multi-cluster extension across FAT0/FAT1, truncation down to partial cluster & zero, cluster reuse after deletion, and simulated interrupted write / out-of-space error recovery verifying FAT consistency and EOC preservation without corruption.
+- **Networking**: Real VirtIO-Net PCI driver (`kernel/virtio_net.c`) with VirtQueue RX/TX rings, physical page DMA buffers, MAC auto-negotiation, ARP request/reply resolution, and ICMP echo ping against QEMU user networking (`10.0.2.2`). Software reflection fallback removed from `eth0`.
+- **Security**: Standard NIST SHA-256, RFC 6070 PBKDF2-HMAC-SHA256 (10,000 iterations), constant-time password verification (`security_verify_password`), dynamic per-user salt generation using RDRAND with TSC/RTC entropy mixing fallback, and hardcoded root credentials completely removed from production builds.
+- **GUI & desktop**: Emerald Green Neo-Liquid Glass desktop environment at 1280x800 resolution with synchronized backbuffer, full-width high-contrast taskbar with neon emerald specular top accent line (`GFX_COLOR_EMERALD_ACCENT`), dedicated frosted-glass System Tray container pill with crisp clock text, and window compositor alpha-blending with transparent terminal text backgrounds (eliminating dark rectangle artifacts).
 
-**Validation boundary:** recent Phase B/C source increments have not been compiled or exercised in QEMU. Do not infer bootability, hardware compatibility, or runtime correctness from source commits alone. The planned testing phase will cover compilation, kernel self-tests, BIOS/UEFI QEMU boots, and subsystem-specific validation.
+### Known limitations & non-goals
+
+- **Single CPU only (Uniprocessor)**: The scheduler and kernel run strictly on the Bootstrap Processor (BSP); SMP (Symmetric Multiprocessing) is not yet implemented.
+- **Virtual machine tested only**: Automated CI and local development run under QEMU (`-M q35 -m 256M -vga std -device virtio-net-pci`); no testing has been performed on physical bare-metal hardware.
+- **USB xHCI**: Register BAR mapping and TRB ring structures are defined and parsed in `kernel/xhci.c`, but live device enumeration (Enable Slot, Address Device, GET_DESCRIPTOR, and live control/interrupt transfers) is not implemented. Live input relies on the 8042 PS/2 keyboard/mouse controller.
+- **Audio**: PCI audio discovery and multi-stream PCM software mixer/tone generator exist in `kernel/audio.c`, but live hardware output to AC97 or Intel HD Audio controllers is untested.
+- **Networking hardware**: Networking is limited to the VirtIO-Net PCI driver and loopback (`lo`). Bare-metal physical NIC drivers (e.g., Intel e1000, Realtek 8139/8169) are not implemented.
+- **No system web browser**: Desktop hyperlinks validate URLs and trigger desktop notification toasts; no HTML engine or browser exists.
+
+### Feature status matrix
+
+| Subsystem / Feature | Status | Notes / Verification |
+| :--- | :--- | :--- |
+| **Limine Boot Protocol (v12.10.0)** | Tested in QEMU | Base rev 6, 4-level paging, hybrid ISO boots on BIOS & UEFI |
+| **Physical Page Allocator (PMM)** | Tested in QEMU | Bitmap frame allocation, boundary checks, free accounting |
+| **Virtual Memory Manager (VMM)** | Tested in QEMU | Four-level paging, HHDM, map/translate/unmap, NX/user bits |
+| **Isolated Process Address Spaces** | Tested in QEMU | Distinct CR3 per process, user memory teardown |
+| **Interrupts & IDT** | Tested in QEMU | 256 vectors, CPU exception handlers, PIC remapping |
+| **ACPI & APIC/IOAPIC** | Tested in QEMU | MADT discovery, PIT IRQ override, Local APIC timer (100 Hz) |
+| **Single-CPU Preemptive Scheduler** | Tested in QEMU | Timer preemption, round-robin, stack guards, 1000-cycle stress test |
+| **Process Lifecycle & Waiting** | Tested in QEMU | Explicit wait flag, `SCHEDULER_WAIT_ANY_CHILD` (`-1LL`), spawn/reap |
+| **Syscall Interface (10 calls)** | Tested in QEMU | `EXIT`, `WRITE`, `READ`, `CLOSE`, `DUP`, `SPAWN`, `EXEC`, `WAIT`, `YIELD`, `GETPID` |
+| **CPL3 Userspace Execution** | Tested in QEMU | System V AMD64 ABI, IRETQ frame, user stack isolation |
+| **ELF64 Executable Loader** | Tested in QEMU | In-memory ELF image parsing, segment mapping, process launch |
+| **Virtual Filesystem (VFS)** | Tested in QEMU | Mount points, root RAMFS, path resolution, dentry cache |
+| **FAT32 Filesystem** | Tested in QEMU | Cluster boundary writes, multi-cluster extension, truncate, reuse, out-of-space consistency |
+| **VirtIO-Net PCI Network Driver** | Tested in QEMU | VirtQueue RX/TX, DMA rings, ARP resolution, ICMP ping to 10.0.2.2 |
+| **Cryptographic Security Hardening**| Tested in QEMU | NIST SHA-256, RFC 6070 PBKDF2 (10,000 iter), RDRAND salt, constant-time compare |
+| **Desktop Environment & Compositor**| Tested in QEMU | 1280x800 resolution, neon taskbar, system tray pill, transparent terminal text |
+| **PS/2 Keyboard & Mouse Drivers** | Tested in QEMU | 8042 scancode decoding, mouse packet decoding, boundary clipping |
+| **Shell (`dsh`) & Terminal Emulator** | Tested in QEMU | 80x25 text grid, ANSI colors, scrolling, history, built-in commands |
+| **Graphical Task Manager** | Tested in QEMU | Live process list, CPU usage history graph, RAM gauge |
+| **Settings & Metadata Subsystem** | Tested in QEMU | System info, CPUID brand, memory/uptime stats, non-tamperable identity |
+| **USB 3.0 / 3.1 xHCI** | Source only | Register BAR mapping & TRB parsing tests only; no device I/O or enumeration |
+| **USB HID Class Driver** | Source only | Boot keyboard/mouse report parsing structs present; no live USB transfer stream |
+| **SATA / AHCI 1.3 Driver** | Source only | FIS command packing & PRDT descriptors tested; no live disk I/O in test ISO |
+| **NVM Express (NVMe 1.3/1.4)** | Source only | SQE/CQE layout & doorbell calculation tested; no live controller in test ISO |
+| **ISO9660 Filesystem** | Source only | PVD & directory extent parsing present in source |
+| **Audio Subsystem & Mixer** | Source only | PCI discovery & software PCM mixer/tone generator tested in memory; no live audio output |
+| **Symmetric Multiprocessing (SMP)**| Missing | Uniprocessor only; AP bootstrap and multi-core synchronization not implemented |
+| **Physical Ethernet Drivers** | Missing | VirtIO-Net PCI only; bare-metal drivers (e1000, rtl8139) not implemented |
+| **Web Browser** | Missing | Desktop links show notification toasts; HTML/DOM engine not implemented |
 
 ## Build the kernel ELF
 

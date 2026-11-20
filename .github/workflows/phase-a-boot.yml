@@ -29,8 +29,9 @@ jobs:
 
       - name: Install build, ISO, and VM tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
             build-essential gcc binutils make xorriso \
             qemu-system-x86 ovmf curl xz-utils
 
@@ -86,27 +87,32 @@ jobs:
       - name: Create hybrid BIOS/UEFI self-test ISO
         run: make iso-test LIMINE_DIR=limine-binary
 
-      - name: Boot test under legacy BIOS
-        run: make qemu-test LIMINE_DIR=limine-binary
+      - name: Run full QEMU test suite (BIOS + UEFI)
+        run: make qemu-test-all LIMINE_DIR=limine-binary
 
-      - name: Boot test under UEFI firmware
+      - name: Verify zero failures in serial logs
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          ovmf_code=""
-          ovmf_vars=""
-          if [[ -f /usr/share/OVMF/OVMF_CODE_4M.fd && -f /usr/share/OVMF/OVMF_VARS_4M.fd ]]; then
-            ovmf_code=/usr/share/OVMF/OVMF_CODE_4M.fd
-            ovmf_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
-          elif [[ -f /usr/share/OVMF/OVMF_CODE.fd && -f /usr/share/OVMF/OVMF_VARS.fd ]]; then
-            ovmf_code=/usr/share/OVMF/OVMF_CODE.fd
-            ovmf_vars=/usr/share/OVMF/OVMF_VARS.fd
-          else
-            echo "A matching OVMF_CODE and OVMF_VARS firmware pair was not installed" >&2
-            find /usr/share/OVMF -maxdepth 1 -type f -print >&2 || true
+          failed=0
+          for log in build/qemu-bios-serial.log build/qemu-uefi-serial.log; do
+            if [[ -f "$log" ]]; then
+              echo "=== Checking $log ==="
+              if grep -E "DAWN-TEST: FAIL|DAWN-OS: FAIL|boot test: FAIL" "$log"; then
+                echo "FAIL: Test failure line detected in $log!" >&2
+                failed=1
+              fi
+            else
+              echo "FAIL: Expected test log $log not found!" >&2
+              failed=1
+            fi
+          done
+          if [[ $failed -ne 0 ]]; then
+            echo "CI FAIL: One or more kernel self-tests failed." >&2
             exit 1
           fi
-          make qemu-uefi-test LIMINE_DIR=limine-binary OVMF_CODE="$ovmf_code" OVMF_VARS="$ovmf_vars"
+          echo "CI PASS: Both BIOS and UEFI passed with zero failures."
 
       - name: Upload ISO and serial logs
         if: always()
