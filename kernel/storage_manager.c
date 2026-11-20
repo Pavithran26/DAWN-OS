@@ -263,7 +263,7 @@ bool storage_manager_self_test(void) {
         test_mgr_disk_storage[i] = 0;
     }
 
-    struct block_device *disk = ramdisk_create("sda", 512, 8192, test_mgr_disk_storage);
+    struct block_device *disk = ramdisk_create("test_sdisk", 512, 8192, test_mgr_disk_storage);
     if (disk == NULL) return false;
     disk->type = BLOCK_DEV_TYPE_SATA;
 
@@ -272,27 +272,27 @@ bool storage_manager_self_test(void) {
     if (discovered_disk_count < STORAGE_MAX_DISKS) {
         struct storage_disk_desc *desc = &discovered_disks[discovered_disk_count++];
         *desc = (struct storage_disk_desc){0};
-        str_copy(desc->name, "sda", BLOCK_DEV_NAME_MAX);
+        str_copy(desc->name, "test_sdisk", BLOCK_DEV_NAME_MAX);
         str_copy(desc->model, "DAWN-OS SATA Drive", sizeof(desc->model));
         desc->type = BLOCK_DEV_TYPE_SATA;
         desc->block_size = 512;
         desc->total_blocks = 8192;
         desc->capacity_bytes = 4194304;
 
-        /* Create partition on sda */
+        /* Create partition on test_sdisk */
         char slice_name[BLOCK_DEV_NAME_MAX] = {0};
-        int res = storage_create_partition("sda", 2048, MBR_TYPE_FAT32_LBA, slice_name);
+        int res = storage_create_partition("test_sdisk", 2048, MBR_TYPE_FAT32_LBA, slice_name);
         if (res != 0) return false;
-        if (!str_equal(slice_name, "sda1")) return false;
+        if (!str_equal(slice_name, "test_sdisk1")) return false;
 
         /* Query disk info */
-        const struct storage_disk_desc *qdisk = storage_find_disk("sda");
+        const struct storage_disk_desc *qdisk = storage_find_disk("test_sdisk");
         if (qdisk == NULL || qdisk->partition_count != 1) return false;
-        if (!str_equal(qdisk->partitions[0].slice_name, "sda1")) return false;
+        if (!str_equal(qdisk->partitions[0].slice_name, "test_sdisk1")) return false;
         if (qdisk->partitions[0].capacity_bytes != 1048576) return false;
 
         /* Delete partition */
-        if (storage_delete_partition("sda", 1) != 0) return false;
+        if (storage_delete_partition("test_sdisk", 1) != 0) return false;
         if (qdisk->partition_count != 0) return false;
 
         /* Restore discovered count */
