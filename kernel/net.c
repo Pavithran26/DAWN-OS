@@ -1,11 +1,58 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "net.h"
+#include "virtio_net.h"
 #include "device.h"
 
 static struct net_device net_devices[MAX_NET_DEVICES];
 static struct net_socket net_sockets[MAX_NET_SOCKETS];
 static uint32_t next_sock_id = 1;
 static bool net_initialized = false;
+
+struct arp_cache_entry {
+    uint32_t ip;
+    uint8_t  mac[ETH_ALEN];
+    bool     valid;
+};
+#define ARP_CACHE_SIZE 16
+static struct arp_cache_entry arp_cache[ARP_CACHE_SIZE];
+static uint32_t icmp_reply_count = 0;
+
+void net_arp_cache_insert(uint32_t ip, const uint8_t *mac) {
+    if (mac == NULL) return;
+    for (size_t i = 0; i < ARP_CACHE_SIZE; i++) {
+        if (arp_cache[i].valid && arp_cache[i].ip == ip) {
+            for (int j = 0; j < 6; j++) arp_cache[i].mac[j] = mac[j];
+            return;
+        }
+    }
+    for (size_t i = 0; i < ARP_CACHE_SIZE; i++) {
+        if (!arp_cache[i].valid) {
+            arp_cache[i].ip = ip;
+            for (int j = 0; j < 6; j++) arp_cache[i].mac[j] = mac[j];
+            arp_cache[i].valid = true;
+            return;
+        }
+    }
+    arp_cache[0].ip = ip;
+    for (int j = 0; j < 6; j++) arp_cache[0].mac[j] = mac[j];
+    arp_cache[0].valid = true;
+}
+
+bool net_arp_cache_lookup(uint32_t ip, uint8_t *out_mac) {
+    for (size_t i = 0; i < ARP_CACHE_SIZE; i++) {
+        if (arp_cache[i].valid && arp_cache[i].ip == ip) {
+            if (out_mac != NULL) {
+                for (int j = 0; j < 6; j++) out_mac[j] = arp_cache[i].mac[j];
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t net_get_icmp_reply_count(void) {
+    return icmp_reply_count;
+}
 
 static inline void str_copy(char *dest, const char *src, size_t max_len) {
     size_t i = 0;
@@ -69,14 +116,25 @@ bool net_initialize(void) {
     /* Initialize default Ethernet device eth0 */
     struct net_device *eth0 = &net_devices[1];
     str_copy(eth0->name, "eth0", sizeof(eth0->name));
-    eth0->mac[0] = 0x52; eth0->mac[1] = 0x54; eth0->mac[2] = 0x00;
-    eth0->mac[3] = 0x12; eth0->mac[4] = 0x34; eth0->mac[5] = 0x56;
     eth0->ip = htonl(0x0A00020FU); /* 10.0.2.15 (QEMU default) */
     eth0->netmask = htonl(0xFFFFFF00U);
     eth0->gateway = htonl(0x0A000202U);
-    eth0->send_packet = loopback_send; /* Fallback to software reflection */
-    eth0->up = true;
-    eth0->active = true;
+
+    if (virtio_net_initialize()) {
+        struct virtio_net_device *vdev = virtio_net_get_device();
+        for (int i = 0; i < 6; i++) {
+            eth0->mac[i] = vdev->mac[i];
+        }
+        eth0->send_packet = virtio_net_send_packet;
+        eth0->up = true;
+        eth0->active = true;
+    } else {
+        eth0->mac[0] = 0x52; eth0->mac[1] = 0x54; eth0->mac[2] = 0x00;
+        eth0->mac[3] = 0x12; eth0->mac[4] = 0x34; eth0->mac[5] = 0x56;
+        eth0->send_packet = NULL;
+        eth0->up = false;
+        eth0->active = false;
+    }
 
     /* Register network device in Device Manager */
     struct device dev = {0};
@@ -106,6 +164,43 @@ struct net_device *net_get_device(const char *name) {
     return NULL;
 }
 
+int net_poll(void) {
+    if (!net_initialized) net_initialize();
+    if (virtio_net_is_available()) {
+        return virtio_net_poll(&net_devices[1]);
+    }
+    return 0;
+}
+
+int net_send_arp_request(struct net_device *dev, uint32_t target_ip) {
+    if (dev == NULL || !dev->up) return -1;
+
+    uint8_t pkt[sizeof(struct eth_header) + sizeof(struct arp_header)];
+    struct eth_header *eh = (struct eth_header *)pkt;
+    struct arp_header *arp = (struct arp_header *)(pkt + sizeof(struct eth_header));
+
+    for (int i = 0; i < 6; i++) {
+        eh->dest[i] = 0xFF;
+        eh->src[i] = dev->mac[i];
+    }
+    eh->type = htons(ETHERTYPE_ARP);
+
+    arp->htype = htons(1);
+    arp->ptype = htons(ETHERTYPE_IPV4);
+    arp->hlen = 6;
+    arp->plen = 4;
+    arp->oper = htons(1); /* Request */
+
+    for (int i = 0; i < 6; i++) {
+        arp->sha[i] = dev->mac[i];
+        arp->tha[i] = 0x00;
+    }
+    arp->spa = dev->ip;
+    arp->tpa = target_ip;
+
+    return net_transmit_packet(dev, pkt, sizeof(pkt));
+}
+
 int net_transmit_packet(struct net_device *dev, const void *buf, size_t len) {
     if (dev == NULL || buf == NULL || len == 0 || !dev->up) return -1;
     dev->tx_packets++;
@@ -126,8 +221,19 @@ int net_send_icmp_echo(struct net_device *dev, uint32_t dest_ip, uint16_t seq, c
     struct icmp_header *ich = (struct icmp_header *)(pkt + sizeof(struct eth_header) + sizeof(struct ipv4_header));
     uint8_t *data = pkt + sizeof(struct eth_header) + sizeof(struct ipv4_header) + sizeof(struct icmp_header);
 
+    uint8_t target_mac[ETH_ALEN];
+    if (dev->send_packet == loopback_send || dest_ip == dev->ip) {
+        for (int i = 0; i < 6; i++) target_mac[i] = dev->mac[i];
+    } else if (net_arp_cache_lookup(dest_ip, target_mac)) {
+        /* Use resolved MAC */
+    } else if (net_arp_cache_lookup(dev->gateway, target_mac)) {
+        /* Use gateway MAC */
+    } else {
+        for (int i = 0; i < 6; i++) target_mac[i] = 0xFF;
+    }
+
     for (int i = 0; i < 6; i++) {
-        eh->dest[i] = 0xFF;
+        eh->dest[i] = target_mac[i];
         eh->src[i] = dev->mac[i];
     }
     eh->type = htons(ETHERTYPE_IPV4);
@@ -200,6 +306,10 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
 
             net_transmit_packet(dev, reply_buf, sizeof(reply_buf));
             return 0;
+        } else if (ntohs(arp->oper) == 2 && arp->tpa == dev->ip) {
+            net_arp_cache_insert(arp->spa, arp->sha);
+            return 0;
+        }
         }
     }
 
@@ -252,6 +362,10 @@ int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
                 size_t total_reply_len = sizeof(struct eth_header) + sizeof(struct ipv4_header) + icmp_data_len;
                 net_transmit_packet(dev, reply_buf, total_reply_len);
                 return 0;
+            } else if (icmp->type == 0) {
+                icmp_reply_count++;
+                return 0;
+            }
             }
         }
 

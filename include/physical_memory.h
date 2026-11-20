@@ -10,7 +10,9 @@
 struct physical_allocator_stats { uint64_t managed_frames; uint64_t free_frames; uint64_t tracked_frames; };
 bool physical_allocator_initialize(const struct limine_memmap_response *map);
 bool physical_allocator_allocate(uint64_t *physical_address);
+bool physical_allocator_allocate_contiguous(size_t count, uint64_t *physical_address);
 bool physical_allocator_free(uint64_t physical_address);
+bool physical_allocator_free_contiguous(uint64_t physical_address, size_t count);
 bool physical_allocator_is_allocated(uint64_t physical_address);
 void physical_allocator_get_stats(struct physical_allocator_stats *stats);
 

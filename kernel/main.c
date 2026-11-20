@@ -38,6 +38,7 @@
 #include "terminal.h"
 #include "task_manager.h"
 #include "net.h"
+#include "virtio_net.h"
 #include "audio.h"
 #include "settings.h"
 #include "installer.h"
@@ -1285,6 +1286,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle\n");
+
+    /* VirtIO Net PCI & ARP/ICMP Echo Test */
+    if (!virtio_net_self_test()) {
+        serial_write("DAWN-TEST: FAIL: virtio-net PCI driver, ARP resolution and ICMP echo ping\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping\n");
 
     /* Phase K: Audio */
     if (!audio_self_test()) {

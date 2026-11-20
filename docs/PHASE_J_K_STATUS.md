@@ -15,7 +15,11 @@ Phases J and K implement the native networking stack, loopback interface, Ethern
   - IP: `127.0.0.1` (`0x7F000001`), netmask: `255.0.0.0`.
   - Zero-copy internal packet loopback with immediate dispatch to receiving protocol handler.
 - Default Ethernet Device (`eth0`):
+  - Driven by native PCI VirtIO Network driver (`kernel/virtio_net.c`, `include/virtio_net.h`) when running on virtualized hardware (QEMU virtio-net-pci).
   - Configured with QEMU network defaults (`10.0.2.15`, netmask `255.255.255.0`, gateway `10.0.2.2`).
+  - Virtqueue RX/TX ring buffer handling with physical page frame DMA allocations.
+  - ARP resolution and dynamic routing through QEMU user networking gateway (`10.0.2.2`).
+  - Active transmit and receive packet/byte statistics tracking.
 - Protocol Stack:
   - Ethernet layer: 14-byte IEEE 802.3 Ethernet framing and EtherType demultiplexing (`ETHERTYPE_IPV4 = 0x0800`, `ETHERTYPE_ARP = 0x0806`).
   - ARP layer: RFC 826 Address Resolution Protocol handling, request/reply structure, and IP-to-MAC resolution.

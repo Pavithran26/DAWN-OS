@@ -106,7 +106,44 @@ bool physical_allocator_initialize(const struct limine_memmap_response *map) {
                     managed_map,allocated_map,(size_t)WORDS);
 }
 bool physical_allocator_allocate(uint64_t *address) { return alloc_ctx(&live,address); }
+
+bool physical_allocator_allocate_contiguous(size_t count, uint64_t *address) {
+    if (!address || count == 0 || live.free_count < (uint64_t)count ||
+        !live.managed || !live.allocated) return false;
+
+    uint64_t run = 0;
+    uint64_t start_frame = 0;
+
+    for (uint64_t f = 1; f < live.frames; f++) {
+        if (bit(live.managed, f) && !bit(live.allocated, f)) {
+            if (run == 0) start_frame = f;
+            run++;
+            if (run == (uint64_t)count) {
+                for (uint64_t i = 0; i < (uint64_t)count; i++) {
+                    set(live.allocated, start_frame + i);
+                }
+                live.free_count -= (uint64_t)count;
+                *address = start_frame * 4096ULL;
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    return false;
+}
+
 bool physical_allocator_free(uint64_t address) { return free_ctx(&live,address); }
+
+bool physical_allocator_free_contiguous(uint64_t address, size_t count) {
+    if (address % 4096ULL != 0 || count == 0) return false;
+    for (size_t i = 0; i < count; i++) {
+        if (!physical_allocator_free(address + (uint64_t)i * 4096ULL)) {
+            return false;
+        }
+    }
+    return true;
+}
 bool physical_allocator_is_allocated(uint64_t address) {
     uint64_t frame = address / 4096ULL;
     return address % 4096ULL == 0ULL && frame != 0ULL &&

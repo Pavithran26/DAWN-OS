@@ -177,6 +177,11 @@ int net_socket_close(int sock_id);
 int net_receive_packet(struct net_device *dev, const void *buf, size_t len);
 int net_transmit_packet(struct net_device *dev, const void *buf, size_t len);
 int net_send_icmp_echo(struct net_device *dev, uint32_t dest_ip, uint16_t seq, const void *payload, size_t payload_len);
+int net_send_arp_request(struct net_device *dev, uint32_t target_ip);
+bool net_arp_cache_lookup(uint32_t ip, uint8_t *out_mac);
+void net_arp_cache_insert(uint32_t ip, const uint8_t *mac);
+uint32_t net_get_icmp_reply_count(void);
+int net_poll(void);
 
 bool net_self_test(void);
 

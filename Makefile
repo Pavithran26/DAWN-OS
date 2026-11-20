@@ -10,8 +10,8 @@ LIMINE_BIOS_SYS ?= $(LIMINE_DIR)/limine-bios.sys
 LIMINE_BIOS_CD ?= $(LIMINE_DIR)/limine-bios-cd.bin
 LIMINE_UEFI_CD ?= $(LIMINE_DIR)/limine-uefi-cd.bin
 LIMINE_EFI ?= $(LIMINE_DIR)/BOOTX64.EFI
-OVMF_CODE ?= /usr/share/OVMF/OVMF_CODE.fd
-OVMF_VARS ?= /usr/share/OVMF/OVMF_VARS.fd
+OVMF_CODE ?= $(shell if [ -f /usr/share/OVMF/OVMF_CODE_4M.fd ]; then echo /usr/share/OVMF/OVMF_CODE_4M.fd; elif [ -f /usr/share/OVMF/OVMF_CODE.fd ]; then echo /usr/share/OVMF/OVMF_CODE.fd; else echo /usr/share/OVMF/OVMF_CODE.fd; fi)
+OVMF_VARS ?= $(shell if [ -f /usr/share/OVMF/OVMF_VARS_4M.fd ]; then echo /usr/share/OVMF/OVMF_VARS_4M.fd; elif [ -f /usr/share/OVMF/OVMF_VARS.fd ]; then echo /usr/share/OVMF/OVMF_VARS.fd; else echo /usr/share/OVMF/OVMF_VARS.fd; fi)
 ISO ?= build/dawn-os.iso
 KERNEL_ELF ?= build/dawn-kernel.elf
 
@@ -28,7 +28,7 @@ USER_CFLAGS = -std=gnu11 -O2 -Wall -Wextra -Werror -Wconversion -Wshadow \
               -m64 -Iuser/include
 USER_LDFLAGS = -nostdlib -static -no-pie -T user/linker.ld -z max-page-size=0x1000
 
-KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o build/process.o build/elf-loader.o build/vfs.o build/fat32.o build/iso9660.o build/vfs-cache.o build/file-explorer.o build/block_dev.o build/pci.o build/ahci.o build/nvme.o build/partition.o build/storage_manager.o build/device.o build/ps2.o build/xhci.o build/usb_hid.o build/input.o build/rtc.o build/gfx.o build/window_manager.o build/desktop.o build/calculator.o build/calendar.o build/shell.o build/terminal.o build/task_manager.o build/net.o build/audio.o build/settings.o build/installer.o build/security.o build/app_runtime.o build/service_manager.o build/power.o build/localization.o build/advanced.o build/os_metadata.o build/system_info.o
+KERNEL_OBJECTS = build/boot.o build/gdt.o build/main.o build/physical_memory.o build/page_table.o build/interrupts.o build/interrupt-stubs.o build/acpi.o build/apic.o build/scheduler.o build/syscall.o build/user-mode.o build/process.o build/elf-loader.o build/vfs.o build/fat32.o build/iso9660.o build/vfs-cache.o build/file-explorer.o build/block_dev.o build/pci.o build/ahci.o build/nvme.o build/partition.o build/storage_manager.o build/device.o build/ps2.o build/xhci.o build/usb_hid.o build/input.o build/rtc.o build/gfx.o build/window_manager.o build/desktop.o build/calculator.o build/calendar.o build/shell.o build/terminal.o build/task_manager.o build/net.o build/virtio_net.o build/audio.o build/settings.o build/installer.o build/security.o build/app_runtime.o build/service_manager.o build/power.o build/localization.o build/advanced.o build/os_metadata.o build/system_info.o
 
 USER_BINARIES = build/user/init.elf build/user/sh.elf build/user/echo.elf \
                 build/user/cat.elf build/user/ls.elf build/user/ld_dawn.elf \
@@ -167,6 +167,9 @@ build/task_manager.o: kernel/task_manager.c include/task_manager.h include/gfx.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/net.o: kernel/net.c include/net.h include/device.h | build
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/virtio_net.o: kernel/virtio_net.c include/virtio_net.h include/net.h include/pci.h include/physical_memory.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/audio.o: kernel/audio.c include/audio.h include/device.h include/pci.h | build
@@ -330,6 +333,9 @@ build/task-manager-test.o: kernel/task_manager.c include/task_manager.h include/
 build/net-test.o: kernel/net.c include/net.h include/device.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
+build/virtio_net-test.o: kernel/virtio_net.c include/virtio_net.h include/net.h include/pci.h include/physical_memory.h | build
+	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
+
 build/audio-test.o: kernel/audio.c include/audio.h include/device.h include/pci.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
@@ -363,8 +369,8 @@ build/os-metadata-test.o: kernel/os_metadata.c include/os_metadata.h include/daw
 build/system-info-test.o: kernel/system_info.c include/system_info.h include/os_metadata.h include/apic.h include/block_dev.h include/physical_memory.h include/storage_manager.h include/limine_requests.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/rtc-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/calculator-test.o build/calendar-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/rtc-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/calculator-test.o build/calendar-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o
+build/dawn-kernel-test.elf: build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/rtc-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/calculator-test.o build/calendar-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/virtio_net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o linker.ld
+	$(LD) $(LDFLAGS) -T linker.ld -o $@ build/boot.o build/gdt.o build/main-test.o build/physical-memory-test.o build/page-table-test.o build/interrupts-test.o build/interrupt-stubs.o build/acpi-test.o build/apic-test.o build/scheduler-test.o build/syscall-test.o build/user-mode-test.o build/process-test.o build/elf-loader-test.o build/vfs-test.o build/fat32-test.o build/iso9660-test.o build/vfs-cache-test.o build/file-explorer-test.o build/block-dev-test.o build/pci-test.o build/ahci-test.o build/nvme-test.o build/partition-test.o build/storage-manager-test.o build/device-test.o build/ps2-test.o build/xhci-test.o build/usb-hid-test.o build/input-test.o build/rtc-test.o build/gfx-test.o build/window-manager-test.o build/desktop-test.o build/calculator-test.o build/calendar-test.o build/shell-test.o build/terminal-test.o build/task-manager-test.o build/net-test.o build/virtio_net-test.o build/audio-test.o build/settings-test.o build/installer-test.o build/security-test.o build/app_runtime-test.o build/service_manager-test.o build/power-test.o build/localization-test.o build/advanced-test.o build/os-metadata-test.o build/system-info-test.o
 
 build/user:
 	mkdir -p build/user
@@ -506,12 +512,12 @@ iso-test: kernel-test
 	$(MAKE) iso KERNEL_ELF=build/dawn-kernel-test.elf ISO=build/dawn-os-test.iso
 
 run: iso
-	$(QEMU) -M q35 -m 256M -smp 1 -cdrom "$(ISO)" -serial stdio -no-reboot -no-shutdown
+	$(QEMU) -M q35 -m 256M -smp 1 -netdev user,id=n0 -device virtio-net-pci,netdev=n0 -cdrom "$(ISO)" -serial stdio -no-reboot -no-shutdown
 
 qemu-test: iso-test
 	@command -v $(QEMU) >/dev/null 2>&1 || { echo 'QEMU not found' >&2; exit 1; }
 	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
-	@set +e; timeout 20s $(QEMU) -M q35 -m 256M -smp 1 -cdrom build/dawn-os-test.iso -boot order=d,menu=off -vga std \
+	@set +e; timeout 20s $(QEMU) -M q35 -m 256M -smp 1 -netdev user,id=n0 -device virtio-net-pci,netdev=n0 -cdrom build/dawn-os-test.iso -boot order=d,menu=off -vga std \
 		-serial file:build/qemu-bios-serial.log -display none -no-reboot -no-shutdown \
 		-d guest_errors,cpu_reset -D build/qemu-bios-debug.log \
 		-device isa-debug-exit,iobase=0xf4,iosize=0x04; status=$$?; \
@@ -526,7 +532,7 @@ qemu-uefi-test: iso-test
 	@test -f "$(OVMF_VARS)" || { echo 'OVMF UEFI variables image not found: $(OVMF_VARS)' >&2; exit 1; }
 	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
 	cp "$(OVMF_VARS)" build/OVMF_VARS.fd
-	@set +e; timeout 25s $(QEMU) -M q35 -m 256M -smp 1 \
+	@set +e; timeout 25s $(QEMU) -M q35 -m 256M -smp 1 -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
 		-drive if=pflash,format=raw,unit=0,file="$(OVMF_CODE)",readonly=on \
 		-drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \
 		-cdrom build/dawn-os-test.iso -boot order=d,menu=off -vga std \
