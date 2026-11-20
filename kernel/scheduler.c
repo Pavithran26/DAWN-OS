@@ -987,7 +987,7 @@ bool scheduler_process_context_self_test(void) {
             !kernel_thread_bind_process(thread_ids[index],process_ids[index]))
             return false;
     }
-    if (!kernel_thread_bind_process(thread_ids[0],process_ids[1]) ||
+    if (kernel_thread_bind_process(thread_ids[0],process_ids[1]) ||
         !scheduler_run_until_idle() ||
         process_context_test_counts[0]!=2ULL ||
         process_context_test_counts[1]!=2ULL ||
