@@ -13,6 +13,8 @@
  * Any value that cannot be detected is the literal "Not available". */
 struct dawn_system_info {
     char cpu_model[DAWN_SYSINFO_CPU_MODEL_MAX];
+    uint32_t cpu_count;
+    uint32_t online_cpu_count;
     uint64_t physical_memory_bytes;
     uint64_t free_memory_bytes;
     uint64_t timer_ticks;

@@ -35,6 +35,7 @@ DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU unde
 
 - **Boot & memory**: Limine v12.10.0 protocol (base revision 6, 4-level paging), physical page frame allocation, HHDM mappings, four-level page tables, and isolated process address spaces.
 - **Interrupts & timers**: IDT exception/interrupt handling, PIC remapping, ACPI MADT parsing, IOAPIC-routed PIT delivery, Local APIC timer calibration (100 Hz), and one-shot/periodic delivery.
+- **SMP multi-core bootstrap**: Limine SMP protocol, multi-core detection, per-CPU state structures (`struct cpu_core`), Application Processor (AP) bootstrap with dedicated 16 KiB kernel stacks, heartbeat tracking, and dynamic online core synchronization (tested with QEMU `-smp 2`).
 - **Scheduler & processes**: Preemptive single-CPU scheduler with timer-driven preemption, round-robin dispatch, kernel stack guards, process-bound context switching (CR3/TSS), CPL3 userspace execution, explicit waiting flag, `SCHEDULER_WAIT_ANY_CHILD` (`-1LL`), and a 1000-cycle spawn/wait/exit stress test with zero resource leaks.
 - **Syscall ABI**: System V AMD64 userspace ABI (`argc`, `argv`, `envp`), with `EXIT`, `WRITE`, `READ`, `CLOSE`, `DUP`, `SPAWN`, `EXEC`, `WAIT`, `YIELD`, and `GETPID`.
 - **Filesystem**: VFS mount architecture, root RAMFS, and FAT32 read/write driver with BPB geometry validation, directory traversal, file/dir creation, 8.3 short names, cluster boundary writes, multi-cluster extension across FAT0/FAT1, truncation down to partial cluster & zero, cluster reuse after deletion, and simulated interrupted write / out-of-space error recovery verifying FAT consistency and EOC preservation without corruption.
@@ -44,8 +45,8 @@ DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU unde
 
 ### Known limitations & non-goals
 
-- **Single CPU only (Uniprocessor)**: The scheduler and kernel run strictly on the Bootstrap Processor (BSP); SMP (Symmetric Multiprocessing) is not yet implemented.
-- **Virtual machine tested only**: Automated CI and local development run under QEMU (`-M q35 -m 256M -vga std -device virtio-net-pci`); no testing has been performed on physical bare-metal hardware.
+- **SMP scheduling**: While multi-core AP discovery, bootstrap, and per-CPU state structures are active, the userspace thread scheduler currently dispatches threads primarily on the Bootstrap Processor (BSP); multi-queue per-CPU work-stealing scheduling is future work.
+- **Virtual machine tested only**: Automated CI and local development run under QEMU (`-M q35 -m 256M -smp 2 -vga std -device virtio-net-pci`); no testing has been performed on physical bare-metal hardware.
 - **USB xHCI**: Register BAR mapping and TRB ring structures are defined and parsed in `kernel/xhci.c`, but live device enumeration (Enable Slot, Address Device, GET_DESCRIPTOR, and live control/interrupt transfers) is not implemented. Live input relies on the 8042 PS/2 keyboard/mouse controller.
 - **Audio**: PCI audio discovery and multi-stream PCM software mixer/tone generator exist in `kernel/audio.c`, but live hardware output to AC97 or Intel HD Audio controllers is untested.
 - **Networking hardware**: Networking is limited to the VirtIO-Net PCI driver and loopback (`lo`). Bare-metal physical NIC drivers (e.g., Intel e1000, Realtek 8139/8169) are not implemented.
@@ -81,7 +82,7 @@ DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU unde
 | **NVM Express (NVMe 1.3/1.4)** | Source only | SQE/CQE layout & doorbell calculation tested; no live controller in test ISO |
 | **ISO9660 Filesystem** | Source only | PVD & directory extent parsing present in source |
 | **Audio Subsystem & Mixer** | Source only | PCI discovery & software PCM mixer/tone generator tested in memory; no live audio output |
-| **Symmetric Multiprocessing (SMP)**| Missing | Uniprocessor only; AP bootstrap and multi-core synchronization not implemented |
+| **Symmetric Multiprocessing (SMP)**| Tested in QEMU | Limine SMP protocol, multi-core detection, AP startup with dedicated stacks & online sync |
 | **Physical Ethernet Drivers** | Missing | VirtIO-Net PCI only; bare-metal drivers (e1000, rtl8139) not implemented |
 | **Web Browser** | Missing | Desktop links show notification toasts; HTML/DOM engine not implemented |
 

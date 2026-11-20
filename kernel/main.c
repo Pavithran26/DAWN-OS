@@ -53,6 +53,7 @@
 #include "rtc.h"
 #include "calculator.h"
 #include "calendar.h"
+#include "smp.h"
 
 #define SERIAL_COM1 0x3F8U
 #define QEMU_DEBUG_EXIT_PORT 0xF4U
@@ -140,6 +141,14 @@ volatile struct limine_efi_system_table_request limine_efi_system_table_request 
     .id = { LIMINE_EFI_SYSTEM_TABLE_REQUEST_ID },
     .revision = 0,
     .response = NULL
+};
+
+__attribute__((used, aligned(8), section(".limine_requests")))
+volatile struct limine_smp_request limine_smp_request = {
+    .id = { LIMINE_SMP_REQUEST_ID },
+    .revision = 0,
+    .response = NULL,
+    .flags = 0
 };
 
 __attribute__((used, aligned(8), section(".limine_requests_end")))
@@ -1047,6 +1056,24 @@ void kernel_main(void) {
 #endif
             }
         }
+    }
+
+    if (!smp_initialize()) {
+        serial_write("DAWN-OS: WARNING: SMP multi-core initialization failed\n");
+    } else {
+        serial_write("DAWN-OS: SMP initialized; detected CPU count: ");
+        serial_write_u64(smp_cpu_count());
+        serial_write(", online: ");
+        serial_write_u64(smp_online_cpu_count());
+        serial_write("\n");
+#ifdef DAWN_KERNEL_TEST
+        if (!smp_self_test()) {
+            serial_write("DAWN-TEST: FAIL: SMP multi-core initialization and CPU state\n");
+            qemu_debug_exit(QEMU_TEST_FAIL);
+            cpu_halt_forever();
+        }
+        serial_write("DAWN-TEST: PASS: SMP multi-core detection, BSP initialization and AP boot\n");
+#endif
     }
 
     if (!scheduler_initialize()) {

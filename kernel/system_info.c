@@ -6,6 +6,7 @@
 #include "physical_memory.h"
 #include "storage_manager.h"
 #include "limine_requests.h"
+#include "smp.h"
 
 static const char not_available[] = "Not available";
 
@@ -95,6 +96,8 @@ bool dawn_system_info_refresh(struct dawn_system_info *out) {
     uint64_t ticks = 0ULL;
 
     if (out == NULL) return false;
+    out->cpu_count = smp_cpu_count();
+    out->online_cpu_count = smp_online_cpu_count();
     out->physical_memory_bytes = physical_memory_total_bytes();
     out->free_memory_bytes = physical_memory_free_bytes();
     out->timer_hz = apic_local_timer_calibrated_hz();
@@ -202,6 +205,8 @@ bool system_info_self_test(void) {
     char buffer[32];
     if (!dawn_system_info_refresh(&info)) return false;
     if (info.cpu_model[0] == '\0') return false;
+    if (info.cpu_count == 0U || info.online_cpu_count == 0U) return false;
+    if (info.online_cpu_count > info.cpu_count) return false;
     if (dawn_decimal_string(0ULL, buffer, sizeof(buffer)) != 1U) return false;
     if (buffer[0] != '0' || buffer[1] != '\0') return false;
     if (dawn_decimal_string(1024ULL, buffer, sizeof(buffer)) != 4U) return false;

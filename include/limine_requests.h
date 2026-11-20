@@ -44,6 +44,9 @@
 #define LIMINE_RSDP_REQUEST_ID \
     LIMINE_COMMON_MAGIC, 0xc5e77b6b397e7b43ULL, 0x27637845accdcf3cULL
 
+#define LIMINE_SMP_REQUEST_ID \
+    LIMINE_COMMON_MAGIC, 0x95a105da0e6f1a5aULL, 0xab206cc962285bcULL
+
 #define LIMINE_EFI_SYSTEM_TABLE_REQUEST_ID \
     LIMINE_COMMON_MAGIC, 0x5ceba5163eaaf6d6ULL, 0x0a6981610cf65fccULL
 
@@ -175,6 +178,31 @@ struct limine_rsdp_request {
 
 extern volatile struct limine_rsdp_request limine_rsdp_request;
 
+struct limine_smp_info {
+    uint32_t processor_id;
+    uint32_t lapic_id;
+    uint64_t reserved;
+    void (*goto_address)(struct limine_smp_info *);
+    uint64_t extra_argument;
+};
+
+struct limine_smp_response {
+    uint64_t revision;
+    uint32_t flags;
+    uint32_t bsp_lapic_id;
+    uint64_t cpu_count;
+    struct limine_smp_info **cpus;
+};
+
+struct limine_smp_request {
+    uint64_t id[4];
+    uint64_t revision;
+    struct limine_smp_response *response;
+    uint64_t flags;
+};
+
+extern volatile struct limine_smp_request limine_smp_request;
+
 struct limine_efi_system_table_response {
     uint64_t revision;
     void *address;
@@ -214,5 +242,11 @@ _Static_assert(sizeof(struct limine_efi_system_table_response) == 16U,
                "Limine EFI system table response ABI size mismatch");
 _Static_assert(sizeof(struct limine_efi_system_table_request) == 48U,
                "Limine EFI system table request ABI size mismatch");
+_Static_assert(sizeof(struct limine_smp_info) == 32U,
+               "Limine SMP info ABI size mismatch");
+_Static_assert(sizeof(struct limine_smp_response) == 32U,
+               "Limine SMP response ABI size mismatch");
+_Static_assert(sizeof(struct limine_smp_request) == 56U,
+               "Limine SMP request ABI size mismatch");
 
 #endif
