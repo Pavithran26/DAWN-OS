@@ -14,13 +14,21 @@
 #define SECURITY_MAX_USERS 16U
 #define SECURITY_MAX_AUDIT_LOGS 32U
 #define SECURITY_HASH_SIZE 32U
+#define SECURITY_PBKDF2_ITERATIONS 10000U
 
 /* Access modes (POSIX compatible) */
 #define SECURITY_ACCESS_READ    0x04U
 #define SECURITY_ACCESS_WRITE   0x02U
 #define SECURITY_ACCESS_EXECUTE 0x01U
 
-/* Custom secure digest for password hashing and authentication */
+/* Standard Cryptographic Primitives */
+void sha256(const void *data, size_t len, uint8_t digest[SECURITY_HASH_SIZE]);
+void hmac_sha256(const void *key, size_t key_len, const void *data, size_t data_len, uint8_t out[SECURITY_HASH_SIZE]);
+void pbkdf2_hmac_sha256(const char *password, size_t pass_len, const uint8_t *salt, size_t salt_len, uint32_t iterations, uint8_t out[SECURITY_HASH_SIZE]);
+uint32_t security_generate_salt(void);
+bool security_is_first_boot(void);
+
+/* PBKDF2-HMAC-SHA256 password hashing and authentication */
 void security_hash_password(const char *password, uint32_t salt, uint8_t digest[SECURITY_HASH_SIZE]);
 bool security_verify_password(const char *password, uint32_t salt, const uint8_t digest[SECURITY_HASH_SIZE]);
 
