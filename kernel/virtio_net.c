@@ -267,13 +267,17 @@ int virtio_net_send_packet(struct net_device *dev, const void *buf, size_t len) 
 
     /* Spin until packet is sent */
     uint16_t target_used = (uint16_t)(vnet_dev.last_tx_used + 1);
-    uint32_t timeout = 2000000;
+    uint32_t timeout = 5000000;
     while (vnet_dev.tx_used->idx != target_used && timeout > 0) {
         __asm__ volatile ("pause" ::: "memory");
         timeout--;
     }
+    if (vnet_dev.tx_used->idx != target_used) {
+        dbg_str("[VNET] TX timed out!\n");
+        return -1;
+    }
     vnet_dev.last_tx_used = vnet_dev.tx_used->idx;
-    return (int)len;
+    return 0;
 }
 
 int virtio_net_poll(struct net_device *dev) {
@@ -333,7 +337,7 @@ bool virtio_net_self_test(void) {
     }
 
     /* Poll for ARP reply */
-    uint32_t retries = 200000;
+    uint32_t retries = 5000000;
     while (retries > 0 && !net_arp_cache_lookup(gw_ip, NULL)) {
         net_poll();
         __asm__ volatile ("pause" ::: "memory");
@@ -353,7 +357,7 @@ bool virtio_net_self_test(void) {
     }
 
     /* Poll for ICMP Echo Reply */
-    retries = 200000;
+    retries = 5000000;
     while (retries > 0 && net_get_icmp_reply_count() == prev_replies) {
         net_poll();
         __asm__ volatile ("pause" ::: "memory");
