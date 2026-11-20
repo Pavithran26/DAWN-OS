@@ -246,7 +246,13 @@ static int64_t syscall_open(uint64_t user_path, uint64_t flags, uint64_t mode) {
 
     struct vfs_node *node = NULL;
     if (!vfs_resolve_path(path_buf, &node) || node == NULL) {
-        return -(int64_t)DAWN_ERRNO_ENOENT;
+        if ((flags & 0x0040U) != 0U) { /* DAWN_O_CREAT */
+            if (vfs_create(path_buf, VFS_FLAG_READ | VFS_FLAG_WRITE, &node) != 0 || node == NULL) {
+                return -(int64_t)DAWN_ERRNO_ENOENT;
+            }
+        } else {
+            return -(int64_t)DAWN_ERRNO_ENOENT;
+        }
     }
 
     uint32_t fd_flags = 0;

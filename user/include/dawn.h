@@ -36,6 +36,9 @@
 #define DAWN_O_RDONLY 0x0001U
 #define DAWN_O_WRONLY 0x0002U
 #define DAWN_O_RDWR   0x0003U
+#define DAWN_O_CREAT  0x0040U
+#define DAWN_O_TRUNC  0x0200U
+#define DAWN_O_APPEND 0x0400U
 
 #define DAWN_SEEK_SET 0
 #define DAWN_SEEK_CUR 1

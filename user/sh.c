@@ -11,6 +11,15 @@ static void cmd_help(void) {
     dawn_println("  cd <dir>        - Change working directory");
     dawn_println("  mkdir <dir>     - Create a directory");
     dawn_println("  rm <file>       - Remove a file");
+    dawn_println("  touch <file>    - Create an empty file");
+    dawn_println("  cp <src> <dst>  - Copy a file");
+    dawn_println("  head [-n N] <f> - Display first N lines of a file");
+    dawn_println("  tail [-n N] <f> - Display last N lines of a file");
+    dawn_println("  wc <file>       - Count lines, words, and bytes");
+    dawn_println("  uname [-a]      - Display operating system information");
+    dawn_println("  fetch           - Display system summary & emerald logo");
+    dawn_println("  ifconfig        - Display network interface configuration");
+    dawn_println("  ping <ip>       - Send ICMP echo requests");
     dawn_println("  date            - Show system UTC date and time");
     dawn_println("  uptime          - Show system uptime report");
     dawn_println("  pid             - Print shell process identifier");
@@ -194,6 +203,48 @@ static void cmd_mem(void) {
     }
 }
 
+static bool try_exec(const char *path, int argc, char *argv[]) {
+    int64_t fd = dawn_open(path, DAWN_O_RDONLY, 0);
+    if (fd < 0) return false;
+
+    struct dawn_posix_stat st;
+    if (dawn_stat(path, &st) < 0 || st.st_size <= 0 || st.st_size > 256 * 1024) {
+        dawn_close((uint64_t)fd);
+        return false;
+    }
+
+    void *image = dawn_malloc((size_t)st.st_size);
+    if (image == NULL) {
+        dawn_close((uint64_t)fd);
+        return false;
+    }
+
+    int64_t rd = dawn_read((uint64_t)fd, image, (uint64_t)st.st_size);
+    dawn_close((uint64_t)fd);
+    if (rd != st.st_size) {
+        dawn_free(image);
+        return false;
+    }
+
+    const char *args[18];
+    int a = 0;
+    args[a++] = path;
+    for (int i = 1; i < argc && a < 16; i++) {
+        args[a++] = argv[i];
+    }
+    args[a] = NULL;
+
+    int64_t pid = dawn_spawn(image, (uint64_t)st.st_size, (const char *const *)args, NULL);
+    dawn_free(image);
+
+    if (pid > 0) {
+        int64_t status = 0;
+        dawn_wait(pid, &status);
+        return true;
+    }
+    return false;
+}
+
 int main(int argc, char *argv[], char *envp[]) {
     (void)argc;
     (void)argv;
@@ -259,13 +310,33 @@ int main(int argc, char *argv[], char *envp[]) {
             cmd_kill(token_count > 1 ? tokens[1] : NULL);
         } else if (dawn_strcmp(cmd, "mem") == 0) {
             cmd_mem();
+        } else if (dawn_strcmp(cmd, "uname") == 0) {
+            dawn_println("DAWN-OS dawn-kernel 1.0.0-emerald x86_64 GNU/DAWN");
         } else if (dawn_strcmp(cmd, "clear") == 0) {
             dawn_print("\033[2J\033[H");
         } else if (dawn_strcmp(cmd, "exit") == 0) {
             dawn_println("Exiting shell session.");
             break;
         } else {
-            dawn_printf("dsh: command not found: %s\n", cmd);
+            /* Try executing binary from /bin/<cmd>, /bin/<cmd>.elf, or direct path */
+            char bin_path[128];
+            bool executed = false;
+
+            if (dawn_strchr(cmd, '/') != NULL) {
+                executed = try_exec(cmd, token_count, tokens);
+            }
+            if (!executed) {
+                dawn_snprintf(bin_path, sizeof(bin_path), "/bin/%s.elf", cmd);
+                executed = try_exec(bin_path, token_count, tokens);
+            }
+            if (!executed) {
+                dawn_snprintf(bin_path, sizeof(bin_path), "/bin/%s", cmd);
+                executed = try_exec(bin_path, token_count, tokens);
+            }
+
+            if (!executed) {
+                dawn_printf("dsh: command not found: %s\n", cmd);
+            }
         }
     }
 

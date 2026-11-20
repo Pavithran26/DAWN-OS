@@ -34,7 +34,10 @@ USER_BINARIES = build/user/init.elf build/user/sh.elf build/user/echo.elf \
                 build/user/cat.elf build/user/ls.elf build/user/ld_dawn.elf \
                 build/user/gui_demo.elf build/user/pwd.elf build/user/mkdir.elf \
                 build/user/rm.elf build/user/date.elf build/user/kill.elf \
-                build/user/uptime.elf
+                build/user/uptime.elf build/user/uname.elf build/user/touch.elf \
+                build/user/cp.elf build/user/head.elf build/user/tail.elf \
+                build/user/wc.elf build/user/clear.elf build/user/fetch.elf \
+                build/user/ifconfig.elf build/user/ping.elf
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all metadata user-bins
 
@@ -426,6 +429,46 @@ build/user/kill.elf: build/user/crt0.o user/kill.c build/user/libdawn.o user/lin
 build/user/uptime.elf: build/user/crt0.o user/uptime.c build/user/libdawn.o user/linker.ld | build/user
 	$(CC) $(USER_CFLAGS) -c user/uptime.c -o build/user/uptime.o
 	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/uptime.o build/user/libdawn.o
+
+build/user/uname.elf: build/user/crt0.o user/uname.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/uname.c -o build/user/uname.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/uname.o build/user/libdawn.o
+
+build/user/touch.elf: build/user/crt0.o user/touch.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/touch.c -o build/user/touch.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/touch.o build/user/libdawn.o
+
+build/user/cp.elf: build/user/crt0.o user/cp.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/cp.c -o build/user/cp.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/cp.o build/user/libdawn.o
+
+build/user/head.elf: build/user/crt0.o user/head.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/head.c -o build/user/head.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/head.o build/user/libdawn.o
+
+build/user/tail.elf: build/user/crt0.o user/tail.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/tail.c -o build/user/tail.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/tail.o build/user/libdawn.o
+
+build/user/wc.elf: build/user/crt0.o user/wc.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/wc.c -o build/user/wc.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/wc.o build/user/libdawn.o
+
+build/user/clear.elf: build/user/crt0.o user/clear.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/clear.c -o build/user/clear.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/clear.o build/user/libdawn.o
+
+build/user/fetch.elf: build/user/crt0.o user/fetch.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/fetch.c -o build/user/fetch.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/fetch.o build/user/libdawn.o
+
+build/user/ifconfig.elf: build/user/crt0.o user/ifconfig.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/ifconfig.c -o build/user/ifconfig.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/ifconfig.o build/user/libdawn.o
+
+build/user/ping.elf: build/user/crt0.o user/ping.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/ping.c -o build/user/ping.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/ping.o build/user/libdawn.o
 
 user-bins: $(USER_BINARIES)
 
