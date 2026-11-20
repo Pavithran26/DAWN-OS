@@ -41,6 +41,8 @@
 #define DAWN_SEEK_CUR 1
 #define DAWN_SEEK_END 2
 
+#ifndef DAWN_POSIX_STAT_DEFINED
+#define DAWN_POSIX_STAT_DEFINED
 struct dawn_posix_stat {
     uint64_t st_dev;
     uint64_t st_ino;
@@ -56,6 +58,7 @@ struct dawn_posix_stat {
     int64_t  st_mtime;
     int64_t  st_ctime;
 };
+#endif
 
 struct dawn_dirent {
     uint64_t d_ino;

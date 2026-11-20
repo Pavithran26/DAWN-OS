@@ -14,6 +14,8 @@ typedef uint32_t mode_t;
 typedef int64_t  off_t;
 typedef int64_t  time_t;
 
+#ifndef DAWN_POSIX_STAT_DEFINED
+#define DAWN_POSIX_STAT_DEFINED
 struct dawn_posix_stat {
     uint64_t st_dev;
     uint64_t st_ino;
@@ -29,6 +31,7 @@ struct dawn_posix_stat {
     time_t   st_mtime;
     time_t   st_ctime;
 };
+#endif
 
 #define S_IFMT   0170000
 #define S_IFREG  0100000
