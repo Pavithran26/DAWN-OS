@@ -367,6 +367,7 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
 /* Self-test */
 bool wm_self_test(void) {
     if (!wm_initialize()) return false;
+    size_t prev_count = wm_get_window_count();
 
     struct window *w1 = wm_create_window("Terminal", 50, 50, 400, 300, WM_FLAG_NONE);
     if (w1 == NULL) return false;
@@ -402,7 +403,7 @@ bool wm_self_test(void) {
     /* Destroy windows */
     if (wm_destroy_window(w1->id) != 0) return false;
     if (wm_destroy_window(w2->id) != 0) return false;
-    if (wm_get_window_count() != 0) return false;
+    if (wm_get_window_count() != prev_count) return false;
 
     return true;
 }
