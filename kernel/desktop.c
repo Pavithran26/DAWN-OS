@@ -326,6 +326,10 @@ void desktop_handle_input_event(const struct input_event *event) {
 void desktop_render(struct gfx_surface *surf) {
     if (surf == NULL) return;
 
+    /* Keep desktop input handling and boundaries synchronized with surface resolution */
+    state.screen_width = surf->width;
+    state.screen_height = surf->height;
+
     /* Render windows, background, and cursor via window manager */
     wm_composite(surf, state.mouse_x, state.mouse_y);
 
@@ -358,11 +362,19 @@ void desktop_render(struct gfx_surface *surf) {
     gfx_draw_string(surf, 16, 488, "Help", GFX_COLOR_TEXT_PRIMARY);
 
     /* Render Taskbar at bottom */
-    uint32_t tb_y = surf->height - DESKTOP_TASKBAR_HEIGHT;
-    gfx_draw_glass_panel(surf, 0, tb_y, surf->width, DESKTOP_TASKBAR_HEIGHT, GFX_COLOR_GLASS_PANEL);
+    uint32_t tb_y = (surf->height > DESKTOP_TASKBAR_HEIGHT) ? (surf->height - DESKTOP_TASKBAR_HEIGHT) : 0U;
 
-    /* Start Button with Emerald Logo */
+    /* High-contrast solid dark emerald base panel */
+    gfx_draw_rect_filled(surf, 0, tb_y, surf->width, DESKTOP_TASKBAR_HEIGHT, GFX_COLOR_EMERALD_BASE);
+    /* Frosted glass overlay */
+    gfx_draw_glass_panel(surf, 0, tb_y, surf->width, DESKTOP_TASKBAR_HEIGHT, GFX_COLOR_GLASS_SURFACE);
+
+    /* Glowing specular neon emerald accent line along the top edge of taskbar */
+    gfx_draw_line(surf, 0, (int32_t)tb_y, (int32_t)(surf->width - 1), (int32_t)tb_y, GFX_COLOR_EMERALD_ACCENT);
+
+    /* Start Button with Emerald Logo and border */
     gfx_draw_glass_panel(surf, 8, tb_y + 8, 36, 32, GFX_COLOR_EMERALD_PRIMARY);
+    gfx_draw_rect_outline(surf, 8, tb_y + 8, 36, 32, GFX_COLOR_EMERALD_ACCENT);
     gfx_draw_icon(surf, 18, tb_y + 16, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_HIGHLIGHT);
 
     /* Window Switcher Tabs */
@@ -373,6 +385,7 @@ void desktop_render(struct gfx_surface *surf) {
         if (win != NULL) {
             uint32_t tab_color = win->focused ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
             gfx_draw_glass_panel(surf, tab_x, tb_y + 8, 120, 32, tab_color);
+            gfx_draw_rect_outline(surf, tab_x, tb_y + 8, 120, 32, win->focused ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_GLASS_BORDER);
             gfx_draw_string(surf, tab_x + 8, tb_y + 16, win->title, GFX_COLOR_TEXT_PRIMARY);
             if (win->focused) {
                 /* Glowing bottom underline */
@@ -382,8 +395,12 @@ void desktop_render(struct gfx_surface *surf) {
         tab_x += 128;
     }
 
-    /* System Tray with dynamic RTC clock */
-    uint32_t tray_x = surf->width - 180;
+    /* System Tray with dynamic RTC clock in a dedicated glass pill container */
+    uint32_t tray_w = 176U;
+    uint32_t tray_x = (surf->width > tray_w + 8U) ? (surf->width - tray_w - 8U) : 0U;
+    gfx_draw_glass_panel(surf, tray_x, tb_y + 8, tray_w, 32, GFX_COLOR_EMERALD_SURFACE);
+    gfx_draw_rect_outline(surf, tray_x, tb_y + 8, tray_w, 32, GFX_COLOR_EMERALD_ACCENT);
+
     struct rtc_datetime rtc_now;
     char clock_str[32];
     if (rtc_get_datetime(&rtc_now)) {
@@ -399,7 +416,7 @@ void desktop_render(struct gfx_surface *surf) {
     } else {
         str_copy(clock_str, "[NET] [VOL] 12:00", sizeof(clock_str));
     }
-    gfx_draw_string(surf, tray_x, tb_y + 16, clock_str, GFX_COLOR_TEXT_SECONDARY);
+    gfx_draw_string(surf, tray_x + 8, tb_y + 16, clock_str, GFX_COLOR_TEXT_PRIMARY);
 
     /* Developer footer from the central metadata source. The domain is
      * underlined and click-handled above. */
@@ -561,6 +578,18 @@ bool desktop_self_test(void) {
     /* Verify taskbar was drawn (check bottom pixels not all zero) */
     uint32_t tb_pixel = test_surf.buffer[(480 - 10) * 640 + 20];
     if (tb_pixel == 0) return false;
+
+    /* Verify top neon accent line was drawn at y = 480 - 48 = 432 */
+    uint32_t top_line_pixel = test_surf.buffer[432 * 640 + 10];
+    if (top_line_pixel != GFX_COLOR_EMERALD_ACCENT) return false;
+
+    /* Verify synchronized screen dimensions */
+    if (state.screen_width != 640 || state.screen_height != 480) return false;
+
+    /* Verify system tray container was drawn */
+    uint32_t tray_x = 640U - 176U - 8U;
+    uint32_t tray_pixel = test_surf.buffer[(432 + 8) * 640 + tray_x + 10];
+    if (tray_pixel == 0) return false;
 
     return true;
 }

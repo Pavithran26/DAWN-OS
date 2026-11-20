@@ -113,14 +113,18 @@ void terminal_render(struct terminal *term) {
         .pitch = TERM_PIXEL_WIDTH * sizeof(uint32_t)
     };
 
+    gfx_clear(&surf, GFX_COLOR_TRANSPARENT);
+
     for (uint32_t r = 0; r < TERM_ROWS; r++) {
         for (uint32_t c = 0; c < TERM_COLS; c++) {
             struct term_cell cell = term->grid[r][c];
             uint32_t px = c * 8U;
             uint32_t py = r * 16U;
 
-            /* Draw background block */
-            gfx_draw_rect_filled(&surf, px, py, 8, 16, cell.bg);
+            /* Draw background block only if cell background is not transparent */
+            if ((cell.bg >> 24) != 0U) {
+                gfx_draw_rect_filled(&surf, px, py, 8, 16, cell.bg);
+            }
 
             /* Draw glyph */
             if (cell.ch != ' ') {
@@ -210,7 +214,7 @@ bool terminal_initialize(void) {
     struct terminal *term = &main_terminal;
     *term = (struct terminal){0};
     term->current_fg = GFX_COLOR_TEXT_PRIMARY;
-    term->current_bg = GFX_COLOR_EMERALD_DEEP;
+    term->current_bg = GFX_COLOR_TRANSPARENT;
     term->cursor_visible = true;
 
     shell_initialize(&term->shell);
@@ -256,6 +260,11 @@ bool terminal_self_test(void) {
 
     /* Render test */
     terminal_render(term);
+
+    /* Verify transparent background to eliminate dark box behind text */
+    if (term->current_bg != GFX_COLOR_TRANSPARENT) return false;
+    uint32_t last_cell_pixel = term->render_buffer[(TERM_PIXEL_HEIGHT - 1U) * TERM_PIXEL_WIDTH + (TERM_PIXEL_WIDTH - 1U)];
+    if ((last_cell_pixel >> 24) != 0U) return false;
 
     /* Simulate Enter key to execute echo */
     struct key_event k_e = {.keycode = 0x12, .ascii = 'e', .pressed = true};

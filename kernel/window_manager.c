@@ -161,10 +161,14 @@ int wm_maximize_window(uint32_t id) {
         win->saved_width = win->width;
         win->saved_height = win->height;
 
+        struct gfx_surface *fb = gfx_get_framebuffer();
+        uint32_t sw = (fb && fb->width > 0) ? fb->width : 1024U;
+        uint32_t sh = (fb && fb->height > 0) ? fb->height : 768U;
+
         win->x = 0;
         win->y = 0;
-        win->width = 1024;
-        win->height = 768 - 48; /* Save taskbar height */
+        win->width = sw;
+        win->height = (sh > 48U) ? (sh - 48U) : sh; /* Save taskbar height */
         win->maximized = true;
     } else {
         win->x = win->saved_x;
@@ -340,7 +344,13 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
             for (uint32_t r = 0; r < ch; r++) {
                 uint32_t *src_row = win->client_buffer + (r * (win->client_pitch / 4U));
                 for (uint32_t c = 0; c < cw; c++) {
-                    gfx_put_pixel(surf, cx + c, cy + r, src_row[c]);
+                    uint32_t pixel = src_row[c];
+                    uint32_t a = (pixel >> 24) & 0xFFU;
+                    if (a == 255U) {
+                        gfx_put_pixel(surf, cx + c, cy + r, pixel);
+                    } else if (a > 0U) {
+                        gfx_blend_pixel(surf, cx + c, cy + r, pixel);
+                    }
                 }
             }
         } else {

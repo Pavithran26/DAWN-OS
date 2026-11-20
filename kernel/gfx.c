@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "gfx.h"
 
-#define DEFAULT_FB_WIDTH  1024U
-#define DEFAULT_FB_HEIGHT 768U
+#define DEFAULT_FB_WIDTH  1280U
+#define DEFAULT_FB_HEIGHT 800U
 
 static uint32_t backbuffer_storage[DEFAULT_FB_WIDTH * DEFAULT_FB_HEIGHT];
 static struct gfx_surface fb_surface = {0};
@@ -158,6 +158,16 @@ void gfx_flip(void) {
         uint32_t *dst_line = fb_surface.buffer + (y * (fb_surface.pitch / 4U));
         for (uint32_t x = 0; x < w; x++) {
             dst_line[x] = src_line[x];
+        }
+    }
+}
+
+void gfx_clear(struct gfx_surface *surf, uint32_t color) {
+    if (surf == NULL || surf->buffer == NULL) return;
+    for (uint32_t y = 0; y < surf->height; y++) {
+        uint32_t *line = &surf->buffer[y * (surf->pitch / 4U)];
+        for (uint32_t x = 0; x < surf->width; x++) {
+            line[x] = color;
         }
     }
 }
