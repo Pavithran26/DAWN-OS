@@ -144,8 +144,9 @@ bool dawn_metadata_initialize(void) {
         DAWN_META_PROJECT_NAME[0] == '\0') return false;
     if (!local_semver_valid(DAWN_META_OS_VERSION)) return false;
     if (DAWN_META_OS_ARCHITECTURE[0] != 'x' || DAWN_META_OS_ARCHITECTURE[1] != '8' ||
-        DAWN_META_OS_ARCHITECTURE[2] != '6' || DAWN_META_OS_ARCHITECTURE[3] != '4' ||
-        DAWN_META_OS_ARCHITECTURE[4] != '\0') return false;
+        DAWN_META_OS_ARCHITECTURE[2] != '6' || DAWN_META_OS_ARCHITECTURE[3] != '_' ||
+        DAWN_META_OS_ARCHITECTURE[4] != '6' || DAWN_META_OS_ARCHITECTURE[5] != '4' ||
+        DAWN_META_OS_ARCHITECTURE[6] != '\0') return false;
     if (!dawn_url_is_valid(DAWN_META_DEVELOPER_WEBSITE) ||
         !dawn_url_is_valid(DAWN_META_DEVELOPER_GITHUB) ||
         !dawn_url_is_valid(DAWN_META_REPOSITORY_URL) ||
