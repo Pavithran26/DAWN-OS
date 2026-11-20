@@ -507,6 +507,12 @@ bool desktop_self_test(void) {
         desktop_handle_input_event(&click_start);
         if (!state.launcher_open) return false;
 
+        struct input_event mouse_release = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = { .x = 20, .y = (int32_t)(tb_y + 16), .left_button = false }
+        };
+        desktop_handle_input_event(&mouse_release);
+
         /* Click About DAWN-OS launcher item (y = tb_y - 290 + 200 = tb_y - 90) */
         struct input_event click_about = {
             .type = INPUT_EVENT_MOUSE,
@@ -517,6 +523,10 @@ bool desktop_self_test(void) {
         if (settings_window_get_id() < 0) return false;
         settings_window_close();
 
+        mouse_release.mouse.x = 50;
+        mouse_release.mouse.y = (int32_t)(tb_y - 90);
+        desktop_handle_input_event(&mouse_release);
+
         /* Click desktop icon "This PC" (x = 30, y = 35) */
         struct input_event click_thispc = {
             .type = INPUT_EVENT_MOUSE,
@@ -525,6 +535,10 @@ bool desktop_self_test(void) {
         desktop_handle_input_event(&click_thispc);
         if (settings_window_get_id() < 0) return false;
         settings_window_close();
+
+        mouse_release.mouse.x = 30;
+        mouse_release.mouse.y = 35;
+        desktop_handle_input_event(&mouse_release);
     }
 
     /* Render test into a 640x480 test surface */
