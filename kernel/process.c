@@ -844,7 +844,7 @@ bool process_spawn(const void *image,size_t image_size,
         return false;
     }
 
-    if (!kernel_thread_create(NULL,NULL,&thread_id)) {
+    if (!kernel_thread_create_user(&thread_id)) {
         (void)process_mark_exited(child_pid);
         (void)process_reap(child_pid);
         return false;

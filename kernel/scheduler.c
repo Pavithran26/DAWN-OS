@@ -205,7 +205,8 @@ static struct kernel_thread *find_ready_thread(
     for (uint64_t attempt=0ULL;attempt<KERNEL_THREAD_MAX;attempt++) {
         const uint64_t index=(ready_cursor+attempt)%KERNEL_THREAD_MAX;
         struct kernel_thread *candidate=&thread_pool[(size_t)index];
-        if (candidate!=exclude && candidate->state==THREAD_READY) {
+        if (candidate!=exclude && candidate->state==THREAD_READY &&
+            (candidate->entry!=NULL || candidate->process_id!=0ULL)) {
             ready_cursor=(index+1ULL)%KERNEL_THREAD_MAX;
             return candidate;
         }
@@ -286,7 +287,7 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
                           uint64_t *thread_id) {
     uint64_t saved_flags=0ULL;
     struct kernel_thread *thread=NULL;
-    if (!initialized || (read_cs()&3U)!=0U) return false;
+    if (!initialized || entry==NULL || (read_cs()&3U)!=0U) return false;
     saved_flags=read_rflags();
     disable_interrupts();
     for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
@@ -317,6 +318,44 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
     increment_saturated(&counters.threads_created);
     increment_saturated(&counters.active_threads);
     if (thread_id!=NULL) *thread_id=thread->id;
+    restore_interrupt_flag(saved_flags);
+    return true;
+}
+
+bool kernel_thread_create_user(uint64_t *thread_id) {
+    uint64_t saved_flags=0ULL;
+    struct kernel_thread *thread=NULL;
+    if (!initialized || thread_id==NULL || (read_cs()&3U)!=0U) return false;
+    saved_flags=read_rflags();
+    disable_interrupts();
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        if (thread_pool[i].state==THREAD_FREE ||
+            thread_pool[i].state==THREAD_DEAD) {
+            thread=&thread_pool[i];
+            break;
+        }
+    }
+    if (thread==NULL || next_thread_id==0ULL ||
+        next_thread_id==UINT64_MAX) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    if (thread->state==THREAD_DEAD && !thread_guard_valid(thread)) {
+        restore_interrupt_flag(saved_flags);
+        return false;
+    }
+    thread_guard_initialize(thread);
+    thread->entry=NULL;
+    thread->argument=NULL;
+    thread->id=next_thread_id++;
+    thread->process_id=0ULL;
+    thread->wait_child_id=0;
+    thread->wait_status_address=0ULL;
+    thread->state=THREAD_READY;
+    thread_frame_initialize(thread);
+    increment_saturated(&counters.threads_created);
+    increment_saturated(&counters.active_threads);
+    *thread_id=thread->id;
     restore_interrupt_flag(saved_flags);
     return true;
 }
@@ -865,7 +904,8 @@ bool scheduler_self_test(void) {
     uint64_t capacity_ids[KERNEL_THREAD_MAX]={0ULL};
     uint64_t reused_id=0ULL;
     if (!initialized || current_thread!=&bootstrap_thread || scheduler_running ||
-        kernel_thread_create(NULL,NULL,NULL)) return false;
+        kernel_thread_create(NULL,NULL,NULL) ||
+        kernel_thread_create_user(NULL)) return false;
     scheduler_test_counts[0]=0ULL;
     scheduler_test_counts[1]=0ULL;
     if (!kernel_thread_create(scheduler_test_worker,(void *)(uintptr_t)0U,&first_id) ||

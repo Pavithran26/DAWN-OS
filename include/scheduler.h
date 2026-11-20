@@ -23,6 +23,7 @@ bool scheduler_is_initialized(void);
 bool scheduler_discard_process_threads(uint64_t process_id);
 bool kernel_thread_create(kernel_thread_entry entry, void *argument,
                           uint64_t *thread_id);
+bool kernel_thread_create_user(uint64_t *thread_id);
 /* Bind one READY process to a not-yet-running kernel thread. */
 bool kernel_thread_bind_process(uint64_t thread_id, uint64_t process_id);
 /* Configure a bound thread's first IRETQ frame to enter a mapped CPL3 context. */
