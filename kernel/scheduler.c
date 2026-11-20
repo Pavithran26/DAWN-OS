@@ -31,6 +31,7 @@ struct kernel_thread {
     enum thread_state state;
     int64_t wait_child_id;
     uint64_t wait_status_address;
+    bool waiting;
     uint8_t stack[KERNEL_THREAD_STACK_SIZE] __attribute__((aligned(16)));
 };
 
@@ -243,6 +244,7 @@ bool scheduler_initialize(void) {
         thread_pool[i].state=THREAD_FREE;
         thread_pool[i].wait_child_id=0;
         thread_pool[i].wait_status_address=0ULL;
+        thread_pool[i].waiting=false;
     }
     bootstrap_thread.saved_frame=NULL;
     bootstrap_thread.entry=NULL;
@@ -251,6 +253,7 @@ bool scheduler_initialize(void) {
     bootstrap_thread.state=THREAD_RUNNING;
     bootstrap_thread.wait_child_id=0;
     bootstrap_thread.wait_status_address=0ULL;
+    bootstrap_thread.waiting=false;
     ready_cursor=0ULL;
     next_thread_id=1ULL;
     scheduler_running=false;
@@ -277,6 +280,9 @@ bool scheduler_discard_process_threads(uint64_t process_id) {
             thread->state!=THREAD_DEAD) {
             thread->state=THREAD_DEAD;
             thread->process_id=0ULL;
+            thread->waiting=false;
+            thread->wait_child_id=0;
+            thread->wait_status_address=0ULL;
             if (counters.active_threads>0ULL) --counters.active_threads;
             increment_saturated(&counters.threads_exited);
         }
@@ -315,6 +321,7 @@ bool kernel_thread_create(kernel_thread_entry entry,void *argument,
     thread->process_id=0ULL;
     thread->wait_child_id=0;
     thread->wait_status_address=0ULL;
+    thread->waiting=false;
     thread->state=THREAD_READY;
     thread_frame_initialize(thread);
     increment_saturated(&counters.threads_created);
@@ -353,6 +360,7 @@ bool kernel_thread_create_user(uint64_t *thread_id) {
     thread->process_id=0ULL;
     thread->wait_child_id=0;
     thread->wait_status_address=0ULL;
+    thread->waiting=false;
     thread->state=THREAD_READY;
     thread_frame_initialize(thread);
     increment_saturated(&counters.threads_created);
@@ -485,7 +493,7 @@ static void scheduler_switch_process_context(
                 cpu_halt_forever();
             for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
                 struct kernel_thread *t=&thread_pool[i];
-                if (t->state!=THREAD_FREE && t->state!=THREAD_DEAD && t->process_id!=0ULL) {
+                if (t->waiting && t->process_id!=0ULL) {
                     if (t->wait_child_id<=0 || (uint64_t)t->wait_child_id==outgoing_id) {
                         struct process_info child_info={0};
                         if (process_get_info(outgoing_id,&child_info) && child_info.parent_id==t->process_id) {
@@ -496,8 +504,11 @@ static void scheduler_switch_process_context(
                                 else
                                     t->saved_frame->rax=(uint64_t)-(int64_t)DAWN_ERRNO_ECHILD;
                             }
+                            t->waiting=false;
                             t->wait_child_id=0;
                             t->wait_status_address=0ULL;
+                            if (t->state==THREAD_BLOCKED)
+                                t->state=THREAD_READY;
                             break;
                         }
                     }
@@ -593,7 +604,7 @@ struct interrupt_frame *scheduler_user_exit(
         if (process_get_info(self->process_id,&child_info) && child_info.parent_id!=0ULL) {
             for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
                 struct kernel_thread *waiter=&thread_pool[i];
-                if (waiter->state==THREAD_BLOCKED && waiter->process_id==child_info.parent_id) {
+                if (waiter->waiting && waiter->state==THREAD_BLOCKED && waiter->process_id==child_info.parent_id) {
                     if (waiter->wait_child_id<=0 || (uint64_t)waiter->wait_child_id==self->process_id) {
                         waiter->state=THREAD_READY;
                         break;
@@ -677,6 +688,7 @@ struct interrupt_frame *scheduler_user_wait(
         return frame;
     }
 
+    self->waiting=true;
     self->wait_child_id=target_child;
     self->wait_status_address=status_address;
     self->state=THREAD_BLOCKED;
