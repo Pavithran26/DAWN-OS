@@ -119,41 +119,10 @@ static uint16_t read_cs(void) {
     __asm__ volatile ("mov %%cs, %0" : "=r"(value));
     return value;
 }
-static inline void sched_serial_outb(uint8_t val) {
-    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"((uint16_t)0x3f8U));
-}
-static void sched_serial_print(const char *s) {
-    while (*s != '\0') {
-        if (*s == '\n') sched_serial_outb((uint8_t)'\r');
-        sched_serial_outb((uint8_t)*s);
-        ++s;
-    }
-}
-static void sched_serial_print_u64(uint64_t val) {
-    char buf[24];
-    size_t i = 0;
-    if (val == 0ULL) {
-        sched_serial_outb((uint8_t)'0');
-        return;
-    }
-    while (val > 0ULL) {
-        buf[i++] = (char)('0' + (val % 10ULL));
-        val /= 10ULL;
-    }
-    while (i > 0U) {
-        sched_serial_outb((uint8_t)buf[--i]);
-    }
-}
-static _Noreturn void cpu_halt_forever_loc(const char *file, int line) {
+static _Noreturn void cpu_halt_forever(void) {
     disable_interrupts();
-    sched_serial_print("\nDAWN-HALT: ");
-    sched_serial_print(file);
-    sched_serial_print(":");
-    sched_serial_print_u64((uint64_t)line);
-    sched_serial_print("\n");
     for (;;) __asm__ volatile ("hlt");
 }
-#define cpu_halt_forever() cpu_halt_forever_loc(__FILE__, __LINE__)
 static void increment_saturated(uint64_t *value) {
     if (value!=NULL && *value!=UINT64_MAX) ++(*value);
 }
@@ -175,8 +144,8 @@ static void thread_frame_initialize(struct kernel_thread *thread) {
     if (thread==NULL) return;
 
     stack_end=(uintptr_t)(thread->stack+KERNEL_THREAD_STACK_SIZE);
-    /* IRETQ consumes RIP/CS/RFLAGS only for same-CPL returns. Leave the
-     * post-IRET stack at SysV function-entry alignment (RSP % 16 == 8). */
+    /* In 64-bit mode, IRETQ unconditionally pops RIP, CS, RFLAGS, RSP, and SS.
+     * Leave the post-IRET stack at SysV function-entry alignment (RSP % 16 == 8). */
     initial_rsp=(stack_end&~(uintptr_t)0xfU)-8U;
     frame=(struct interrupt_frame *)(uintptr_t)(initial_rsp-sizeof(*frame));
     if ((uintptr_t)frame<(uintptr_t)thread->stack+KERNEL_THREAD_GUARD_SIZE)
@@ -186,6 +155,8 @@ static void thread_frame_initialize(struct kernel_thread *thread) {
     frame->rip=(uint64_t)(uintptr_t)kernel_thread_bootstrap;
     frame->cs=(uint64_t)kernel_code_selector;
     frame->rflags=INITIAL_THREAD_RFLAGS;
+    frame->user_rsp=(uint64_t)initial_rsp;
+    frame->user_ss=(uint64_t)DAWN_KERNEL_DATA_SELECTOR;
     thread->saved_frame=frame;
 }
 static bool thread_frame_valid(const struct kernel_thread *thread,
@@ -934,31 +905,25 @@ bool scheduler_self_test(void) {
     uint64_t first_id=0ULL,second_id=0ULL;
     uint64_t capacity_ids[KERNEL_THREAD_MAX]={0ULL};
     uint64_t reused_id=0ULL;
-    sched_serial_print("SST: 1\n");
     if (!initialized || current_thread!=&bootstrap_thread || scheduler_running ||
         kernel_thread_create(NULL,NULL,NULL) ||
         kernel_thread_create_user(NULL)) return false;
-    sched_serial_print("SST: 2\n");
     scheduler_test_counts[0]=0ULL;
     scheduler_test_counts[1]=0ULL;
     if (!kernel_thread_create(scheduler_test_worker,(void *)(uintptr_t)0U,&first_id) ||
         !kernel_thread_create(scheduler_test_worker,(void *)(uintptr_t)1U,&second_id) ||
-        first_id==0ULL || second_id==0ULL || first_id==second_id) return false;
-    sched_serial_print("SST: 3\n");
-    if (!scheduler_run_until_idle()) return false;
-    sched_serial_print("SST: 4\n");
+        first_id==0ULL || second_id==0ULL || first_id==second_id ||
+        !scheduler_run_until_idle()) return false;
     scheduler_get_stats(&stats);
     if (scheduler_test_counts[0]!=4ULL || scheduler_test_counts[1]!=4ULL ||
         stats.threads_created!=2ULL || stats.threads_exited!=2ULL ||
         stats.active_threads!=0ULL || stats.voluntary_yields<8ULL ||
         stats.context_switches<4ULL) return false;
-    sched_serial_print("SST: 5\n");
     for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
         if (thread_pool[i].state==THREAD_DEAD &&
             !thread_guard_valid(&thread_pool[i])) return false;
     }
 
-    sched_serial_print("SST: 6\n");
     /* Fill every slot, reject overflow, then verify DEAD slots can be reused. */
     for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
         if (!kernel_thread_create(scheduler_test_noop_worker,NULL,
@@ -968,24 +933,18 @@ bool scheduler_self_test(void) {
             if (capacity_ids[previous]==capacity_ids[i]) return false;
         }
     }
-    sched_serial_print("SST: 7\n");
-    if (kernel_thread_create(scheduler_test_noop_worker,NULL,NULL)) return false;
-    sched_serial_print("SST: 8\n");
-    if (!scheduler_run_until_idle()) return false;
-    sched_serial_print("SST: 9\n");
+    if (kernel_thread_create(scheduler_test_noop_worker,NULL,NULL) ||
+        !scheduler_run_until_idle()) return false;
     scheduler_get_stats(&stats);
     if (stats.threads_created!=10ULL || stats.threads_exited!=10ULL ||
         stats.active_threads!=0ULL) return false;
 
-    sched_serial_print("SST: 10\n");
     if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&reused_id) ||
         reused_id==0ULL || reused_id<=capacity_ids[KERNEL_THREAD_MAX-1U] ||
         !scheduler_run_until_idle()) return false;
-    sched_serial_print("SST: 11\n");
     scheduler_get_stats(&stats);
     if (stats.threads_created!=11ULL || stats.threads_exited!=11ULL ||
         stats.active_threads!=0ULL) return false;
-    sched_serial_print("SST: done\n");
     return true;
 }
 
