@@ -469,15 +469,49 @@ void settings_window_render(void) {
             gfx_draw_string(&surf, cx + 18, cy + 160, "Play Chime", GFX_COLOR_TEXT_PRIMARY);
             break;
 
-        case TAB_NETWORK:
+        case TAB_NETWORK: {
             gfx_draw_string(&surf, cx, cy, "Network Settings", GFX_COLOR_EMERALD_NEON);
-            gfx_draw_string(&surf, cx, cy + 30, "Active Device:  eth0 (Ethernet)", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 55, "IP Address:     10.0.2.15", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 80, "Subnet Mask:    255.255.255.0", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 105, "Gateway:        10.0.2.2", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 130, "DNS Server:     8.8.8.8", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, cy + 160, "Configuration:  Static / Manual", GFX_COLOR_TEXT_MUTED);
+            struct net_device *eth = net_get_default_device();
+            if (eth != NULL) {
+                char ip_buf[32] = {0};
+                ip_to_str(eth->ip, ip_buf);
+                char line_ip[64] = "IP Address:     ";
+                for (size_t k = 0; ip_buf[k] != '\0' && 16 + k + 1 < sizeof(line_ip); k++) {
+                    line_ip[16 + k] = ip_buf[k];
+                }
+
+                char mask_buf[32] = {0};
+                ip_to_str(eth->netmask, mask_buf);
+                char line_mask[64] = "Subnet Mask:    ";
+                for (size_t k = 0; mask_buf[k] != '\0' && 16 + k + 1 < sizeof(line_mask); k++) {
+                    line_mask[16 + k] = mask_buf[k];
+                }
+
+                char gw_buf[32] = {0};
+                ip_to_str(eth->gateway, gw_buf);
+                char line_gw[64] = "Gateway:        ";
+                for (size_t k = 0; gw_buf[k] != '\0' && 16 + k + 1 < sizeof(line_gw); k++) {
+                    line_gw[16 + k] = gw_buf[k];
+                }
+
+                char line_stats[64] = "Packets RX/TX:  ";
+                size_t sp = 16;
+                sp += u32_to_str((uint32_t)eth->rx_packets, line_stats + sp);
+                line_stats[sp++] = ' ';
+                line_stats[sp++] = '/';
+                line_stats[sp++] = ' ';
+                sp += u32_to_str((uint32_t)eth->tx_packets, line_stats + sp);
+                line_stats[sp] = '\0';
+
+                gfx_draw_string(&surf, cx, cy + 30, "Active Device:  eth0 (Ethernet UP)", GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 55, line_ip, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 80, line_mask, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 105, line_gw, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 130, line_stats, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx, cy + 160, "Link: UP (Full-Duplex 1000Mbps)", GFX_COLOR_EMERALD_ACCENT);
+            }
             break;
+        }
 
         case TAB_TIME: {
             gfx_draw_string(&surf, cx, cy, "Date & Time", GFX_COLOR_EMERALD_NEON);

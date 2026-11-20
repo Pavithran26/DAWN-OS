@@ -196,9 +196,16 @@ void desktop_handle_input_event(const struct input_event *event) {
                 }
             }
 
-            /* Check Tray Clock Click to open Calendar */
+            /* Check Tray Clicks: [NET] (0..48), [VOL] (48..96), Clock (96..180) */
             if (mevt->y >= (int32_t)tb_y && mevt->x >= (int32_t)(state.screen_width - 180)) {
-                calendar_window_open();
+                int32_t tray_offset = mevt->x - (int32_t)(state.screen_width - 180);
+                if (tray_offset < 48) {
+                    settings_window_open_tab(TAB_NETWORK);
+                } else if (tray_offset < 96) {
+                    settings_window_open_tab(TAB_AUDIO);
+                } else {
+                    calendar_window_open();
+                }
                 return;
             }
 
