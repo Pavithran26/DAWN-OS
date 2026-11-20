@@ -51,24 +51,6 @@ struct virtio_net_device *virtio_net_get_device(void) {
     return &vnet_dev;
 }
 
-static void dbg_char(char c) {
-    while ((inb(0x3F8 + 5) & 0x20) == 0);
-    outb(0x3F8, (uint8_t)c);
-}
-static void dbg_str(const char *s) {
-    while (*s) {
-        if (*s == '\n') dbg_char('\r');
-        dbg_char(*s++);
-    }
-}
-static void dbg_hex(uint32_t val) {
-    const char *hex = "0123456789ABCDEF";
-    dbg_str("0x");
-    for (int i = 7; i >= 0; i--) {
-        dbg_char(hex[(val >> (i * 4)) & 0x0F]);
-    }
-}
-
 bool virtio_net_initialize(void) {
     if (vnet_dev.initialized) return true;
 
@@ -76,30 +58,15 @@ bool virtio_net_initialize(void) {
     size_t dev_count = pci_get_device_count();
     const struct pci_device *target_pci = NULL;
 
-    dbg_str("[VNET] Scanning PCI devices, count: ");
-    dbg_hex((uint32_t)dev_count);
-    dbg_str("\n");
-
     for (size_t i = 0; i < dev_count; i++) {
         const struct pci_device *pdev = pci_get_device(i);
-        if (pdev != NULL) {
-            dbg_str("  PCI dev: vendor=");
-            dbg_hex(pdev->vendor_id);
-            dbg_str(" device=");
-            dbg_hex(pdev->device_id);
-            dbg_str(" class=");
-            dbg_hex(pdev->class_code);
-            dbg_str(" bar0=");
-            dbg_hex(pdev->bar[0]);
-            dbg_str("\n");
-            if (pdev->vendor_id == VIRTIO_PCI_VENDOR_ID) {
-                target_pci = pdev;
-            }
+        if (pdev != NULL && pdev->vendor_id == VIRTIO_PCI_VENDOR_ID) {
+            target_pci = pdev;
+            break;
         }
     }
 
     if (target_pci == NULL) {
-        dbg_str("[VNET] No virtio target found!\n");
         return false;
     }
 
@@ -273,7 +240,6 @@ int virtio_net_send_packet(struct net_device *dev, const void *buf, size_t len) 
         timeout--;
     }
     if (vnet_dev.tx_used->idx != target_used) {
-        dbg_str("[VNET] TX timed out!\n");
         return -1;
     }
     vnet_dev.last_tx_used = vnet_dev.tx_used->idx;
@@ -315,26 +281,15 @@ int virtio_net_poll(struct net_device *dev) {
 
 #ifdef DAWN_KERNEL_TEST
 bool virtio_net_self_test(void) {
-    dbg_str("[VNET] Starting self test\n");
-    if (!virtio_net_initialize()) {
-        dbg_str("[VNET] Init failed\n");
-        return false;
-    }
+    if (!virtio_net_initialize()) return false;
     struct net_device *eth0 = net_get_device("eth0");
-    if (eth0 == NULL || !eth0->up) {
-        dbg_str("[VNET] eth0 is NULL or not up\n");
-        return false;
-    }
+    if (eth0 == NULL || !eth0->up) return false;
 
     /* Send ARP request for QEMU Gateway (10.0.2.2) */
     uint32_t gw_ip = eth0->gateway;
     if (gw_ip == 0) gw_ip = htonl(0x0A000202U);
 
-    dbg_str("[VNET] Sending ARP request to gateway\n");
-    if (net_send_arp_request(eth0, gw_ip) != 0) {
-        dbg_str("[VNET] ARP send failed\n");
-        return false;
-    }
+    if (net_send_arp_request(eth0, gw_ip) != 0) return false;
 
     /* Poll for ARP reply */
     uint32_t retries = 5000000;
@@ -343,18 +298,11 @@ bool virtio_net_self_test(void) {
         __asm__ volatile ("pause" ::: "memory");
         retries--;
     }
-    if (!net_arp_cache_lookup(gw_ip, NULL)) {
-        dbg_str("[VNET] ARP lookup timed out\n");
-        return false;
-    }
-    dbg_str("[VNET] ARP reply received!\n");
+    if (!net_arp_cache_lookup(gw_ip, NULL)) return false;
 
     /* Send ICMP Echo Request to Gateway */
     uint32_t prev_replies = net_get_icmp_reply_count();
-    if (net_send_icmp_echo(eth0, gw_ip, 42, "PING", 4) != 0) {
-        dbg_str("[VNET] ICMP echo send failed\n");
-        return false;
-    }
+    if (net_send_icmp_echo(eth0, gw_ip, 42, "PING", 4) != 0) return false;
 
     /* Poll for ICMP Echo Reply */
     retries = 5000000;
@@ -363,11 +311,7 @@ bool virtio_net_self_test(void) {
         __asm__ volatile ("pause" ::: "memory");
         retries--;
     }
-    if (net_get_icmp_reply_count() == prev_replies) {
-        dbg_str("[VNET] ICMP reply timed out\n");
-        return false;
-    }
-    dbg_str("[VNET] ICMP reply received!\n");
+    if (net_get_icmp_reply_count() == prev_replies) return false;
 
     return true;
 }
