@@ -505,8 +505,18 @@ bool security_initialize(void) {
 /* Cryptographic Hardening Self-Tests                                         */
 /* -------------------------------------------------------------------------- */
 
+static inline void sec_dbg_char(char c) {
+    __asm__ volatile ("1: inb $0x3fd, %%al; test $0x20, %%al; jz 1b; movb %0, %%al; outb %%al, $0x3f8" : : "r"((uint8_t)c) : "al");
+}
+static void sec_dbg(const char *s) {
+    while (*s) {
+        if (*s == '\n') sec_dbg_char('\r');
+        sec_dbg_char(*s++);
+    }
+}
+
 bool security_self_test(void) {
-    if (!security_initialize()) return false;
+    if (!security_initialize()) { sec_dbg("[SEC] init fail\n"); return false; }
 
     /* 1. SHA-256 NIST Vector 1: Empty string "" */
     static const uint8_t nist_empty_expected[32] = {
@@ -518,7 +528,7 @@ bool security_self_test(void) {
     uint8_t digest_empty[32];
     sha256("", 0, digest_empty);
     for (size_t i = 0; i < 32U; i++) {
-        if (digest_empty[i] != nist_empty_expected[i]) return false;
+        if (digest_empty[i] != nist_empty_expected[i]) { sec_dbg("[SEC] empty fail\n"); return false; }
     }
 
     /* 2. SHA-256 NIST Vector 2: "abc" */
@@ -531,7 +541,7 @@ bool security_self_test(void) {
     uint8_t digest_abc[32];
     sha256("abc", 3, digest_abc);
     for (size_t i = 0; i < 32U; i++) {
-        if (digest_abc[i] != nist_abc_expected[i]) return false;
+        if (digest_abc[i] != nist_abc_expected[i]) { sec_dbg("[SEC] abc fail\n"); return false; }
     }
 
     /* 3. PBKDF2-HMAC-SHA256 RFC 6070 Test Case 1: P="password", S="salt", c=1, dkLen=32 */
@@ -544,7 +554,7 @@ bool security_self_test(void) {
     uint8_t pbkdf2_c1_out[32];
     pbkdf2_hmac_sha256("password", 8, (const uint8_t *)"salt", 4, 1U, pbkdf2_c1_out);
     for (size_t i = 0; i < 32U; i++) {
-        if (pbkdf2_c1_out[i] != rfc6070_c1_expected[i]) return false;
+        if (pbkdf2_c1_out[i] != rfc6070_c1_expected[i]) { sec_dbg("[SEC] pbkdf2 c1 fail\n"); return false; }
     }
 
     /* 4. PBKDF2-HMAC-SHA256 RFC 6070 Test Case 2: P="password", S="salt", c=2, dkLen=32 */
@@ -557,13 +567,13 @@ bool security_self_test(void) {
     uint8_t pbkdf2_c2_out[32];
     pbkdf2_hmac_sha256("password", 8, (const uint8_t *)"salt", 4, 2U, pbkdf2_c2_out);
     for (size_t i = 0; i < 32U; i++) {
-        if (pbkdf2_c2_out[i] != rfc6070_c2_expected[i]) return false;
+        if (pbkdf2_c2_out[i] != rfc6070_c2_expected[i]) { sec_dbg("[SEC] pbkdf2 c2 fail\n"); return false; }
     }
 
     /* 5. Per-user dynamic salt generation test: distinct salts */
     uint32_t salt_a = security_generate_salt();
     uint32_t salt_b = security_generate_salt();
-    if (salt_a == salt_b) return false;
+    if (salt_a == salt_b) { sec_dbg("[SEC] salt fail\n"); return false; }
 
     /* 6. Password hashing and verification test */
     uint8_t hash1[SECURITY_HASH_SIZE];
@@ -572,31 +582,31 @@ bool security_self_test(void) {
     security_hash_password("admin_pass_2026", salt_a, hash2);
 
     for (size_t i = 0; i < SECURITY_HASH_SIZE; i++) {
-        if (hash1[i] != hash2[i]) return false;
+        if (hash1[i] != hash2[i]) { sec_dbg("[SEC] hash mismatch\n"); return false; }
     }
 
     /* 7. Verification and wrong-password rejection */
-    if (!security_verify_password("admin_pass_2026", salt_a, hash1)) return false;
-    if (security_verify_password("wrong_password", salt_a, hash1)) return false;
-    if (security_verify_password("admin_pass_2026", salt_b, hash1)) return false;
+    if (!security_verify_password("admin_pass_2026", salt_a, hash1)) { sec_dbg("[SEC] verify fail\n"); return false; }
+    if (security_verify_password("wrong_password", salt_a, hash1)) { sec_dbg("[SEC] wrongpass accepted\n"); return false; }
+    if (security_verify_password("admin_pass_2026", salt_b, hash1)) { sec_dbg("[SEC] wrongsalt accepted\n"); return false; }
 
     /* 8. User authentication test */
     uint32_t auth_uid = 0;
-    if (!security_authenticate_user("root", "toor", &auth_uid) || auth_uid != SECURITY_UID_ROOT) return false;
-    if (!security_authenticate_user("dawn", "dawn", &auth_uid) || auth_uid != SECURITY_UID_DEFAULT) return false;
-    if (security_authenticate_user("dawn", "wrongpass", &auth_uid)) return false;
+    if (!security_authenticate_user("root", "toor", &auth_uid) || auth_uid != SECURITY_UID_ROOT) { sec_dbg("[SEC] auth root fail\n"); return false; }
+    if (!security_authenticate_user("dawn", "dawn", &auth_uid) || auth_uid != SECURITY_UID_DEFAULT) { sec_dbg("[SEC] auth dawn fail\n"); return false; }
+    if (security_authenticate_user("dawn", "wrongpass", &auth_uid)) { sec_dbg("[SEC] auth wrongpass accepted\n"); return false; }
 
     /* 9. File permission tests */
-    if (!security_check_file_permission(1000, 1000, 1000, 1000, 0700, SECURITY_ACCESS_READ)) return false;
-    if (security_check_file_permission(1001, 1001, 1000, 1000, 0700, SECURITY_ACCESS_READ)) return false;
-    if (!security_check_file_permission(SECURITY_UID_ROOT, SECURITY_GID_ROOT, 1000, 1000, 0700, SECURITY_ACCESS_READ)) return false;
+    if (!security_check_file_permission(1000, 1000, 1000, 1000, 0700, SECURITY_ACCESS_READ)) { sec_dbg("[SEC] perm 1 fail\n"); return false; }
+    if (security_check_file_permission(1001, 1001, 1000, 1000, 0700, SECURITY_ACCESS_READ)) { sec_dbg("[SEC] perm 2 fail\n"); return false; }
+    if (!security_check_file_permission(SECURITY_UID_ROOT, SECURITY_GID_ROOT, 1000, 1000, 0700, SECURITY_ACCESS_READ)) { sec_dbg("[SEC] perm 3 fail\n"); return false; }
 
     /* 10. Memory boundary validation */
     const void *valid_user_ptr = (const void *)0x0000000040000000ULL;
-    if (!security_validate_user_pointer(valid_user_ptr, 64)) return false;
+    if (!security_validate_user_pointer(valid_user_ptr, 64)) { sec_dbg("[SEC] ptr 1 fail\n"); return false; }
 
     const void *invalid_kernel_ptr = (const void *)0xFFFF800000001000ULL;
-    if (security_validate_user_pointer(invalid_kernel_ptr, 64)) return false;
+    if (security_validate_user_pointer(invalid_kernel_ptr, 64)) { sec_dbg("[SEC] ptr 2 fail\n"); return false; }
 
     return true;
 }
