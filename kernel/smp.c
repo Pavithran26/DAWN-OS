@@ -18,15 +18,6 @@ static void smp_ap_entry(struct limine_smp_info *info) {
         while (1) __asm__ volatile ("pause; hlt");
     }
 
-    /* Switch to dedicated per-core kernel stack */
-    void *stack_top = (void *)(core->stack + SMP_STACK_SIZE);
-    __asm__ volatile (
-        "mov %0, %%rsp\n\t"
-        :
-        : "r"(stack_top)
-        : "memory"
-    );
-
     core->online = true;
     (void)__sync_fetch_and_add(&smp_online_count, 1U);
 
