@@ -7,6 +7,7 @@
 #include "process.h"
 #include "vfs.h"
 #include "rtc.h"
+#include "system_info.h"
 
 #define SERIAL_COM1 0x3f8U
 #define SERIAL_POLL_LIMIT 100000U
@@ -520,6 +521,43 @@ static int64_t syscall_kill(uint64_t target_pid, uint64_t sig) {
     return 0;
 }
 
+static int64_t syscall_sysinfo(uint64_t user_buf) {
+    if (user_buf == 0ULL || !vm_user_range_valid(user_buf, sizeof(struct dawn_sysinfo_user), true))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    struct dawn_system_info kern_info = {0};
+    if (!dawn_system_info_refresh(&kern_info))
+        return -(int64_t)DAWN_ERRNO_EIO;
+
+    struct dawn_sysinfo_user uinfo = {0};
+    uinfo.cpu_count = kern_info.cpu_count;
+    uinfo.online_cpu_count = kern_info.online_cpu_count;
+    uinfo.total_memory_bytes = kern_info.physical_memory_bytes;
+    uinfo.free_memory_bytes = kern_info.free_memory_bytes;
+    uinfo.uptime_seconds = (uint64_t)kern_info.uptime_seconds;
+
+    size_t i = 0;
+    while (kern_info.cpu_model[i] != '\0' && i + 1 < sizeof(uinfo.cpu_model)) {
+        uinfo.cpu_model[i] = kern_info.cpu_model[i];
+        i++;
+    }
+    uinfo.cpu_model[i] = '\0';
+
+    size_t j = 0;
+    if (kern_info.boot_mode != NULL) {
+        while (kern_info.boot_mode[j] != '\0' && j + 1 < sizeof(uinfo.boot_mode)) {
+            uinfo.boot_mode[j] = kern_info.boot_mode[j];
+            j++;
+        }
+    }
+    uinfo.boot_mode[j] = '\0';
+
+    if (!vm_copy_to_user(user_buf, &uinfo, sizeof(uinfo)))
+        return -(int64_t)DAWN_ERRNO_EFAULT;
+
+    return 0;
+}
+
 int64_t syscall_dispatch(uint64_t number,
                          uint64_t argument0,uint64_t argument1,
                          uint64_t argument2,uint64_t argument3,
@@ -564,6 +602,8 @@ int64_t syscall_dispatch(uint64_t number,
             return syscall_getdents(argument0,argument1,argument2);
         case DAWN_SYS_KILL:
             return syscall_kill(argument0,argument1);
+        case DAWN_SYS_SYSINFO:
+            return syscall_sysinfo(argument0);
         case DAWN_SYS_EXIT:
         case DAWN_SYS_YIELD:
         case DAWN_SYS_WAIT:
@@ -653,6 +693,9 @@ bool syscall_self_test(void) {
         return false;
     if (syscall_dispatch(DAWN_SYS_KILL,0ULL,0ULL,0ULL,
                          0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EPERM)
+        return false;
+    if (syscall_dispatch(DAWN_SYS_SYSINFO,0ULL,0ULL,0ULL,
+                         0ULL,0ULL,0ULL)!=-(int64_t)DAWN_ERRNO_EFAULT)
         return false;
     return syscall_dispatch(UINT64_MAX,0ULL,0ULL,0ULL,
                             0ULL,0ULL,0ULL)==-(int64_t)DAWN_ERRNO_ENOSYS;

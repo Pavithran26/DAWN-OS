@@ -37,7 +37,9 @@ USER_BINARIES = build/user/init.elf build/user/sh.elf build/user/echo.elf \
                 build/user/uptime.elf build/user/uname.elf build/user/touch.elf \
                 build/user/cp.elf build/user/head.elf build/user/tail.elf \
                 build/user/wc.elf build/user/clear.elf build/user/fetch.elf \
-                build/user/ifconfig.elf build/user/ping.elf
+                build/user/ifconfig.elf build/user/ping.elf build/user/nproc.elf \
+                build/user/free.elf build/user/whoami.elf build/user/sleep.elf \
+                build/user/grep.elf
 
 .PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all metadata user-bins
 
@@ -481,6 +483,26 @@ build/user/ifconfig.elf: build/user/crt0.o user/ifconfig.c build/user/libdawn.o 
 build/user/ping.elf: build/user/crt0.o user/ping.c build/user/libdawn.o user/linker.ld | build/user
 	$(CC) $(USER_CFLAGS) -c user/ping.c -o build/user/ping.o
 	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/ping.o build/user/libdawn.o
+
+build/user/nproc.elf: build/user/crt0.o user/nproc.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/nproc.c -o build/user/nproc.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/nproc.o build/user/libdawn.o
+
+build/user/free.elf: build/user/crt0.o user/free.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/free.c -o build/user/free.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/free.o build/user/libdawn.o
+
+build/user/whoami.elf: build/user/crt0.o user/whoami.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/whoami.c -o build/user/whoami.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/whoami.o build/user/libdawn.o
+
+build/user/sleep.elf: build/user/crt0.o user/sleep.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/sleep.c -o build/user/sleep.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/sleep.o build/user/libdawn.o
+
+build/user/grep.elf: build/user/crt0.o user/grep.c build/user/libdawn.o user/linker.ld | build/user
+	$(CC) $(USER_CFLAGS) -c user/grep.c -o build/user/grep.o
+	$(LD) $(USER_LDFLAGS) -o $@ build/user/crt0.o build/user/grep.o build/user/libdawn.o
 
 user-bins: $(USER_BINARIES)
 

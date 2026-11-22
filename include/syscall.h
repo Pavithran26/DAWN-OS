@@ -42,7 +42,18 @@ enum dawn_syscall_number {
     DAWN_SYS_STAT = 19,
     DAWN_SYS_LSEEK = 20,
     DAWN_SYS_GETDENTS = 21,
-    DAWN_SYS_KILL = 22
+    DAWN_SYS_KILL = 22,
+    DAWN_SYS_SYSINFO = 23
+};
+
+struct dawn_sysinfo_user {
+    uint32_t cpu_count;
+    uint32_t online_cpu_count;
+    uint64_t total_memory_bytes;
+    uint64_t free_memory_bytes;
+    uint64_t uptime_seconds;
+    char cpu_model[64];
+    char boot_mode[16];
 };
 
 struct dawn_dirent {

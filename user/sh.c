@@ -22,6 +22,11 @@ static void cmd_help(void) {
     dawn_println("  ping <ip>       - Send ICMP echo requests");
     dawn_println("  date            - Show system UTC date and time");
     dawn_println("  uptime          - Show system uptime report");
+    dawn_println("  nproc           - Print number of processing units / CPU cores");
+    dawn_println("  free [-h|-m]    - Display amount of free and used memory");
+    dawn_println("  whoami          - Print effective user name");
+    dawn_println("  sleep <sec>     - Pause for specified seconds");
+    dawn_println("  grep [-i|-v|-n] - Search for PATTERN in file or stdin");
     dawn_println("  pid             - Print shell process identifier");
     dawn_println("  kill <pid>      - Terminate a process");
     dawn_println("  mem             - Test dynamic heap memory allocator");
@@ -164,9 +169,28 @@ static void cmd_date(void) {
 }
 
 static void cmd_uptime(void) {
-    uint64_t epoch = 0;
-    dawn_time(&epoch);
-    dawn_printf("System time: %u seconds since Unix epoch\n", (unsigned int)epoch);
+    struct dawn_sysinfo info;
+    if (dawn_sysinfo(&info) == 0) {
+        uint64_t sec = info.uptime_seconds;
+        uint32_t days = (uint32_t)(sec / 86400ULL);
+        uint32_t hours = (uint32_t)((sec % 86400ULL) / 3600ULL);
+        uint32_t mins = (uint32_t)((sec % 3600ULL) / 60ULL);
+        uint32_t secs = (uint32_t)(sec % 60ULL);
+        if (days > 0) {
+            dawn_printf("up %u day%s, %u:%02u:%02u, %u cpus (SMP active)\n",
+                        days, days == 1 ? "" : "s", hours, mins, secs, info.online_cpu_count);
+        } else if (hours > 0) {
+            dawn_printf("up %u:%02u:%02u, %u cpus (SMP active)\n",
+                        hours, mins, secs, info.online_cpu_count);
+        } else {
+            dawn_printf("up %u min, %u sec, %u cpus (SMP active)\n",
+                        mins, secs, info.online_cpu_count);
+        }
+    } else {
+        uint64_t epoch = 0;
+        dawn_time(&epoch);
+        dawn_printf("System time: %u seconds since Unix epoch\n", (unsigned int)epoch);
+    }
 }
 
 static void cmd_kill(const char *pid_str) {

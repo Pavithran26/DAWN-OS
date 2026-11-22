@@ -693,24 +693,36 @@ void settings_window_render(void) {
                 char uptime[24];
                 settings_format_labelled(line, sizeof(line), "CPU: ", info.cpu_model);
                 settings_draw_limited(&surf, cx, cy + 144, line, 50U, GFX_COLOR_TEXT_PRIMARY);
+                {
+                    char cores_buf[32];
+                    char c_on[12];
+                    (void)dawn_decimal_string(info.online_cpu_count, c_on, sizeof(c_on));
+                    size_t cp = 0;
+                    const char *pfx = (info.online_cpu_count > 1) ? " (SMP Active)" : " (Single Core)";
+                    for (size_t k = 0; c_on[k] != '\0' && cp + 1 < sizeof(cores_buf); k++) cores_buf[cp++] = c_on[k];
+                    for (size_t k = 0; pfx[k] != '\0' && cp + 1 < sizeof(cores_buf); k++) cores_buf[cp++] = pfx[k];
+                    cores_buf[cp] = '\0';
+                    settings_format_labelled(line, sizeof(line), "CPU Cores: ", cores_buf);
+                    gfx_draw_string(&surf, cx, cy + 164, line, GFX_COLOR_TEXT_PRIMARY);
+                }
                 if (dawn_human_bytes(info.physical_memory_bytes, memory, sizeof(memory)) != 0U) {
                     settings_format_labelled(line, sizeof(line), "Total Memory: ", memory);
-                    gfx_draw_string(&surf, cx, cy + 166, line, GFX_COLOR_TEXT_MUTED);
+                    gfx_draw_string(&surf, cx, cy + 184, line, GFX_COLOR_TEXT_MUTED);
                 }
                 if (dawn_human_bytes(info.free_memory_bytes, memory, sizeof(memory)) != 0U) {
                     settings_format_labelled(line, sizeof(line), "Free Memory: ", memory);
-                    gfx_draw_string(&surf, cx, cy + 188, line, GFX_COLOR_TEXT_MUTED);
+                    gfx_draw_string(&surf, cx, cy + 204, line, GFX_COLOR_TEXT_MUTED);
                 }
                 settings_format_labelled(line, sizeof(line), "Boot Mode: ", info.boot_mode);
-                gfx_draw_string(&surf, cx, cy + 210, line, GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 224, line, GFX_COLOR_TEXT_MUTED);
                 if (dawn_decimal_string(info.uptime_seconds, uptime, sizeof(uptime)) != 0U) {
                     settings_format_labelled(line, sizeof(line), "Uptime (sec): ", uptime);
-                    gfx_draw_string(&surf, cx, cy + 232, line, GFX_COLOR_TEXT_MUTED);
+                    gfx_draw_string(&surf, cx, cy + 244, line, GFX_COLOR_TEXT_MUTED);
                 }
                 settings_format_labelled(line, sizeof(line), "Storage: ", info.storage_summary);
-                settings_draw_limited(&surf, cx, cy + 254, line, 50U, GFX_COLOR_TEXT_MUTED);
+                settings_draw_limited(&surf, cx, cy + 264, line, 50U, GFX_COLOR_TEXT_MUTED);
                 settings_format_labelled(line, sizeof(line), "Filesystem: ", info.filesystem_summary);
-                gfx_draw_string(&surf, cx, cy + 276, line, GFX_COLOR_TEXT_MUTED);
+                gfx_draw_string(&surf, cx, cy + 284, line, GFX_COLOR_TEXT_MUTED);
             } else {
                 gfx_draw_string(&surf, cx, cy + 144, "System information unavailable", GFX_COLOR_TEXT_MUTED);
             }

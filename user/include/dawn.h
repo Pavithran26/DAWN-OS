@@ -32,6 +32,7 @@
 #define DAWN_SYS_LSEEK       20ULL
 #define DAWN_SYS_GETDENTS    21ULL
 #define DAWN_SYS_KILL        22ULL
+#define DAWN_SYS_SYSINFO     23ULL
 
 #define DAWN_O_RDONLY 0x0001U
 #define DAWN_O_WRONLY 0x0002U
@@ -224,6 +225,20 @@ static inline int64_t dawn_getdents(uint64_t fd, struct dawn_dirent *dirp, size_
 
 static inline int64_t dawn_kill(uint64_t pid, int sig) {
     return dawn_syscall2(DAWN_SYS_KILL, pid, (uint64_t)sig);
+}
+
+struct dawn_sysinfo {
+    uint32_t cpu_count;
+    uint32_t online_cpu_count;
+    uint64_t total_memory_bytes;
+    uint64_t free_memory_bytes;
+    uint64_t uptime_seconds;
+    char cpu_model[64];
+    char boot_mode[16];
+};
+
+static inline int64_t dawn_sysinfo(struct dawn_sysinfo *info) {
+    return dawn_syscall1(DAWN_SYS_SYSINFO, (uint64_t)(uintptr_t)info);
 }
 
 static inline int64_t dawn_spawn(const void *image, uint64_t image_size, const char *const argv[], const char *const envp[]) {

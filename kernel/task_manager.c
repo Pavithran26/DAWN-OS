@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "task_manager.h"
 #include "physical_memory.h"
+#include "smp.h"
 
 static struct task_manager main_taskmgr = {0};
 static bool taskmgr_initialized = false;
@@ -52,24 +53,39 @@ void task_manager_refresh(struct task_manager *tm) {
     it0->is_user = false;
 
     /* PID 1: Native Init Process */
+    struct process_info p1 = {0};
     struct taskmgr_proc_item *it1 = &tm->items[tm->item_count++];
     it1->pid = 1;
     it1->ppid = 0;
     str_copy(it1->name, "init", sizeof(it1->name));
-    it1->state = PROCESS_STATE_READY;
+    it1->state = process_get_info(1, &p1) ? p1.state : PROCESS_STATE_READY;
     it1->cpu_percent = 5;
     it1->mem_bytes = 65536;
     it1->is_user = true;
 
-    /* PID 2: Desktop Compositor & Shell */
-    struct taskmgr_proc_item *it2 = &tm->items[tm->item_count++];
-    it2->pid = 2;
-    it2->ppid = 1;
-    str_copy(it2->name, "desktop_wm", sizeof(it2->name));
-    it2->state = PROCESS_STATE_READY;
-    it2->cpu_percent = 10;
-    it2->mem_bytes = 4194304;
-    it2->is_user = false;
+    /* Process entries for remaining slots up to DAWN_PROCESS_MAX */
+    for (uint64_t pid = 2; pid <= (uint64_t)DAWN_PROCESS_MAX; pid++) {
+        struct process_info pinfo = {0};
+        if (process_get_info(pid, &pinfo) && pinfo.state != PROCESS_STATE_FREE) {
+            if (tm->item_count < TASKMGR_MAX_RECORDS) {
+                struct taskmgr_proc_item *it = &tm->items[tm->item_count++];
+                it->pid = pid;
+                it->ppid = pinfo.parent_id;
+                it->state = pinfo.state;
+                if (pid == 2) {
+                    str_copy(it->name, "desktop_wm", sizeof(it->name));
+                    it->cpu_percent = 10;
+                    it->mem_bytes = 4194304;
+                    it->is_user = false;
+                } else {
+                    str_copy(it->name, "user_proc", sizeof(it->name));
+                    it->cpu_percent = 3;
+                    it->mem_bytes = 131072;
+                    it->is_user = true;
+                }
+            }
+        }
+    }
 
     /* Update CPU history */
     tm->current_cpu_usage = 15; /* 15% total non-idle */
@@ -161,6 +177,15 @@ void task_manager_render(struct task_manager *tm) {
     } else {
         /* Performance Tab */
         gfx_draw_string(&surf, 14, 46, "CPU Utilization History", GFX_COLOR_TEXT_PRIMARY);
+
+        char smp_label[48];
+        uint32_t online_cpus = smp_online_cpu_count();
+        if (online_cpus > 1) {
+            str_copy(smp_label, "SMP: 2 Cores Active", sizeof(smp_label));
+        } else {
+            str_copy(smp_label, "Single Core", sizeof(smp_label));
+        }
+        gfx_draw_string(&surf, 320, 46, smp_label, GFX_COLOR_EMERALD_ACCENT);
 
         /* Graph Box */
         gfx_draw_glass_panel(&surf, 14, 68, 490, 140, GFX_COLOR_EMERALD_BASE);

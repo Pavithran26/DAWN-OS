@@ -268,6 +268,62 @@ int net_send_icmp_echo(struct net_device *dev, uint32_t dest_ip, uint16_t seq, c
     return net_transmit_packet(dev, pkt, total_len);
 }
 
+int net_send_udp_packet(struct net_device *dev, uint32_t src_ip, uint16_t src_port,
+                        uint32_t dest_ip, uint16_t dest_port,
+                        const void *payload, size_t payload_len) {
+    if (dev == NULL || !dev->up) return -1;
+    if (payload_len > 1400) payload_len = 1400;
+
+    uint8_t pkt[1500] = {0};
+    struct eth_header *eh = (struct eth_header *)pkt;
+    struct ipv4_header *ih = (struct ipv4_header *)(pkt + sizeof(struct eth_header));
+    struct udp_header *uh = (struct udp_header *)(pkt + sizeof(struct eth_header) + sizeof(struct ipv4_header));
+    uint8_t *data = pkt + sizeof(struct eth_header) + sizeof(struct ipv4_header) + sizeof(struct udp_header);
+
+    uint8_t target_mac[ETH_ALEN];
+    if (dev->send_packet == loopback_send || dest_ip == dev->ip) {
+        for (int i = 0; i < 6; i++) target_mac[i] = dev->mac[i];
+    } else if (net_arp_cache_lookup(dest_ip, target_mac)) {
+        /* Use resolved MAC */
+    } else if (net_arp_cache_lookup(dev->gateway, target_mac)) {
+        /* Use gateway MAC */
+    } else {
+        for (int i = 0; i < 6; i++) target_mac[i] = 0xFF;
+    }
+
+    for (int i = 0; i < 6; i++) {
+        eh->dest[i] = target_mac[i];
+        eh->src[i] = dev->mac[i];
+    }
+    eh->type = htons(ETHERTYPE_IPV4);
+
+    size_t ip_total = sizeof(struct ipv4_header) + sizeof(struct udp_header) + payload_len;
+    ih->ver_ihl = 0x45;
+    ih->tos = 0;
+    ih->total_length = htons((uint16_t)ip_total);
+    ih->id = htons(0x4242);
+    ih->flags_frag = 0;
+    ih->ttl = 64;
+    ih->protocol = IPPROTO_UDP;
+    ih->src_ip = (src_ip != 0) ? src_ip : dev->ip;
+    ih->dest_ip = dest_ip;
+    ih->checksum = 0;
+    ih->checksum = net_checksum(ih, sizeof(struct ipv4_header));
+
+    uh->src_port = htons(src_port);
+    uh->dst_port = htons(dest_port);
+    uh->length = htons((uint16_t)(sizeof(struct udp_header) + payload_len));
+    uh->checksum = 0;
+
+    if (payload != NULL && payload_len > 0) {
+        const uint8_t *src_p = (const uint8_t *)payload;
+        for (size_t i = 0; i < payload_len; i++) data[i] = src_p[i];
+    }
+
+    size_t total_len = sizeof(struct eth_header) + ip_total;
+    return net_transmit_packet(dev, pkt, total_len);
+}
+
 int net_receive_packet(struct net_device *dev, const void *buf, size_t len) {
     if (dev == NULL || buf == NULL || len < sizeof(struct eth_header)) return -1;
     dev->rx_packets++;
@@ -466,7 +522,17 @@ int net_socket_connect(int sock_id, uint32_t ip, uint16_t port) {
 int net_socket_send(int sock_id, const void *data, size_t len) {
     for (size_t i = 0; i < MAX_NET_SOCKETS; i++) {
         if (net_sockets[i].active && net_sockets[i].id == (uint32_t)sock_id) {
-            (void)data;
+            struct net_socket *sock = &net_sockets[i];
+            if (sock->type == SOCK_DGRAM && sock->connected) {
+                struct net_device *dev = net_get_default_device();
+                if (dev == NULL) return -1;
+                uint16_t lport = sock->bound ? sock->local_port : (uint16_t)50000U;
+                int res = net_send_udp_packet(dev, sock->local_ip, lport,
+                                              sock->remote_ip, sock->remote_port,
+                                              data, len);
+                if (res != 0) return -1;
+                return (int)len;
+            }
             return (int)len;
         }
     }
@@ -548,6 +614,16 @@ bool net_self_test(void) {
     if (recv_buf[0] != 'D' || recv_buf[1] != 'A' || recv_buf[2] != 'W' || recv_buf[3] != 'N') return false;
 
     net_socket_close(sock);
+
+    /* Test UDP transmission via net_send_udp_packet over loopback */
+    int sock_tx = net_socket_create(SOCK_DGRAM, IPPROTO_UDP);
+    if (sock_tx < 0) return false;
+    if (net_socket_bind(sock_tx, lo->ip, 9090) != 0) return false;
+    if (net_send_udp_packet(lo, lo->ip, 12345, lo->ip, 9090, "HELO", 4) != 0) return false;
+    char recv_udp[8] = {0};
+    int r_udp = net_socket_recv(sock_tx, recv_udp, sizeof(recv_udp));
+    if (r_udp != 4 || recv_udp[0] != 'H' || recv_udp[1] != 'E' || recv_udp[2] != 'L' || recv_udp[3] != 'O') return false;
+    net_socket_close(sock_tx);
 
     /* ICMP Echo Ping test over loopback */
     uint64_t prev_tx = lo->tx_packets;
