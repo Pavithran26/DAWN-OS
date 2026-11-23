@@ -1350,6 +1350,14 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: virtio-blk PCI driver, request queue, read-only bounds and sector read\n");
 
+    /* Live VirtIO Block-to-Filesystem Device Test */
+    if (!iso9660_live_device_test()) {
+        serial_write("DAWN-TEST: FAIL: actual VirtIO device-backed ISO9660 file read\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: actual VirtIO device-backed ISO9660 file read\n");
+
     /* Phase K: Audio */
     if (!audio_self_test()) {
         serial_write("DAWN-TEST: FAIL: audio mixer, volume control and stream mixing\n");
@@ -1474,6 +1482,27 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation\n");
+
+    if (!userspace_spawn_wait_test()) {
+        serial_write("DAWN-TEST: FAIL: userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle\n");
+
+    if (!userspace_exec_test()) {
+        serial_write("DAWN-TEST: FAIL: userspace CPL3 SYS_EXEC image replacement and address space reset\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: userspace CPL3 SYS_EXEC image replacement and address space reset\n");
+
+    if (!userspace_filesystem_test()) {
+        serial_write("DAWN-TEST: FAIL: userspace CPL3 filesystem access on mounted VirtIO disk\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: userspace CPL3 filesystem access on mounted VirtIO disk\n");
 
     serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");

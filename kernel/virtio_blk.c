@@ -89,8 +89,10 @@ bool virtio_blk_initialize(void) {
 
     for (size_t i = 0; i < dev_count; i++) {
         const struct pci_device *pdev = pci_get_device(i);
+        /* Accept ONLY legacy PCI device ID (0x1001). Modern devices (0x1042) require
+         * modern MMIO/capability transport and are rejected by this legacy I/O driver. */
         if (pdev != NULL && pdev->vendor_id == VIRTIO_PCI_VENDOR_ID &&
-            (pdev->device_id == VIRTIO_BLK_PCI_DEVICE_ID || pdev->device_id == VIRTIO_BLK_PCI_MODERN_ID)) {
+            pdev->device_id == VIRTIO_BLK_PCI_DEVICE_ID) {
             target_pci = pdev;
             break;
         }
@@ -284,7 +286,14 @@ int virtio_blk_read_sectors(uint64_t sector, uint32_t count, void *buf) {
             return -1;
         }
 
-        vblk_dev.last_used_idx = vblk_dev.used->idx;
+        /* Validate used ring completion element ownership and header ID */
+        uint16_t used_slot = (uint16_t)(vblk_dev.last_used_idx % vblk_dev.qsize);
+        uint32_t elem_id = vblk_dev.used->ring[used_slot].id;
+        if (elem_id != 0U) {
+            return -1;
+        }
+
+        vblk_dev.last_used_idx++;
 
         if (*vblk_dev.req_status != VIRTIO_BLK_S_OK) {
             return -1;
@@ -318,6 +327,17 @@ bool virtio_blk_self_test(void) {
     }
 
     if (vblk_dev.capacity_sectors == 0U) {
+        return false;
+    }
+
+    /* Transport validation: legacy I/O transport must match 0x1001, not modern 0x1042 */
+    if (VIRTIO_BLK_PCI_DEVICE_ID != 0x1001U) {
+        return false;
+    }
+    if (VIRTIO_BLK_PCI_MODERN_ID == VIRTIO_BLK_PCI_DEVICE_ID) {
+        return false;
+    }
+    if (vblk_dev.qsize == 0U || vblk_dev.qsize > 1024U) {
         return false;
     }
 

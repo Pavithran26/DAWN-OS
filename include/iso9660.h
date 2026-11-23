@@ -66,6 +66,7 @@ struct vfs_node *iso9660_mount_device(struct block_device *bdev);
 
 #ifdef DAWN_KERNEL_TEST
 bool iso9660_self_test(void);
+bool iso9660_live_device_test(void);
 #endif
 
 #endif

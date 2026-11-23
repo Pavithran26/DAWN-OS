@@ -7,10 +7,16 @@
 #include <stdint.h>
 #include "block_dev.h"
 
-/* VirtIO PCI Vendor / Device IDs */
-#define VIRTIO_PCI_VENDOR_ID     0x1AF4U
-#define VIRTIO_BLK_PCI_DEVICE_ID 0x1001U
-#define VIRTIO_BLK_PCI_MODERN_ID 0x1042U
+/* VirtIO PCI Vendor / Device IDs
+ * DAWN-OS VirtIO Block Driver implements the VirtIO 0.9.5 Legacy PCI Transport
+ * via I/O space BAR registers (PCI Device ID 0x1001).
+ * Non-transitional modern VirtIO 1.0+ PCI devices (Device ID 0x1042) require
+ * PCI capability list parsing (VIRTIO_PCI_CAP_*) and MMIO registers, and are
+ * intentionally rejected by this legacy transport driver.
+ */
+#define VIRTIO_PCI_VENDOR_ID          0x1AF4U
+#define VIRTIO_BLK_PCI_DEVICE_ID      0x1001U
+#define VIRTIO_BLK_PCI_MODERN_ID      0x1042U
 
 /* VirtIO PCI Register Offsets (I/O space) */
 #define VIRTIO_REG_DEVICE_FEATURES 0x00U /* 32-bit R */

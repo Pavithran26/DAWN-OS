@@ -446,27 +446,72 @@ bool iso9660_self_test(void) {
     }
 
     block_dev_unregister(ramdisk->id);
+    return true;
+}
 
-    /* If VirtIO block device vda is available, also test mounting the live QEMU drive */
+bool iso9660_live_device_test(void) {
+    /* Mandatory real QEMU VirtIO block device test */
     struct block_device *vda = block_dev_lookup("vda");
-    if (vda != NULL) {
-        struct vfs_node *vda_root = iso9660_mount_device(vda);
-        if (vda_root != NULL) {
-            struct vfs_node *vda_file = iso9660_finddir(vda_root, "TEST.TXT");
-            if (vda_file != NULL && vda_file->size > 0) {
-                char vda_buf[64] = {0};
-                int64_t r = iso9660_read(vda_file, 0, sizeof(vda_buf) - 1, vda_buf);
-                if (r > 0) {
-                    /* Verify expected prefix "DAWN-OS VIRTIO BLOCK DEVICE" */
-                    static const char expected_prefix[] = "DAWN-OS VIRTIO BLOCK DEVICE";
-                    for (size_t i = 0; i < sizeof(expected_prefix) - 1 && i < (size_t)r; i++) {
-                        if (vda_buf[i] != expected_prefix[i]) {
-                            return false;
-                        }
-                    }
-                }
-            }
+    if (vda == NULL) {
+        return false;
+    }
+    if (vda->capacity_bytes == 0ULL || vda->total_blocks == 0ULL) {
+        return false;
+    }
+    if (!vda->read_only) {
+        return false;
+    }
+
+    /* Verify read-only enforcement through block device API */
+    static uint8_t dummy_write[512] __attribute__((aligned(16))) = {0};
+    if (block_dev_write(vda, 0ULL, 1U, dummy_write) != -1) {
+        return false;
+    }
+    if (vda->ops.write_blocks != NULL && vda->ops.write_blocks(vda, 0ULL, 1U, dummy_write) != -1) {
+        return false;
+    }
+
+    /* Mount real device-backed ISO9660 filesystem */
+    struct vfs_node *vda_root = iso9660_mount_device(vda);
+    if (vda_root == NULL) {
+        return false;
+    }
+
+    /* Find test.txt */
+    struct vfs_node *vda_file = iso9660_finddir(vda_root, "TEST.TXT");
+    if (vda_file == NULL) {
+        return false;
+    }
+
+    static const char expected[] = "DAWN-OS VIRTIO BLOCK DEVICE ROOT\n";
+    const size_t expected_len = sizeof(expected) - 1U; /* 33 bytes (or 34 with \0) */
+    if (vda_file->size != expected_len && vda_file->size != sizeof(expected)) {
+        return false;
+    }
+
+    /* Verify read-only enforcement through filesystem node */
+    if ((vda_file->permissions & VFS_FLAG_WRITE) != 0U || vda_file->ops.write != NULL) {
+        return false;
+    }
+
+    /* Read complete file and verify byte-for-byte */
+    char vda_buf[64] = {0};
+    int64_t r = iso9660_read(vda_file, 0ULL, sizeof(vda_buf), vda_buf);
+    if (r < (int64_t)expected_len) {
+        return false;
+    }
+    for (size_t i = 0U; i < expected_len; i++) {
+        if (vda_buf[i] != expected[i]) {
+            return false;
         }
+    }
+
+    /* Out-of-bounds / EOF read rejection */
+    if (iso9660_read(vda_file, (uint64_t)vda_file->size, 10U, vda_buf) != 0) {
+        return false;
+    }
+    if (iso9660_read(vda_file, (uint64_t)vda_file->size + 100ULL, 10U, vda_buf) != 0) {
+        return false;
     }
 
     return true;

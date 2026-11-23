@@ -6,6 +6,9 @@
 #include "syscall.h"
 #include "physical_memory.h"
 #include "page_table.h"
+#include "vfs.h"
+#include "block_dev.h"
+#include "iso9660.h"
 
 #ifdef DAWN_KERNEL_TEST
 
@@ -122,6 +125,72 @@ static bool build_test_elf(void *buffer, size_t capacity, const uint8_t *code, s
     }
 
     *out_size = 0x1000U + code_size;
+    return true;
+}
+
+static bool build_test_elf_with_payload(void *buffer, size_t capacity,
+                                        const uint8_t *code, size_t code_size,
+                                        const uint8_t *payload, size_t payload_size,
+                                        size_t *out_size) {
+    if (buffer == NULL || out_size == NULL || capacity < 0x1000U + 0x200U + payload_size) {
+        return false;
+    }
+
+    uint8_t *bytes = (uint8_t *)buffer;
+    for (size_t i = 0; i < 0x1000U + 0x200U + payload_size; i++) {
+        bytes[i] = 0;
+    }
+
+    struct test_elf64_header header = {0};
+    header.ident[0] = 0x7fU;
+    header.ident[1] = (uint8_t)'E';
+    header.ident[2] = (uint8_t)'L';
+    header.ident[3] = (uint8_t)'F';
+    header.ident[4] = ELF_IDENT_CLASS_64;
+    header.ident[5] = ELF_IDENT_DATA_LSB;
+    header.ident[6] = ELF_IDENT_VERSION;
+    header.type = ELF_TYPE_EXEC;
+    header.machine = ELF_MACHINE_X86_64;
+    header.version = ELF_VERSION_CURRENT;
+    header.entry = 0x400000ULL;
+    header.program_header_offset = sizeof(struct test_elf64_header);
+    header.header_size = (uint16_t)sizeof(struct test_elf64_header);
+    header.program_header_entry_size = (uint16_t)sizeof(struct test_elf64_program_header);
+    header.program_header_count = 1U;
+
+    uint64_t total_payload = 0x200ULL + (uint64_t)payload_size;
+    uint64_t mem_size = ((total_payload + ELF64_PAGE_SIZE - 1ULL) / ELF64_PAGE_SIZE) * ELF64_PAGE_SIZE;
+
+    struct test_elf64_program_header program = {0};
+    program.type = ELF_PROGRAM_LOAD;
+    program.flags = ELF_FLAG_READ | ELF_FLAG_EXECUTE;
+    program.offset = 0x1000ULL;
+    program.virtual_address = 0x400000ULL;
+    program.physical_address = 0x400000ULL;
+    program.file_size = total_payload;
+    program.memory_size = mem_size;
+    program.alignment = ELF64_PAGE_SIZE;
+
+    /* Copy ELF header */
+    for (size_t i = 0; i < sizeof(header); i++) {
+        bytes[i] = ((const uint8_t *)&header)[i];
+    }
+    /* Copy program header */
+    for (size_t i = 0; i < sizeof(program); i++) {
+        bytes[sizeof(header) + i] = ((const uint8_t *)&program)[i];
+    }
+    /* Copy code at offset 0x1000 */
+    for (size_t i = 0; i < code_size; i++) {
+        bytes[0x1000U + i] = code[i];
+    }
+    /* Copy payload at offset 0x1200 */
+    if (payload != NULL && payload_size > 0U) {
+        for (size_t i = 0; i < payload_size; i++) {
+            bytes[0x1200U + i] = payload[i];
+        }
+    }
+
+    *out_size = 0x1000U + 0x200U + payload_size;
     return true;
 }
 
@@ -465,6 +534,376 @@ bool userspace_runtime_self_test(void) {
     }
 
     /* Verify no physical page frame leaks across all process creations and teardowns */
+    physical_allocator_get_stats(&after);
+    if (before.free_frames != after.free_frames) {
+        return false;
+    }
+
+    return true;
+}
+
+bool userspace_spawn_wait_test(void) {
+    struct physical_allocator_stats before = {0};
+    struct physical_allocator_stats after = {0};
+    physical_allocator_get_stats(&before);
+
+    /* 1. Build child ELF (exits with status 42) */
+    static const uint8_t exit42_code[] = {
+        /* mov $42, %rdi */
+        0x48U, 0xc7U, 0xc7U, 0x2aU, 0x00U, 0x00U, 0x00U,
+        /* mov $2, %rax (DAWN_SYS_EXIT) */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U,
+        /* int $0x80 */
+        0xcdU, 0x80U,
+        /* ud2 */
+        0x0fU, 0x0bU
+    };
+
+    static uint8_t child_elf[8192];
+    size_t child_size = 0;
+    if (!build_test_elf(child_elf, sizeof(child_elf), exit42_code, sizeof(exit42_code), &child_size)) {
+        return false;
+    }
+
+    /* 2. Parent code */
+    uint8_t parent_code[] = {
+        /* Step 1: Negative wait - non-existent child 99999 */
+        0x48U, 0xc7U, 0xc7U, 0x9fU, 0x86U, 0x01U, 0x00U, /* mov $99999, %rdi */
+        0x48U, 0x31U, 0xf6U,                               /* xor %rsi, %rsi */
+        0x48U, 0xc7U, 0xc0U, 0x05U, 0x00U, 0x00U, 0x00U, /* mov $5, %rax (SYS_WAIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0xf6U,                         /* cmp $-10, %rax (-ECHILD) */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x5bU, 0x00U, 0x00U, 0x00U, /* mov $91, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* Step 2: Negative wait - kernel pointer */
+        0x48U, 0xc7U, 0xc7U, 0x9fU, 0x86U, 0x01U, 0x00U, /* mov $99999, %rdi */
+        0x48U, 0xbeU, 0x00U, 0x00U, 0x00U, 0x80U, 0xffU, 0xffU, 0xffU, 0xffU, /* movabs $0xffffffff80000000, %rsi */
+        0x48U, 0xc7U, 0xc0U, 0x05U, 0x00U, 0x00U, 0x00U, /* mov $5, %rax (SYS_WAIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0xf2U,                         /* cmp $-14, %rax (-EFAULT) */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x5cU, 0x00U, 0x00U, 0x00U, /* mov $92, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* Step 3: Spawn child */
+        0x48U, 0xc7U, 0xc7U, 0x00U, 0x02U, 0x40U, 0x00U, /* mov $0x400200, %rdi */
+        0x48U, 0xc7U, 0xc6U, 0x00U, 0x00U, 0x00U, 0x00U, /* mov $child_size, %rsi (offset 103) */
+        0x48U, 0x31U, 0xd2U,                               /* xor %rdx, %rdx */
+        0x4dU, 0x31U, 0xd2U,                               /* xor %r10, %r10 */
+        0x48U, 0xc7U, 0xc0U, 0x09U, 0x00U, 0x00U, 0x00U, /* mov $9, %rax (SYS_SPAWN) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0x00U,                         /* cmp $0, %rax */
+        0x7fU, 0x12U,                                     /* jg +18 */
+        0x48U, 0xc7U, 0xc7U, 0x5dU, 0x00U, 0x00U, 0x00U, /* mov $93, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+        0x48U, 0x89U, 0xc3U,                               /* mov %rax, %rbx (child_pid) */
+
+        /* Step 4: Wait for child */
+        0x48U, 0x83U, 0xecU, 0x10U,                         /* sub $16, %rsp */
+        0x48U, 0xc7U, 0x04U, 0x24U, 0x00U, 0x00U, 0x00U, 0x00U, /* movq $0, (%rsp) */
+        0x48U, 0x89U, 0xdfU,                               /* mov %rbx, %rdi */
+        0x48U, 0x89U, 0xe6U,                               /* mov %rsp, %rsi */
+        0x48U, 0xc7U, 0xc0U, 0x05U, 0x00U, 0x00U, 0x00U, /* mov $5, %rax (SYS_WAIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x39U, 0xd8U,                               /* cmp %rbx, %rax */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x5eU, 0x00U, 0x00U, 0x00U, /* mov $94, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+        0x48U, 0x8bU, 0x04U, 0x24U,                         /* mov (%rsp), %rax */
+        0x48U, 0x83U, 0xc4U, 0x10U,                         /* add $16, %rsp */
+        0x48U, 0x83U, 0xf8U, 0x2aU,                         /* cmp $42, %rax */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x5fU, 0x00U, 0x00U, 0x00U, /* mov $95, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* Step 5: Exit 0 */
+        0x48U, 0x31U, 0xffU,                               /* xor %rdi, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU                                      /* ud2 */
+    };
+
+    /* Patch child_size into parent_code at offset 103 */
+    parent_code[103] = (uint8_t)(child_size & 0xffU);
+    parent_code[104] = (uint8_t)((child_size >> 8) & 0xffU);
+    parent_code[105] = (uint8_t)((child_size >> 16) & 0xffU);
+    parent_code[106] = (uint8_t)((child_size >> 24) & 0xffU);
+
+    static uint8_t parent_elf[16384];
+    size_t parent_size = 0;
+    if (!build_test_elf_with_payload(parent_elf, sizeof(parent_elf),
+                                     parent_code, sizeof(parent_code),
+                                     child_elf, child_size, &parent_size)) {
+        return false;
+    }
+
+    uint64_t parent_pid = 0;
+    const char *parent_args[] = {"parent_task", NULL};
+    if (!process_spawn(parent_elf, parent_size, 1, parent_args, NULL, &parent_pid) || parent_pid == 0) {
+        return false;
+    }
+
+    if (!scheduler_run_until_idle()) {
+        return false;
+    }
+
+    struct process_info pinfo = {0};
+    if (!process_get_info(parent_pid, &pinfo)) {
+        return false;
+    }
+
+    if (pinfo.state != PROCESS_STATE_EXITED || pinfo.exit_status != 0) {
+        return false;
+    }
+
+    if (!process_reap(parent_pid)) {
+        return false;
+    }
+
+    /* Verify no physical frame leaks */
+    physical_allocator_get_stats(&after);
+    if (before.free_frames != after.free_frames) {
+        return false;
+    }
+
+    return true;
+}
+
+bool userspace_exec_test(void) {
+    struct physical_allocator_stats before = {0};
+    struct physical_allocator_stats after = {0};
+    physical_allocator_get_stats(&before);
+
+    /* 1. Build replacement ELF (exits with status 84) */
+    static const uint8_t exit84_code[] = {
+        /* mov $84, %rdi */
+        0x48U, 0xc7U, 0xc7U, 0x54U, 0x00U, 0x00U, 0x00U,
+        /* mov $2, %rax (DAWN_SYS_EXIT) */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U,
+        /* int $0x80 */
+        0xcdU, 0x80U,
+        /* ud2 */
+        0x0fU, 0x0bU
+    };
+
+    static uint8_t repl_elf[8192];
+    size_t repl_size = 0;
+    if (!build_test_elf(repl_elf, sizeof(repl_elf), exit84_code, sizeof(exit84_code), &repl_size)) {
+        return false;
+    }
+
+    /* 2. Initial process code (invokes SYS_EXEC with replacement ELF) */
+    uint8_t init_code[] = {
+        0x48U, 0xc7U, 0xc7U, 0x00U, 0x02U, 0x40U, 0x00U, /* mov $0x400200, %rdi */
+        0x48U, 0xc7U, 0xc6U, 0x00U, 0x00U, 0x00U, 0x00U, /* mov $repl_size, %rsi (offset 10) */
+        0x48U, 0x31U, 0xd2U,                               /* xor %rdx, %rdx */
+        0x4dU, 0x31U, 0xd2U,                               /* xor %r10, %r10 */
+        0x48U, 0xc7U, 0xc0U, 0x0aU, 0x00U, 0x00U, 0x00U, /* mov $10, %rax (DAWN_SYS_EXEC) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+
+        /* Fail exit if exec returns */
+        0x48U, 0xc7U, 0xc7U, 0x60U, 0x00U, 0x00U, 0x00U, /* mov $96, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU                                      /* ud2 */
+    };
+
+    /* Patch repl_size into init_code at offset 10 */
+    init_code[10] = (uint8_t)(repl_size & 0xffU);
+    init_code[11] = (uint8_t)((repl_size >> 8) & 0xffU);
+    init_code[12] = (uint8_t)((repl_size >> 16) & 0xffU);
+    init_code[13] = (uint8_t)((repl_size >> 24) & 0xffU);
+
+    static uint8_t init_elf[16384];
+    size_t init_proc_size = 0;
+    if (!build_test_elf_with_payload(init_elf, sizeof(init_elf),
+                                     init_code, sizeof(init_code),
+                                     repl_elf, repl_size, &init_proc_size)) {
+        return false;
+    }
+
+    uint64_t exec_pid = 0;
+    const char *exec_args[] = {"exec_task", NULL};
+    if (!process_spawn(init_elf, init_proc_size, 1, exec_args, NULL, &exec_pid) || exec_pid == 0) {
+        return false;
+    }
+
+    if (!scheduler_run_until_idle()) {
+        return false;
+    }
+
+    struct process_info einfo = {0};
+    if (!process_get_info(exec_pid, &einfo)) {
+        return false;
+    }
+
+    /* The process must have preserved its PID and exited with replacement status 84 */
+    if (einfo.state != PROCESS_STATE_EXITED || einfo.exit_status != 84) {
+        return false;
+    }
+
+    if (!process_reap(exec_pid)) {
+        return false;
+    }
+
+    /* Verify no physical frame leaks */
+    physical_allocator_get_stats(&after);
+    if (before.free_frames != after.free_frames) {
+        return false;
+    }
+
+    return true;
+}
+
+bool userspace_filesystem_test(void) {
+    struct physical_allocator_stats before = {0};
+    struct physical_allocator_stats after = {0};
+    physical_allocator_get_stats(&before);
+
+    /* Ensure /mnt/testdisk is mounted */
+    struct block_device *vda = block_dev_lookup("vda");
+    if (vda != NULL) {
+        struct vfs_node *test_node = NULL;
+        if (!vfs_resolve_path("/mnt/testdisk/test.txt", &test_node)) {
+            struct vfs_node *vda_root = iso9660_mount_device(vda);
+            if (vda_root != NULL) {
+                (void)vfs_mkdir("/mnt", 0755U, NULL);
+                (void)vfs_mkdir("/mnt/testdisk", 0755U, NULL);
+                (void)vfs_mount("/mnt/testdisk", vda_root, "iso9660");
+            }
+        }
+    }
+
+    /* 1. Code for filesystem test */
+    static const uint8_t fs_code[] = {
+        /* 1. Open "/mnt/testdisk/test.txt" */
+        0x48U, 0xc7U, 0xc7U, 0x00U, 0x02U, 0x40U, 0x00U, /* mov $0x400200, %rdi */
+        0x48U, 0x31U, 0xf6U,                               /* xor %rsi, %rsi (DAWN_O_RDONLY) */
+        0x48U, 0x31U, 0xd2U,                               /* xor %rdx, %rdx */
+        0x48U, 0xc7U, 0xc0U, 0x0bU, 0x00U, 0x00U, 0x00U, /* mov $11, %rax (DAWN_SYS_OPEN) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0x00U,                         /* cmp $0, %rax */
+        0x7dU, 0x12U,                                     /* jge +18 */
+        0x48U, 0xc7U, 0xc7U, 0x51U, 0x00U, 0x00U, 0x00U, /* mov $81, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+        0x48U, 0x89U, 0xc3U,                               /* mov %rax, %rbx (fd) */
+
+        /* 2. Read 64 bytes */
+        0x48U, 0x83U, 0xecU, 0x40U,                         /* sub $64, %rsp */
+        0x48U, 0x89U, 0xdfU,                               /* mov %rbx, %rdi */
+        0x48U, 0x89U, 0xe6U,                               /* mov %rsp, %rsi */
+        0x48U, 0xc7U, 0xc2U, 0x40U, 0x00U, 0x00U, 0x00U, /* mov $64, %rdx */
+        0x48U, 0xc7U, 0xc0U, 0x06U, 0x00U, 0x00U, 0x00U, /* mov $6, %rax (DAWN_SYS_READ) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0x21U,                         /* cmp $33, %rax */
+        0x7dU, 0x12U,                                     /* jge +18 */
+        0x48U, 0xc7U, 0xc7U, 0x52U, 0x00U, 0x00U, 0x00U, /* mov $82, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* Compare 'D','A','W','N' */
+        0x8bU, 0x0cU, 0x24U,                               /* mov (%rsp), %ecx */
+        0x81U, 0xf9U, 0x44U, 0x41U, 0x57U, 0x4eU,         /* cmp $0x4e574144, %ecx */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x53U, 0x00U, 0x00U, 0x00U, /* mov $83, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* 3. EOF check */
+        0x48U, 0x89U, 0xdfU,                               /* mov %rbx, %rdi */
+        0x48U, 0x89U, 0xe6U,                               /* mov %rsp, %rsi */
+        0x48U, 0xc7U, 0xc2U, 0x40U, 0x00U, 0x00U, 0x00U, /* mov $64, %rdx */
+        0x48U, 0xc7U, 0xc0U, 0x06U, 0x00U, 0x00U, 0x00U, /* mov $6, %rax (DAWN_SYS_READ) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0x00U,                         /* cmp $0, %rax */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x54U, 0x00U, 0x00U, 0x00U, /* mov $84, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* 4. Write rejection */
+        0x48U, 0x89U, 0xdfU,                               /* mov %rbx, %rdi */
+        0x48U, 0x89U, 0xe6U,                               /* mov %rsp, %rsi */
+        0x48U, 0xc7U, 0xc2U, 0x0aU, 0x00U, 0x00U, 0x00U, /* mov $10, %rdx */
+        0x48U, 0xc7U, 0xc0U, 0x01U, 0x00U, 0x00U, 0x00U, /* mov $1, %rax (DAWN_SYS_WRITE) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0x00U,                         /* cmp $0, %rax */
+        0x7cU, 0x12U,                                     /* jl +18 */
+        0x48U, 0xc7U, 0xc7U, 0x55U, 0x00U, 0x00U, 0x00U, /* mov $85, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* 5. Close */
+        0x48U, 0x89U, 0xdfU,                               /* mov %rbx, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x07U, 0x00U, 0x00U, 0x00U, /* mov $7, %rax (DAWN_SYS_CLOSE) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x48U, 0x83U, 0xf8U, 0x00U,                         /* cmp $0, %rax */
+        0x74U, 0x12U,                                     /* je +18 */
+        0x48U, 0xc7U, 0xc7U, 0x56U, 0x00U, 0x00U, 0x00U, /* mov $86, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU,                                     /* ud2 */
+
+        /* 6. Exit 0 */
+        0x48U, 0x83U, 0xc4U, 0x40U,                         /* add $64, %rsp */
+        0x48U, 0x31U, 0xffU,                               /* xor %rdi, %rdi */
+        0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U, /* mov $2, %rax (SYS_EXIT) */
+        0xcdU, 0x80U,                                     /* int $0x80 */
+        0x0fU, 0x0bU                                      /* ud2 */
+    };
+
+    static const char path_payload[] = "/mnt/testdisk/test.txt";
+    static uint8_t fs_elf[8192];
+    size_t fs_size = 0;
+    if (!build_test_elf_with_payload(fs_elf, sizeof(fs_elf),
+                                     fs_code, sizeof(fs_code),
+                                     (const uint8_t *)path_payload, sizeof(path_payload),
+                                     &fs_size)) {
+        return false;
+    }
+
+    uint64_t fs_pid = 0;
+    const char *fs_args[] = {"fs_task", NULL};
+    if (!process_spawn(fs_elf, fs_size, 1, fs_args, NULL, &fs_pid) || fs_pid == 0) {
+        return false;
+    }
+
+    if (!scheduler_run_until_idle()) {
+        return false;
+    }
+
+    struct process_info fsinfo = {0};
+    if (!process_get_info(fs_pid, &fsinfo)) {
+        return false;
+    }
+
+    if (fsinfo.state != PROCESS_STATE_EXITED || fsinfo.exit_status != 0) {
+        return false;
+    }
+
+    if (!process_reap(fs_pid)) {
+        return false;
+    }
+
+    /* Verify no physical frame leaks */
     physical_allocator_get_stats(&after);
     if (before.free_frames != after.free_frames) {
         return false;

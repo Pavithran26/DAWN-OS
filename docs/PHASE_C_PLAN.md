@@ -10,6 +10,11 @@ Phase C implementation is complete. The kernel has a fully audited, verified use
 - Fault isolation verified: CPL3 Page Faults (vector 14) and General Protection Faults (vector 13) safely terminate only the offending process without kernel panic.
 - VirtIO Block Device driver (`virtio_blk.c`) over legacy PCI transport with VirtQueue 0, DMA buffers, capacity discovery, and bounded polling.
 - ISO9660 device-backed filesystem mounting from block devices (`iso9660_mount_device`) with sector caching and byte-for-byte read verification.
+- Mandatory live VirtIO device-to-filesystem test (`iso9660_live_device_test`) verifying `vda` discovery, read-only mode, write rejection, file lookup (`TEST.TXT`), exact size, and byte-for-byte content.
+- VirtIO 0.9.5 legacy PCI transport hardening (strictly accepts `0x1001`, rejects modern `0x1042`), queue size validation, used ring completion element checks, and status byte checks.
+- Real CPL3 userspace `SYS_SPAWN` and `SYS_WAIT` integration test with child exit status 42 collected onto user stack, child reaping, negative wait tests, and zero frame leaks.
+- Real CPL3 userspace `SYS_EXEC` replacement validation with PID preservation, address space reset, exit status 84 collection, and zero frame leaks.
+- Real CPL3 userspace filesystem access on mounted VirtIO disk (`/mnt/testdisk/test.txt`) with mount-crossing path traversal, read verification, EOF test, and write rejection.
 - Deterministic QEMU test disk image (`build/test-disk.iso`) integrated into CI workflows.
 
 ## Current implementation snapshot (2026-11-17)

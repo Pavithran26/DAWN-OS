@@ -108,7 +108,7 @@ The kernel virtual base is `0xffffffff80000000`. `.limine_requests_start`, `.lim
 4. **Bounded concurrency:** 4 processes, 8 kernel threads, 16 FDs per process.
 5. **Polling UI input.** `input_poll_hardware()` is called from the desktop loop.
 6. **No userspace GUI toolkit.** Desktop components are linked into the kernel.
-7. **Hardware Driver Status:** VirtIO-Net PCI NIC driver (real packets, ARP, ICMP ping) and VirtIO-Block PCI driver (VirtQueue 0 DMA, capacity discovery, chunked 512-byte sector reads, read-only enforcement, ISO9660 device mount) are fully implemented and verified under QEMU. Audio is in-kernel software synthesis (no physical HDA codec driver yet), and AHCI/NVMe drivers perform discovery and virtual block transfers without physical DMA command issue.
+7. **Hardware Driver Status:** VirtIO-Net PCI NIC driver (real packets, ARP, ICMP ping) and VirtIO-Block PCI driver (VirtIO 0.9.5 Legacy Transport via I/O BAR registers, PCI Device ID 0x1001 only, VirtQueue 0 DMA, capacity discovery, chunked 512-byte sector reads, read-only enforcement, live device-backed ISO9660 mount, and userspace CPL3 file access) are fully implemented and verified under QEMU. Audio is in-kernel software synthesis (no physical HDA codec driver yet), and AHCI/NVMe drivers perform discovery and virtual block transfers without physical DMA command issue.
 
 ---
 

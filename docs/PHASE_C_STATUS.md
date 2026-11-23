@@ -248,3 +248,22 @@
 - **Deterministic QEMU Disk & Build Integration:**
   - Added `build/test-disk.iso` target in `Makefile` generated via `xorriso -as mkisofs` containing verified `/test.txt` payload.
   - Integrated `-drive file=build/test-disk.iso,if=none,id=d0,format=raw,readonly=on -device virtio-blk-pci,drive=d0` across all BIOS, UEFI, and smoke QEMU invocations.
+
+## Phase C Final Hardening & End-to-End Verification (2026-11-23)
+
+- **Mandatory Live VirtIO Block-to-Filesystem Device Test (`iso9660.c`, `include/iso9660.h`):**
+  - Implemented `iso9660_live_device_test()` with mandatory assertions for attached VirtIO disk (`vda`).
+  - Verifies discovery of `vda`, non-zero block capacity, read-only status (`vda->read_only == true`), and block-device write rejection (`block_dev_write` returns -1).
+  - Mounts live device-backed ISO9660 filesystem, locates `/TEST.TXT`, validates exact size (33 bytes payload + newline = 33/34 bytes), and reads byte-for-byte matching `"DAWN-OS VIRTIO BLOCK DEVICE ROOT\n"`.
+  - Enforces out-of-bounds/EOF read rejection and filesystem node write permission rejection.
+  - Emits serial marker: `DAWN-TEST: PASS: actual VirtIO device-backed ISO9660 file read`.
+
+- **VirtIO Block Transport Safety & Robustness (`virtio_blk.c`, `include/virtio_blk.h`):**
+  - Restricts probe strictly to VirtIO 0.9.5 Legacy PCI Transport (PCI Device ID `0x1001` with I/O space BAR registers).
+  - Explicitly rejects modern VirtIO devices (Device ID `0x1042`) which require modern MMIO registers and PCI capability list structures (`VIRTIO_PCI_CAP_*`).
+  - Added queue size validation (`0 < qsize <= 1024`), used ring completion element ownership check (`elem.id == 0`), index tracking (`last_used_idx++`), and request status verification (`VIRTIO_BLK_S_OK`).
+
+- **Real Userspace CPL3 Process Lifecycle (`userspace_test.c`, `include/userspace_test.h`):**
+  - **Test 10 (SYS_SPAWN and SYS_WAIT):** Dedicated CPL3 parent process executes real `SYS_SPAWN` to launch a child ELF at CPL3. Child runs at CPL3 and exits with status 42 (`SYS_EXIT(42)`). Parent blocks in `SYS_WAIT`, collects child PID and status 42 onto its user stack, reaps child, and exits with status 0 (`SYS_EXIT(0)`). Exercises negative tests: wait for non-existent child returns `-ECHILD`, wait with kernel pointer returns `-EFAULT`. Verifies zero physical frame leaks.
+  - **Test 11 (SYS_EXEC Replacement):** Initial CPL3 ELF invokes `SYS_EXEC` with a replacement ELF residing in user memory. Replacement ELF starts at its entry point, preserves PID, executes at CPL3, and exits with status 84 (`SYS_EXIT(84)`). Verifies address space reset and zero physical frame leaks.
+  - **Test 12 (Userspace Filesystem Access):** VFS path resolution (`vfs_resolve_path()`) traverses mount points (`current = current->mount_point`). CPL3 process opens `"/mnt/testdisk/test.txt"` (`SYS_OPEN`, `DAWN_O_RDONLY`), reads 64 bytes (`SYS_READ`), verifies byte content prefix `"DAWN"`, tests EOF (returns 0), verifies write rejection (`SYS_WRITE` on read-only fd fails with negative error), closes fd (`SYS_CLOSE`), and exits with 0. Verifies zero physical frame leaks.

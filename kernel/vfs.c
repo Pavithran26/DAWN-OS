@@ -292,9 +292,15 @@ bool vfs_resolve_path(const char *path,struct vfs_node **out_node) {
             component[n++]=path[i++];
         }
         component[n]='\0';
+        if (current != NULL && current->mount_point != NULL) {
+            current = current->mount_point;
+        }
         if (current==NULL || current->type!=VFS_TYPE_DIRECTORY || current->ops.finddir==NULL) return false;
         current=current->ops.finddir(current,component);
         if (current==NULL) return false;
+    }
+    if (current != NULL && current->mount_point != NULL) {
+        current = current->mount_point;
     }
     if (len>1U && path[len-1U]=='/' && current->type!=VFS_TYPE_DIRECTORY) return false;
     *out_node=current;
