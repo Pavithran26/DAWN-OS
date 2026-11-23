@@ -45,6 +45,8 @@
 #define PIT_CALIBRATION_INTERVAL_MS 50U
 #define PIT_CALIBRATION_COUNT ((PIT_BASE_HZ*PIT_CALIBRATION_INTERVAL_MS)/1000U)
 #define LAPIC_TIMER_CALIBRATION_MAX_POLLS 100000000ULL
+#define LAPIC_TIMER_MIN_PERIOD_COUNT 500U
+#define LAPIC_TIMER_MAX_PERIOD_COUNT 10000000U
 
 static volatile uint32_t *local_apic;
 static volatile uint32_t *io_apic;
@@ -298,7 +300,7 @@ static bool apic_local_timer_start(uint32_t initial_count,bool periodic) {
     return true;
 }
 
-bool apic_local_timer_calibrate(uint32_t target_hz) {
+bool apic_local_timer_calibrate_measure(uint32_t target_hz, uint32_t *out_period_count) {
     const uint64_t saved_flags=cpu_read_rflags();
     uint8_t speaker_control=0U;
     uint32_t start_count=0U;
@@ -309,13 +311,12 @@ bool apic_local_timer_calibrate(uint32_t target_hz) {
     bool reference_elapsed=false;
     bool success=false;
 
-    if (!initialized || local_apic==NULL || target_hz<10U || target_hz>1000U)
+    if (!initialized || local_apic==NULL || out_period_count==NULL ||
+        target_hz<10U || target_hz>1000U)
         return false;
 
     cpu_cli();
     speaker_control=inb((uint16_t)PIT_SPEAKER_CONTROL);
-    local_timer_calibrated_hz=0U;
-    local_timer_calibrated_period_count=0U;
     apic_local_timer_stop();
 
     /* PIT channel 2 supplies a 50 ms mode-0 reference. Channel 0 is kept
@@ -363,7 +364,8 @@ bool apic_local_timer_calibrate(uint32_t target_hz) {
                 const uint64_t denominator=(uint64_t)PIT_CALIBRATION_INTERVAL_MS*
                                             (uint64_t)target_hz;
                 const uint64_t calculated=numerator/denominator;
-                if (calculated>0ULL && calculated<=UINT32_MAX) {
+                if (calculated>=LAPIC_TIMER_MIN_PERIOD_COUNT &&
+                    calculated<=LAPIC_TIMER_MAX_PERIOD_COUNT) {
                     period_count=(uint32_t)calculated;
                     success=true;
                 }
@@ -375,11 +377,22 @@ bool apic_local_timer_calibrate(uint32_t target_hz) {
     __asm__ volatile ("outb %0, %1" : : "a"(speaker_control),
                       "Nd"((uint16_t)PIT_SPEAKER_CONTROL));
     if (success) {
-        local_timer_calibrated_hz=target_hz;
-        local_timer_calibrated_period_count=period_count;
+        *out_period_count=period_count;
     }
     cpu_restore_interrupt_flag(saved_flags);
     return success;
+}
+
+bool apic_local_timer_calibrate(uint32_t target_hz) {
+    uint32_t period_count=0U;
+    local_timer_calibrated_hz=0U;
+    local_timer_calibrated_period_count=0U;
+    if (!apic_local_timer_calibrate_measure(target_hz,&period_count)) {
+        return false;
+    }
+    local_timer_calibrated_hz=target_hz;
+    local_timer_calibrated_period_count=period_count;
+    return true;
 }
 
 bool apic_local_timer_start_calibrated_periodic(void) {
@@ -483,6 +496,40 @@ bool apic_local_timer_api_self_test(void) {
         apic_local_timer_calibrate(1001U)) return false;
     return local_timer_calibrated_hz==calibrated_hz &&
            local_timer_calibrated_period_count==calibrated_count;
+}
+
+bool apic_local_timer_calibration_tolerance_test(void) {
+    uint32_t first_count=0U;
+    uint32_t second_count=0U;
+    uint32_t diff=0U;
+    uint64_t max_allowed_diff=0ULL;
+
+    if (!initialized || local_apic==NULL) return false;
+    if (local_timer_calibrated_hz!=100U) return false;
+    first_count=local_timer_calibrated_period_count;
+    if (first_count<LAPIC_TIMER_MIN_PERIOD_COUNT ||
+        first_count>LAPIC_TIMER_MAX_PERIOD_COUNT) return false;
+
+    /* Perform a second independent measurement at 100 Hz */
+    if (!apic_local_timer_calibrate_measure(100U,&second_count)) return false;
+    if (second_count<LAPIC_TIMER_MIN_PERIOD_COUNT ||
+        second_count>LAPIC_TIMER_MAX_PERIOD_COUNT) return false;
+
+    /* Repeatability tolerance: measurements must agree within 2% */
+    diff=(first_count>second_count) ? (first_count-second_count) : (second_count-first_count);
+    max_allowed_diff=((uint64_t)first_count*2ULL)/100ULL;
+    if (max_allowed_diff==0ULL) max_allowed_diff=1ULL;
+    if ((uint64_t)diff>max_allowed_diff) return false;
+
+    /* Verify bounds and invalid argument rejection */
+    if (apic_local_timer_calibrate_measure(0U,&second_count)) return false;
+    if (apic_local_timer_calibrate_measure(9U,&second_count)) return false;
+    if (apic_local_timer_calibrate_measure(1001U,&second_count)) return false;
+    if (apic_local_timer_calibrate_measure(100U,NULL)) return false;
+
+    /* Verify state preservation */
+    return (local_timer_calibrated_hz==100U &&
+            local_timer_calibrated_period_count==first_count);
 }
 #endif
 

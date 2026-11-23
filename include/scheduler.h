@@ -47,6 +47,7 @@ struct interrupt_frame *scheduler_user_wait(struct interrupt_frame *frame);
 /* Spawn a child process or replace image from CPL3 syscall frame. */
 struct interrupt_frame *scheduler_user_spawn(struct interrupt_frame *frame);
 struct interrupt_frame *scheduler_user_exec(struct interrupt_frame *frame);
+bool scheduler_cleanup_all_threads(void);
 #ifdef DAWN_KERNEL_TEST
 bool scheduler_self_test(void);
 bool scheduler_preemption_self_test(void);
@@ -54,5 +55,7 @@ bool scheduler_process_context_self_test(void);
 bool scheduler_user_context_self_test(void);
 bool scheduler_elf_launch_self_test(void);
 bool scheduler_wait_self_test(void);
+bool scheduler_guard_and_state_self_test(void);
+bool scheduler_stress_self_test(void);
 #endif
 #endif

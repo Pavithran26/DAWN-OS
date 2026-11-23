@@ -292,6 +292,34 @@ bool scheduler_discard_process_threads(uint64_t process_id) {
     return true;
 }
 
+bool scheduler_cleanup_all_threads(void) {
+    if (!initialized || (read_cs()&3U)!=0U)
+        return false;
+    const uint64_t saved_flags=read_rflags();
+    disable_interrupts();
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        struct kernel_thread *thread=&thread_pool[i];
+        if (thread->state!=THREAD_FREE && thread->state!=THREAD_DEAD) {
+            increment_saturated(&counters.threads_exited);
+        }
+        thread->state=THREAD_DEAD;
+        thread->process_id=0ULL;
+        thread->entry=NULL;
+        thread->argument=NULL;
+        thread->waiting=false;
+        thread->wait_child_id=0;
+        thread->wait_status_address=0ULL;
+        thread_guard_initialize(thread);
+    }
+    counters.active_threads=0ULL;
+    current_thread=&bootstrap_thread;
+    bootstrap_thread.state=THREAD_RUNNING;
+    scheduler_running=false;
+    ready_cursor=0ULL;
+    restore_interrupt_flag(saved_flags);
+    return true;
+}
+
 bool kernel_thread_create(kernel_thread_entry entry,void *argument,
                           uint64_t *thread_id) {
     uint64_t saved_flags=0ULL;
@@ -858,6 +886,64 @@ static volatile uint64_t preemption_wait_expired;
 static volatile uint64_t preemption_stress_started_mask;
 static volatile uint64_t preemption_stress_timeout_mask;
 static volatile uint64_t user_timer_peer_ran;
+static volatile uint64_t guard_state_worker_ran;
+static volatile uint64_t guard_state_worker_saw_running;
+static volatile uint64_t stress_ring_flags[4];
+static volatile uint64_t stress_ring_done[4];
+static volatile uint64_t churn_worker_cycles[2];
+
+static void scheduler_guard_state_worker(void *argument) {
+    (void)argument;
+    guard_state_worker_ran=1ULL;
+    if (current_thread!=NULL && current_thread->state==THREAD_RUNNING) {
+        guard_state_worker_saw_running=1ULL;
+    }
+}
+
+static void scheduler_stress_ring_worker(void *argument) {
+    const uintptr_t index=(uintptr_t)argument;
+    if (index>=4U) cpu_halt_forever();
+
+    if (index==3U) {
+        for (uint64_t step=0ULL;step<50000ULL;step++) {
+            __asm__ volatile ("pause");
+        }
+        stress_ring_flags[2]=1ULL;
+        stress_ring_done[3]=1ULL;
+        return;
+    }
+
+    for (uint64_t attempt=0ULL;attempt<50000000ULL;attempt++) {
+        if (stress_ring_flags[index]!=0ULL) {
+            if (index>0U) {
+                stress_ring_flags[index-1U]=1ULL;
+            }
+            stress_ring_done[index]=1ULL;
+            return;
+        }
+        __asm__ volatile ("pause");
+    }
+}
+
+static void scheduler_timer_churn_worker_control(void *argument) {
+    (void)argument;
+    for (uint32_t c=0U;c<8U;c++) {
+        apic_local_timer_stop();
+        churn_worker_cycles[0]++;
+        kernel_thread_yield();
+        (void)apic_local_timer_start_calibrated_periodic();
+        churn_worker_cycles[0]++;
+        kernel_thread_yield();
+    }
+}
+
+static void scheduler_timer_churn_worker_peer(void *argument) {
+    (void)argument;
+    for (uint32_t c=0U;c<16U;c++) {
+        churn_worker_cycles[1]++;
+        kernel_thread_yield();
+    }
+}
 
 static void scheduler_test_worker(void *argument) {
     const uintptr_t worker_index=(uintptr_t)argument;
@@ -1425,6 +1511,214 @@ bool scheduler_wait_self_test(void) {
         if (thread_pool[slot].state != THREAD_FREE && thread_pool[slot].state != THREAD_DEAD) {
             return false;
         }
+    }
+
+    return true;
+}
+
+bool scheduler_guard_and_state_self_test(void) {
+    uint64_t thread_id=0ULL;
+    struct kernel_thread *target=NULL;
+    struct scheduler_stats stats_after={0};
+    uint64_t fill_ids[KERNEL_THREAD_MAX]={0ULL};
+    size_t filled=0U;
+    uint64_t reject_id=0ULL;
+
+    if (!initialized || scheduler_running || current_thread!=&bootstrap_thread)
+        return false;
+
+    guard_state_worker_ran=0ULL;
+    guard_state_worker_saw_running=0ULL;
+
+    /* 1. Create worker and verify initial state is THREAD_READY */
+    if (!kernel_thread_create(scheduler_guard_state_worker,NULL,&thread_id) || thread_id==0ULL)
+        return false;
+
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        if (thread_pool[i].id==thread_id) {
+            target=&thread_pool[i];
+            break;
+        }
+    }
+    if (target==NULL || target->state!=THREAD_READY) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* 2. Run scheduler until idle */
+    if (!scheduler_run_until_idle()) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* 3. Verify worker executed, observed THREAD_RUNNING, and transitioned to THREAD_DEAD */
+    if (guard_state_worker_ran!=1ULL || guard_state_worker_saw_running!=1ULL ||
+        target->state!=THREAD_DEAD) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* 4. Verify stack guard is valid */
+    if (!thread_guard_valid(target)) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* 5. Corrupt stack guard on the dead slot and verify kernel_thread_create rejects it */
+    target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
+    if (thread_guard_valid(target)) {
+        target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* Fill all other slots with noop threads so candidate allocation must choose target */
+    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
+        if (&thread_pool[i]!=target) {
+            if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&fill_ids[filled])) {
+                target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
+                scheduler_cleanup_all_threads();
+                return false;
+            }
+            filled++;
+        }
+    }
+
+    /* With all other slots filled/READY, trying to create one more must evaluate target */
+    if (kernel_thread_create(scheduler_test_noop_worker,NULL,&reject_id)) {
+        target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* 6. Restore guard byte and verify creation now succeeds on target */
+    target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&reject_id)) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* Run all filled threads to completion */
+    if (!scheduler_run_until_idle()) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    scheduler_get_stats(&stats_after);
+    if (stats_after.active_threads!=0ULL) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    return true;
+}
+
+bool scheduler_stress_self_test(void) {
+    struct scheduler_stats before={0},after={0};
+    const uint64_t saved_flags=read_rflags();
+
+    if (!initialized || current_thread!=&bootstrap_thread || scheduler_running)
+        return false;
+
+    /* Part 1: Multiple non-yielding workers in dependency ring under timer preemption */
+    scheduler_get_stats(&before);
+    for (size_t i=0U;i<4U;i++) {
+        stress_ring_flags[i]=0ULL;
+        stress_ring_done[i]=0ULL;
+    }
+
+    if (!apic_local_timer_start_calibrated_periodic()) return false;
+
+    disable_interrupts();
+    ready_cursor=0ULL;
+    restore_interrupt_flag(saved_flags);
+
+    for (uintptr_t i=0U;i<4U;i++) {
+        if (!kernel_thread_create(scheduler_stress_ring_worker,(void *)i,NULL)) {
+            apic_local_timer_stop();
+            scheduler_cleanup_all_threads();
+            return false;
+        }
+    }
+
+    if (!scheduler_run_until_idle()) {
+        apic_local_timer_stop();
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    apic_local_timer_stop();
+
+    for (size_t i=0U;i<4U;i++) {
+        if (stress_ring_done[i]!=1ULL) {
+            scheduler_cleanup_all_threads();
+            return false;
+        }
+    }
+
+    scheduler_get_stats(&after);
+    if (after.active_threads!=0ULL ||
+        after.threads_exited<before.threads_exited+4ULL ||
+        after.timer_preemptions<before.timer_preemptions+3ULL) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    for (size_t slot=0U;slot<KERNEL_THREAD_MAX;slot++) {
+        if (thread_pool[slot].state==THREAD_DEAD &&
+            (!thread_guard_valid(&thread_pool[slot]) ||
+             !thread_frame_valid(&thread_pool[slot],thread_pool[slot].saved_frame))) {
+            scheduler_cleanup_all_threads();
+            return false;
+        }
+    }
+
+    /* Part 2: Repeated timer stop/restart churn during active scheduling */
+    churn_worker_cycles[0]=0ULL;
+    churn_worker_cycles[1]=0ULL;
+    scheduler_get_stats(&before);
+
+    if (!apic_local_timer_start_calibrated_periodic()) return false;
+
+    if (!kernel_thread_create(scheduler_timer_churn_worker_control,NULL,NULL) ||
+        !kernel_thread_create(scheduler_timer_churn_worker_peer,NULL,NULL) ||
+        !scheduler_run_until_idle()) {
+        apic_local_timer_stop();
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    apic_local_timer_stop();
+
+    if (churn_worker_cycles[0]!=16ULL || churn_worker_cycles[1]!=16ULL) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    scheduler_get_stats(&after);
+    if (after.active_threads!=0ULL ||
+        after.threads_exited<before.threads_exited+2ULL) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* Part 3: Cleanup validation and post-cleanup thread dispatch */
+    uint64_t dummy_id1=0ULL,dummy_id2=0ULL;
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&dummy_id1) ||
+        !kernel_thread_create(scheduler_test_noop_worker,NULL,&dummy_id2)) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+    if (!scheduler_cleanup_all_threads()) return false;
+    scheduler_get_stats(&after);
+    if (after.active_threads!=0ULL) return false;
+
+    /* Verify we can create and run a thread cleanly after cleanup */
+    uint64_t post_id=0ULL;
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&post_id) ||
+        !scheduler_run_until_idle()) {
+        scheduler_cleanup_all_threads();
+        return false;
     }
 
     return true;

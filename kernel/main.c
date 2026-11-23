@@ -1045,6 +1045,12 @@ void kernel_main(void) {
                 serial_write_u64(apic_local_timer_calibrated_period_count());
                 serial_write("\n");
 #ifdef DAWN_KERNEL_TEST
+                if (!apic_local_timer_calibration_tolerance_test()) {
+                    serial_write("DAWN-TEST: FAIL: Local APIC timer calibration accuracy and repeatability tolerance\n");
+                    qemu_debug_exit(QEMU_TEST_FAIL);
+                    cpu_halt_forever();
+                }
+                serial_write("DAWN-TEST: PASS: Local APIC timer calibration accuracy and repeatability tolerance\n");
                 serial_write("DAWN-TEST: PASS: Local APIC timer calibration\n");
 #endif
             } else {
@@ -1101,6 +1107,18 @@ void kernel_main(void) {
     }
     apic_local_timer_stop();
     serial_write("DAWN-TEST: PASS: repeated timer-driven kernel-thread preemption\n");
+    if (!scheduler_guard_and_state_self_test()) {
+        serial_write("DAWN-TEST: FAIL: thread stack guard detection, state machine transitions and cleanup\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: thread stack guard detection, state machine transitions and cleanup\n");
+    if (!scheduler_stress_self_test()) {
+        serial_write("DAWN-TEST: FAIL: scheduler heavy preemption stress, non-yielding workers and timer churn\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: scheduler heavy preemption stress, non-yielding workers and timer churn\n");
     if (!scheduler_process_context_self_test()) {
         serial_write("DAWN-TEST: FAIL: process-bound scheduler context switching\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
