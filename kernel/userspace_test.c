@@ -5,6 +5,7 @@
 #include "scheduler.h"
 #include "syscall.h"
 #include "physical_memory.h"
+#include "page_table.h"
 
 #ifdef DAWN_KERNEL_TEST
 
@@ -336,6 +337,130 @@ bool userspace_runtime_self_test(void) {
 
         if (!process_reap(gpf_pid)) {
             return false;
+        }
+    }
+
+    /* Test 6: Malformed ELF and invalid argument rejection with clean rollback */
+    {
+        uint64_t dummy_pid = 0;
+        struct physical_allocator_stats test6_before = {0};
+        struct physical_allocator_stats test6_after = {0};
+        physical_allocator_get_stats(&test6_before);
+
+        /* Null image pointer must fail */
+        if (process_spawn(NULL, 1024, 0, NULL, NULL, &dummy_pid)) {
+            return false;
+        }
+
+        /* Zero image size must fail */
+        uint8_t dummy_byte = 0;
+        if (process_spawn(&dummy_byte, 0, 0, NULL, NULL, &dummy_pid)) {
+            return false;
+        }
+
+        /* Null out_pid must fail */
+        if (process_spawn(&dummy_byte, 1, 0, NULL, NULL, NULL)) {
+            return false;
+        }
+
+        /* Malformed ELF magic must fail and roll back */
+        static uint8_t bad_elf[512];
+        for (size_t i = 0; i < sizeof(bad_elf); i++) bad_elf[i] = 0;
+        bad_elf[0] = 0x7fU;
+        bad_elf[1] = (uint8_t)'X';
+        bad_elf[2] = (uint8_t)'Y';
+        bad_elf[3] = (uint8_t)'Z';
+        if (process_spawn(bad_elf, sizeof(bad_elf), 0, NULL, NULL, &dummy_pid)) {
+            return false;
+        }
+
+        /* Verify zero page frame leaks during failed spawns */
+        physical_allocator_get_stats(&test6_after);
+        if (test6_before.free_frames != test6_after.free_frames) {
+            return false;
+        }
+    }
+
+    /* Test 7: Memory boundary isolation and kernel space protection */
+    {
+        /* NULL address range must be rejected */
+        if (vm_user_range_valid(0x0ULL, 4096ULL, true)) {
+            return false;
+        }
+
+        /* Kernel virtual base must be rejected */
+        if (vm_user_range_valid(0xffffffff80000000ULL, 4096ULL, false)) {
+            return false;
+        }
+
+        /* HHDM virtual range must be rejected */
+        if (vm_user_range_valid(0xffff800000000000ULL, 4096ULL, false)) {
+            return false;
+        }
+
+        /* Canonical address ceiling overflow must be rejected */
+        if (vm_user_range_valid((1ULL << 47) - 2048ULL, 4096ULL, false)) {
+            return false;
+        }
+
+        /* Syscall boundary protection: passing kernel buffer to SYS_WRITE must return -EFAULT */
+        int64_t w_ret = syscall_dispatch((uint64_t)DAWN_SYS_WRITE, (uint64_t)DAWN_STDOUT_FD,
+                                         0xffffffff80000000ULL, 32ULL, 0ULL, 0ULL, 0ULL);
+        if (w_ret != -(int64_t)DAWN_ERRNO_EFAULT) {
+            return false;
+        }
+    }
+
+    /* Test 8: Process wait on non-existent child */
+    {
+        uint64_t exited_child = 0ULL;
+        if (process_has_children(99999ULL, -1LL, &exited_child)) {
+            return false;
+        }
+    }
+
+    /* Test 9: Repeated spawn/exit/reap cycles and process slot reuse */
+    {
+        static const uint8_t cycle_code[] = {
+            /* mov $2, %rax (DAWN_SYS_EXIT) */
+            0x48U, 0xc7U, 0xc0U, 0x02U, 0x00U, 0x00U, 0x00U,
+            /* mov $7, %rdi (status 7) */
+            0x48U, 0xc7U, 0xc7U, 0x07U, 0x00U, 0x00U, 0x00U,
+            /* int $0x80 */
+            0xcdU, 0x80U,
+            /* ud2 */
+            0x0fU, 0x0bU
+        };
+
+        static uint8_t cycle_elf[8192];
+        size_t cycle_size = 0;
+        if (!build_test_elf(cycle_elf, sizeof(cycle_elf), cycle_code, sizeof(cycle_code), &cycle_size)) {
+            return false;
+        }
+
+        for (uint32_t i = 0U; i < 5U; i++) {
+            uint64_t cpid = 0ULL;
+            const char *cargs[] = {"cycle_task", NULL};
+            if (!process_spawn(cycle_elf, cycle_size, 1, cargs, NULL, &cpid) || cpid == 0ULL) {
+                return false;
+            }
+
+            if (!scheduler_run_until_idle()) {
+                return false;
+            }
+
+            struct process_info cinfo = {0};
+            if (!process_get_info(cpid, &cinfo)) {
+                return false;
+            }
+
+            if (cinfo.state != PROCESS_STATE_EXITED || cinfo.exit_status != 7) {
+                return false;
+            }
+
+            if (!process_reap(cpid)) {
+                return false;
+            }
         }
     }
 
