@@ -1,18 +1,27 @@
 # DAWN-OS Automated Test Suite Report
 
-- **Source Commit:** `7bdbc071df879513ffd427876177c69a93b45a2f`
-- **Timestamp (UTC):** `2026-11-23T05:44:36Z`
-- **CI Run:** [GitHub Actions Run #45119599891](https://github.com/Pavithran26/DAWN-OS/actions/runs/45119599891)
+- **Source Commit:** `9bf1ca3436aea9ebf7d71b552deb57701a12a86f`
+- **Timestamp (UTC):** `2026-11-23T06:08:28Z`
+- **CI Run:** [GitHub Actions Run #45121979973](https://github.com/Pavithran26/DAWN-OS/actions/runs/45121979973)
 - **Status:** **ALL PASSED**
 
 ---
 
-## Boot Environment Results
+## Boot Environment Results (Self-Test Kernel)
 
 | Environment | Bootloader | Firmware / Hypervisor | Exit Code | Result | Failures |
 |---|---|---|---|---|---|
 | **BIOS** | Limine v12.10.0 (BIOS CD) | QEMU q35 + SeaBIOS | 33 | **PASS** | 0 |
 | **UEFI** | Limine v12.10.0 (BOOTX64.EFI) | QEMU q35 + OVMF (4M) | 33 | **PASS** | 0 |
+
+---
+
+## Production ISO Smoke Boot Results
+
+| Target | Bootloader | Firmware / Hypervisor | Expected Milestone | Result |
+|---|---|---|---|---|
+| **BIOS (Production ISO)** | Limine BIOS CD | QEMU q35 + SeaBIOS | Desktop Event Loop | **PASS (desktop loop reached)** |
+| **UEFI (Production ISO)** | Limine BOOTX64.EFI | QEMU q35 + OVMF (4M) | Desktop Event Loop | **PASS (desktop loop reached)** |
 
 ---
 

@@ -56,7 +56,7 @@ DAWN-OS: ACPI MADT: PIT IRQ0 override GSI 2
 DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked
 DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery
 DAWN-TEST: PASS: Local APIC one-shot timer interrupt
-DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624691
+DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624623
 DAWN-TEST: PASS: Local APIC timer calibration
 DAWN-OS: SMP initialized; detected CPU count: 2, online: 2
 DAWN-TEST: PASS: SMP multi-core detection, BSP initialization and AP boot

@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "os_name": "DAWN-OS",
+  "version": "1.0.0",
+  "channel": "development",
+  "branch": "test-results",
+  "build_type": "test-reports-and-evidence",
+  "target_architecture": "x86_64",
+  "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
+  "bootloader": "Limine v12.10.0",
+  "source_commit": "9bf1ca3436aea9ebf7d71b552deb57701a12a86f",
+  "source_commit_short": "9bf1ca3",
+  "build_timestamp_utc": "2026-11-23T06:08:28Z",
+  "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45121979973",
+  "validation": {
+    "status": "PASSED",
+    "bios_boot": "PASSED (exit 33, 0 FAIL)",
+    "uefi_boot": "PASSED (exit 33, 0 FAIL)",
+    "production_bios_boot": "PASSED (desktop loop reached)",
+    "production_uefi_boot": "PASSED (desktop loop reached)",
+    "bios_tests_passed_count": 64,
+    "uefi_tests_passed_count": 64
+  },
+  "artifacts": [
+    {
+      "filename": "test-summary.json",
+      "size_bytes": 8856,
+      "sha256": "1c0e3983028b87037b56ac4ea352bab11647f2eeeffea4a054193494d7ec5855"
+    },
+    {
+      "filename": "test-report.md",
+      "size_bytes": 6541,
+      "sha256": "ec945baa838d57e4d6a81e0a66dc9abe70f7aacadb26f711e5adaab76d2b1856"
+    },
+    {
+      "filename": "test-matrix.txt",
+      "size_bytes": 1355,
+      "sha256": "0599a7f09482d678c9318a552ee7f982a3bda42f5216f9b60061b4093ff0b114"
+    },
+    {
+      "filename": "bios-serial.log",
+      "size_bytes": 7576,
+      "sha256": "bdeccc65a9f0bf2ab63f27dd1d2bd08aa0b3e23a6bd11c6235bb7cd6a5f68779"
+    },
+    {
+      "filename": "uefi-serial.log",
+      "size_bytes": 7899,
+      "sha256": "7d0dfc3390178d55ac70c3deef1f7c572c03d5903bc0d1a3a0f9b6e795a42aac"
+    },
+    {
+      "filename": "bios-smoke.log",
+      "size_bytes": 3100,
+      "sha256": "dfa88d4cff9efcb01d45f203dc9a1cbd3e16833e6e88a3b1e2e8d96d74fb748e"
+    },
+    {
+      "filename": "uefi-smoke.log",
+      "size_bytes": 3423,
+      "sha256": "bd9c7dffe22b88430e5754f8f008e341e3f8b83168b0b81cfdb6d1e1187a15d9"
+    }
+  ]
+}

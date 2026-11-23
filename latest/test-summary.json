@@ -1,8 +1,8 @@
 {
-  "source_commit": "7bdbc071df879513ffd427876177c69a93b45a2f",
-  "timestamp_utc": "2026-11-23T05:44:36Z",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45119599891",
-  "bios": {
+  "source_commit": "9bf1ca3436aea9ebf7d71b552deb57701a12a86f",
+  "timestamp_utc": "2026-11-23T06:08:28Z",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45121979973",
+  "bios_self_test": {
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
@@ -74,7 +74,7 @@
       "Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer"
     ]
   },
-  "uefi": {
+  "uefi_self_test": {
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
@@ -145,5 +145,10 @@
       "init process spawning and user stack setup",
       "Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer"
     ]
+  },
+  "production_smoke_test": {
+    "bios_status": "PASS",
+    "uefi_status": "PASS",
+    "expected_milestone": "DAWN-OS: Entering production desktop event and scheduler loop"
   }
 }
