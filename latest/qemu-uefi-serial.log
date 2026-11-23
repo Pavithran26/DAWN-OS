@@ -6,16 +6,16 @@ DAWN-OS: Limine base revision 6 accepted
 DAWN-OS: Limine 4-level paging mode confirmed
 DAWN-TEST: PASS: memory-map validator edge cases
 DAWN-OS: Limine memory map validated
-DAWN-OS: memory map entries: 35
-DAWN-OS: usable regions: 10
+DAWN-OS: memory map entries: 33
+DAWN-OS: usable regions: 9
 DAWN-OS: usable RAM MiB: 186
-DAWN-OS: bootloader-reclaimable regions: 10
+DAWN-OS: bootloader-reclaimable regions: 9
 DAWN-OS: bootloader-reclaimable MiB: 42
 DAWN-OS: unknown memory-map types (not allocatable): 0
 DAWN-OS: HHDM response validated; dynamic offset accepted
 DAWN-TEST: PASS: physical page allocator edge cases
-DAWN-OS: physical allocator managed frames: 47658
-DAWN-OS: physical allocator free frames: 47658
+DAWN-OS: physical allocator managed frames: 47622
+DAWN-OS: physical allocator free frames: 47622
 DAWN-OS: physical allocator tracking limit MiB: 4096
 DAWN-OS: x86_64 four-level page-table manager initialized
 DAWN-TEST: PASS: virtual-memory map/translate/unmap tests
@@ -58,7 +58,7 @@ DAWN-OS: ACPI MADT: PIT IRQ0 override GSI 2
 DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked
 DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery
 DAWN-TEST: PASS: Local APIC one-shot timer interrupt
-DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624538
+DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624539
 DAWN-TEST: PASS: Local APIC timer calibration accuracy and repeatability tolerance
 DAWN-TEST: PASS: Local APIC timer calibration
 DAWN-OS: SMP initialized; detected CPU count: 2, online: 2
@@ -103,6 +103,7 @@ DAWN-TEST: PASS: terminal emulator text grid, scrolling and render buffer
 DAWN-TEST: PASS: task manager process list, performance graphs and controls
 DAWN-TEST: PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle
 DAWN-TEST: PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping
+DAWN-TEST: PASS: virtio-blk PCI driver, request queue, read-only bounds and sector read
 DAWN-TEST: PASS: audio mixer, master volume, stream mixing and tone generation
 DAWN-TEST: PASS: settings serialization, defaults, clamping and window navigation
 DAWN-TEST: PASS: metadata validation, URL handling and safe text
@@ -117,5 +118,7 @@ DAWN-TEST: PASS: spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and ker
 DAWN-OS: framebuffer request fulfilled
 DAWN-OS: spawning native init process (PID 1)...
 DAWN-TEST: PASS: init process spawning and user stack setup
+-INIT] PID 1 active.
+      DAWN-TEST: PASS: userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation
 DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer
 DAWN-TEST: RESULT=PASS
