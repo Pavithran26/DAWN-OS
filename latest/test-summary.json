@@ -1,12 +1,12 @@
 {
-  "source_commit": "b331bef8d30093f529be4312aa1f4b04a1b07e87",
-  "timestamp_utc": "2026-11-23T06:37:26Z",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45125180689",
+  "source_commit": "b80d048a2e38774b47749f40f61ff8b421fcd0e7",
+  "timestamp_utc": "2026-11-23T07:29:51Z",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45131330303",
   "bios_self_test": {
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 67,
+    "tests_passed": 69,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -62,6 +62,7 @@
       "task manager process list, performance graphs and controls",
       "network checksum, loopback, UDP packet dispatch and socket lifecycle",
       "virtio-net PCI driver, ARP resolution and ICMP echo ping",
+      "virtio-blk PCI driver, request queue, read-only bounds and sector read",
       "audio mixer, master volume, stream mixing and tone generation",
       "settings serialization, defaults, clamping and window navigation",
       "metadata validation, URL handling and safe text",
@@ -74,6 +75,7 @@
       "multi-language catalog, keymap translation tables and accessibility scaling",
       "spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules",
       "init process spawning and user stack setup",
+      "userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation",
       "Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer"
     ]
   },
@@ -81,7 +83,7 @@
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 67,
+    "tests_passed": 69,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -137,6 +139,7 @@
       "task manager process list, performance graphs and controls",
       "network checksum, loopback, UDP packet dispatch and socket lifecycle",
       "virtio-net PCI driver, ARP resolution and ICMP echo ping",
+      "virtio-blk PCI driver, request queue, read-only bounds and sector read",
       "audio mixer, master volume, stream mixing and tone generation",
       "settings serialization, defaults, clamping and window navigation",
       "metadata validation, URL handling and safe text",
@@ -149,6 +152,7 @@
       "multi-language catalog, keymap translation tables and accessibility scaling",
       "spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules",
       "init process spawning and user stack setup",
+      "userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation",
       "Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer"
     ]
   },

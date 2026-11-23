@@ -1,8 +1,8 @@
 # DAWN-OS Automated Test Suite Report
 
-- **Source Commit:** `b331bef8d30093f529be4312aa1f4b04a1b07e87`
-- **Timestamp (UTC):** `2026-11-23T06:37:26Z`
-- **CI Run:** [GitHub Actions Run #45125180689](https://github.com/Pavithran26/DAWN-OS/actions/runs/45125180689)
+- **Source Commit:** `b80d048a2e38774b47749f40f61ff8b421fcd0e7`
+- **Timestamp (UTC):** `2026-11-23T07:29:51Z`
+- **CI Run:** [GitHub Actions Run #45131330303](https://github.com/Pavithran26/DAWN-OS/actions/runs/45131330303)
 - **Status:** **ALL PASSED**
 
 ---
@@ -25,7 +25,7 @@
 
 ---
 
-## Verified Kernel Subsystems & Tests (67 Total)
+## Verified Kernel Subsystems & Tests (69 Total)
 
 | Subsystem | Verified Test Name | Status |
 |---|---|---|
@@ -62,6 +62,7 @@
 | Process & Scheduler | process spawning from in-memory ELF image and thread binding | PASS |
 | Process & Scheduler | task manager process list, performance graphs and controls | PASS |
 | Process & Scheduler | init process spawning and user stack setup | PASS |
+| Process & Scheduler | userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation | PASS |
 | Process & Scheduler | Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer | PASS |
 | Storage & Filesystem | parent child wait, blocking and collection | PASS |
 | Storage & Filesystem | VFS mount, hierarchy, path resolution and operations | PASS |
@@ -77,6 +78,7 @@
 | Networking & Drivers | USB HID keyboard/mouse report parsing | PASS |
 | Networking & Drivers | network checksum, loopback, UDP packet dispatch and socket lifecycle | PASS |
 | Networking & Drivers | virtio-net PCI driver, ARP resolution and ICMP echo ping | PASS |
+| Networking & Drivers | virtio-blk PCI driver, request queue, read-only bounds and sector read | PASS |
 | Networking & Drivers | audio mixer, master volume, stream mixing and tone generation | PASS |
 | GUI & Applications | desktop taskbar, launcher and composition | PASS |
 | GUI & Applications | calculator application operations and button layout | PASS |
