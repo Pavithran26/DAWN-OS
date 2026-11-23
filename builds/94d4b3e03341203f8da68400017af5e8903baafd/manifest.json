@@ -1,0 +1,167 @@
+{
+  "schema_version": "1.0.0",
+  "os_name": "DAWN-OS",
+  "version": "1.0.0",
+  "channel": "development",
+  "branch": "userland",
+  "build_type": "userland-applications",
+  "target_architecture": "x86_64",
+  "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
+  "bootloader": "Limine v12.10.0",
+  "source_commit": "94d4b3e03341203f8da68400017af5e8903baafd",
+  "source_commit_short": "94d4b3e",
+  "build_timestamp_utc": "2026-11-23T12:43:37Z",
+  "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45176616827",
+  "validation": {
+    "status": "PASSED",
+    "bios_boot": "PASSED (exit 33, 0 FAIL)",
+    "uefi_boot": "PASSED (exit 33, 0 FAIL)",
+    "production_bios_boot": "PASSED (desktop loop reached)",
+    "production_uefi_boot": "PASSED (desktop loop reached)",
+    "bios_tests_passed_count": 79,
+    "uefi_tests_passed_count": 79
+  },
+  "artifacts": [
+    {
+      "filename": "cat.elf",
+      "size_bytes": 14448,
+      "sha256": "d31f1c51b5bf9a7bfdd3d69b73af9f43762f1b800a39fa61e8d9f93d826a43fc"
+    },
+    {
+      "filename": "clear.elf",
+      "size_bytes": 14400,
+      "sha256": "a676d0d086b307c4dae35032e9fc138b22003b3e674a28fd56b0d53726a7daa3"
+    },
+    {
+      "filename": "cp.elf",
+      "size_bytes": 14504,
+      "sha256": "53c918e7ecee112d02d24ac13ed2b66fbfa00889ce60574185ccfdbdfd7a32df"
+    },
+    {
+      "filename": "date.elf",
+      "size_bytes": 14512,
+      "sha256": "826b944f8b1a4517c2f2d7334938593d8f0142cc79da8b7809a1128f7ff0cd1d"
+    },
+    {
+      "filename": "echo.elf",
+      "size_bytes": 14384,
+      "sha256": "7ec6a467acb9b1fcf8b7ce1ed0458e9376d89d439c804585736d60a47c473be0"
+    },
+    {
+      "filename": "fetch.elf",
+      "size_bytes": 14992,
+      "sha256": "40291d5f0677beb205ff6436e21ec8ee5d5dba0e0d235f7ed94796f282648752"
+    },
+    {
+      "filename": "free.elf",
+      "size_bytes": 14864,
+      "sha256": "2cfde6a5fc93bba1f78d50f2cf4312b3919692aa40c500fc8f5ac57d53fb4bd9"
+    },
+    {
+      "filename": "grep.elf",
+      "size_bytes": 14880,
+      "sha256": "c3c6d1be49a6d8ab4c55b80170b51b2ba160bb384e26ea7430e9489365f5ce7a"
+    },
+    {
+      "filename": "gui_demo.elf",
+      "size_bytes": 15048,
+      "sha256": "1118e4583b7535d6ea01c754a12d909f9ce18d4d3f3741f6d36320550539c8ad"
+    },
+    {
+      "filename": "head.elf",
+      "size_bytes": 14416,
+      "sha256": "bbe8b65ca115a916f160d87ea999dc8c2c42281e248ce16916b10bb1bd73861e"
+    },
+    {
+      "filename": "ifconfig.elf",
+      "size_bytes": 14944,
+      "sha256": "ec0ecc0a2b83139dc52d9e1a055ebb4912b4941409cf1964120b76dc67aff77e"
+    },
+    {
+      "filename": "init.elf",
+      "size_bytes": 14864,
+      "sha256": "daa23f7e962eec17e85546b5431165b923bb8fc24a1e7e9c4a1f5729c2d680e7"
+    },
+    {
+      "filename": "kill.elf",
+      "size_bytes": 14464,
+      "sha256": "df462f5f7a7eb5de71612ca64a8c3b579be421e5f20fa0a27287980f7ff6ac57"
+    },
+    {
+      "filename": "ld_dawn.elf",
+      "size_bytes": 14488,
+      "sha256": "f8a283eef8fdc7abc6e29a5afd25524a9da8827ed1b08262a31f27b64217f165"
+    },
+    {
+      "filename": "ls.elf",
+      "size_bytes": 14440,
+      "sha256": "edcff6370d884d45277d5373e6fe21b388cac92807e15fe18232984aac78e48c"
+    },
+    {
+      "filename": "mkdir.elf",
+      "size_bytes": 14448,
+      "sha256": "5e0f289cf1bf3843ab2e8c546feee1523fff257dedeb49578be4f9cb393cb066"
+    },
+    {
+      "filename": "nproc.elf",
+      "size_bytes": 14640,
+      "sha256": "0f9bc6c79623c1d87b3d61cd2934a4119a08b3c565c23e5424cdf1de4f64cfed"
+    },
+    {
+      "filename": "ping.elf",
+      "size_bytes": 14576,
+      "sha256": "0154044b308bd6f6f726f032a19157dcd54d4e48e012b92560f2d83f6f43c1f8"
+    },
+    {
+      "filename": "pwd.elf",
+      "size_bytes": 14400,
+      "sha256": "751c0a3f29353148c6e3e4708a720c1bd628b06e5dafcbb3db654870874d58e1"
+    },
+    {
+      "filename": "rm.elf",
+      "size_bytes": 14424,
+      "sha256": "4c78216f71d6506bcca325398ed0c3a70c903b26d1f22e16d5db160b69644676"
+    },
+    {
+      "filename": "sh.elf",
+      "size_bytes": 21184,
+      "sha256": "249d1f86b5b2107f7a867a7f583397d83293d21cd5a4eff319a2001f912d6e0a"
+    },
+    {
+      "filename": "sleep.elf",
+      "size_bytes": 14448,
+      "sha256": "69710f5df0c2a3da95fd3c4c0182bed53b09250b06796a5cd12b027a66f9da6a"
+    },
+    {
+      "filename": "tail.elf",
+      "size_bytes": 14448,
+      "sha256": "53ab59e4240945d6295571343bdf45e741a4825bef888a47c3ee3c1c43c259cd"
+    },
+    {
+      "filename": "touch.elf",
+      "size_bytes": 14448,
+      "sha256": "fecc37e2be9191a81f9d1aa0ca47239adccec14be3b7e6da106eaefd6df41b20"
+    },
+    {
+      "filename": "uname.elf",
+      "size_bytes": 14560,
+      "sha256": "e5eda7fc1683803b6e1bad47748d49e64d4fc69ab3c6ae038f866a27f980f014"
+    },
+    {
+      "filename": "uptime.elf",
+      "size_bytes": 14624,
+      "sha256": "5ca8b380ac7a8d35457b8f9246fbe042295d48d45a59393ace783247849941cb"
+    },
+    {
+      "filename": "wc.elf",
+      "size_bytes": 14440,
+      "sha256": "4c7dea55238427a8560aa671680f78709073a49340d0ac42218d5091f0db9f19"
+    },
+    {
+      "filename": "whoami.elf",
+      "size_bytes": 14496,
+      "sha256": "e3298dffbb47b017399f60cca135f1be4b19df1fb6a222931b0e2400b5d08928"
+    }
+  ]
+}
