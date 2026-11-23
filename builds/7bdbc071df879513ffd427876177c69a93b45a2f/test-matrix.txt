@@ -1,0 +1,15 @@
+DAWN-OS Verified Subsystem Matrix:
+  [OK] Limine v12.10.0 Boot Protocol (BIOS + UEFI)
+  [OK] 64-bit Paging, Memory Map, PMM & VMM
+  [OK] Interrupts, IDT, ACPI MADT, IOAPIC & Local APIC
+  [OK] SMP Multi-Core Bootstrap (2 Cores Active in QEMU)
+  [OK] Preemptive Thread Scheduler & Process Lifecycle
+  [OK] Syscall ABI v1 (Hardware FAST SYSCALL & INT 0x80)
+  [OK] Ring-3 Userspace CPL3 Switch & Stack Guarding
+  [OK] VFS Virtual Filesystem, FAT32 Read/Write, ISO9660
+  [OK] Storage: MBR/GPT Partitioning, Block Dev Virtualization
+  [OK] Drivers: PS/2 Keyboard/Mouse, RTC, Graphics Framebuffer
+  [OK] GUI: Neo-Liquid Glass Window Manager, Task Manager, Settings
+  [OK] Networking: VirtIO-Net PCI Driver, ARP, ICMP Ping, UDP Stack
+  [OK] Audio: Intel HDA Audio Mixer & Waveform Generator
+  [OK] Security: NIST SHA-256, RFC 6070 PBKDF2 Password Hashing
