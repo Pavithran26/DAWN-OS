@@ -1,12 +1,12 @@
 {
-  "source_commit": "cd95efd2afd3ea0eb4b793814fcf64435ea33f7f",
-  "timestamp_utc": "2026-11-23T10:14:26Z",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45153537649",
+  "source_commit": "98c34aee79a9838c727750e759082a7ccd2c9a42",
+  "timestamp_utc": "2026-11-23T11:38:12Z",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45166796341",
   "bios_self_test": {
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 73,
+    "tests_passed": 74,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -53,6 +53,7 @@
       "unified input event queue and dispatch",
       "real-time clock BCD decoding and formatting",
       "graphics primitives, alpha blending and font rendering",
+      "safe framebuffer metadata validation, clipped blit and damage tracking",
       "window manager lifecycle, Z-order and controls",
       "desktop taskbar, launcher and composition",
       "calculator application operations and button layout",
@@ -87,7 +88,7 @@
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 73,
+    "tests_passed": 74,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -134,6 +135,7 @@
       "unified input event queue and dispatch",
       "real-time clock BCD decoding and formatting",
       "graphics primitives, alpha blending and font rendering",
+      "safe framebuffer metadata validation, clipped blit and damage tracking",
       "window manager lifecycle, Z-order and controls",
       "desktop taskbar, launcher and composition",
       "calculator application operations and button layout",

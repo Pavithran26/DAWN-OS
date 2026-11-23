@@ -6,16 +6,16 @@ DAWN-OS: Limine base revision 6 accepted
 DAWN-OS: Limine 4-level paging mode confirmed
 DAWN-TEST: PASS: memory-map validator edge cases
 DAWN-OS: Limine memory map validated
-DAWN-OS: memory map entries: 35
-DAWN-OS: usable regions: 10
+DAWN-OS: memory map entries: 33
+DAWN-OS: usable regions: 9
 DAWN-OS: usable RAM MiB: 185
-DAWN-OS: bootloader-reclaimable regions: 10
+DAWN-OS: bootloader-reclaimable regions: 9
 DAWN-OS: bootloader-reclaimable MiB: 42
 DAWN-OS: unknown memory-map types (not allocatable): 0
 DAWN-OS: HHDM response validated; dynamic offset accepted
 DAWN-TEST: PASS: physical page allocator edge cases
-DAWN-OS: physical allocator managed frames: 47602
-DAWN-OS: physical allocator free frames: 47602
+DAWN-OS: physical allocator managed frames: 47569
+DAWN-OS: physical allocator free frames: 47569
 DAWN-OS: physical allocator tracking limit MiB: 4096
 DAWN-OS: x86_64 four-level page-table manager initialized
 DAWN-TEST: PASS: virtual-memory map/translate/unmap tests
@@ -58,7 +58,7 @@ DAWN-OS: ACPI MADT: PIT IRQ0 override GSI 2
 DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked
 DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery
 DAWN-TEST: PASS: Local APIC one-shot timer interrupt
-DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624602
+DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624977
 DAWN-TEST: PASS: Local APIC timer calibration accuracy and repeatability tolerance
 DAWN-TEST: PASS: Local APIC timer calibration
 DAWN-OS: SMP initialized; detected CPU count: 2, online: 2
@@ -94,6 +94,7 @@ DAWN-TEST: PASS: USB HID keyboard/mouse report parsing
 DAWN-TEST: PASS: unified input event queue and dispatch
 DAWN-TEST: PASS: real-time clock BCD decoding and formatting
 DAWN-TEST: PASS: graphics primitives, alpha blending and font rendering
+DAWN-TEST: PASS: safe framebuffer metadata validation, clipped blit and damage tracking
 DAWN-TEST: PASS: window manager lifecycle, Z-order and controls
 DAWN-TEST: PASS: desktop taskbar, launcher and composition
 DAWN-TEST: PASS: calculator application operations and button layout
