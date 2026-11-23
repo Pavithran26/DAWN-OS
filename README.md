@@ -6,12 +6,12 @@ This branch (`qemu-uefi`) stores serial logs, execution traces, and diagnostic e
 
 ## Verification Summary
 
-- **Source Commit:** [`9bf1ca3`](https://github.com/Pavithran26/DAWN-OS/commit/9bf1ca3436aea9ebf7d71b552deb57701a12a86f)
+- **Source Commit:** [`b331bef`](https://github.com/Pavithran26/DAWN-OS/commit/b331bef8d30093f529be4312aa1f4b04a1b07e87)
 - **UEFI Self-Test Result:** PASSED (exit 33, 0 FAIL)
 - **Production ISO Smoke Boot:** PASSED (desktop loop reached)
-- **Tests Passed:** 64 / 64 (0 failures)
-- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45121979973)
-- **Timestamp:** `2026-11-23T06:08:28Z`
+- **Tests Passed:** 67 / 67 (0 failures)
+- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45125180689)
+- **Timestamp:** `2026-11-23T06:37:26Z`
 
 ---
 
