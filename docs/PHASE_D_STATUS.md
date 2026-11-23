@@ -108,3 +108,47 @@ Phase D implements the optional local-console graphical desktop shell for DAWN-O
   8. Damage tracking accumulation, bounding box expansion, and `gfx_flush` lifecycle.
   9. Glyph rendering and boundary text clipping.
   10. Glass panel and icon generation.
+
+---
+
+## 4. Milestone D2 — Input & Event Delivery
+
+### Normalized Event Architecture (`include/input.h`, `kernel/input.c`)
+- **Bounded Event Queue (`INPUT_QUEUE_CAPACITY = 128U`):**
+  - Ring buffer decouples interrupt-side capture (`ps2_poll_key`, `ps2_poll_mouse`, USB HID) from desktop composition and UI-side event handling.
+  - Drop-tail overflow policy: when the queue reaches capacity (128 events), newly pushed events are rejected immediately without blocking, allocating, or corrupting state.
+  - Telemetry and drop counters track system health: `input_get_total_events()`, `input_get_dropped_events()`, `input_get_overflow_count()`, and `input_get_queue_count()`.
+- **Interrupt-Safe Concurrency:**
+  - Push and poll operations are synchronized using `cpu_save_flags_and_cli()` and `cpu_restore_flags()` to ensure re-entrancy safety across timer ticks and device interrupts.
+- **Mouse Motion Coalescing:**
+  - Consecutive motion events with identical button states are coalesced into the latest queue slot (`dx += evt->dx`, `dy += evt->dy`, `x = evt->x`, `y = evt->y`).
+  - Prevents high-frequency pointer movement from exhausting the bounded queue and starving keyboard events.
+
+### Hardened PS/2 Keyboard & Mouse Driver (`include/ps2.h`, `kernel/ps2.c`)
+- **Extended Scancode Decoding (`0xE0` prefix):**
+  - Full decoding of navigational arrow keys (`KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`), Delete (`KEY_DELETE`), Super/Meta (`KEY_SUPER`), and right modifier keys.
+  - Tracking of GUI/Super modifier state in `struct key_event` (`bool gui`).
+- **Floating Bus / Absent Device Detection:**
+  - Status port checks immediately detect floating bus (`0xFF`) and break out of read/write wait loops without spinning for 100,000 cycles.
+  - Non-blocking polling returns immediately when no hardware is present or ready.
+- **Mouse Packet Validation:**
+  - Rejection of packets lacking the standard PS/2 sync bit (`(byte & 0x08U) == 0`).
+  - Rejection of packets reporting X/Y overflow (`0x40` or `0x80` status bits).
+
+### Keyboard-First Navigation & Focus Indication (`kernel/window_manager.c`, `kernel/desktop.c`)
+- **Window Focus Cycling (`Alt+Tab` / `Alt+Shift+Tab`):**
+  - `wm_cycle_focus()` cycles the active window across the Z-order hierarchy.
+  - Automatically un-minimizes the focused window upon activation.
+  - Dispatches `wm_handle_key` to focused window callbacks (`on_key`).
+- **Shortcut Controls (`Alt+F4`, `Super`, `Ctrl+Esc`):**
+  - `Alt+F4`: Safely closes the top active window and refocuses the next window in Z-order.
+  - `Super` / `Ctrl+Esc`: Toggles the application launcher open and closed.
+  - `Esc`: Dismisses the open application launcher.
+- **High-Contrast Focus Indication:**
+  - Active window is bordered by a distinct focus ring outline (`GFX_COLOR_FOCUS_RING = 0xFF38BDF8U`) during composition.
+
+### Test Harness & Validation
+- `ps2_self_test()`: Extended key decoding, Super key press/release, mouse packet decoding, bad sync bit rejection, overflow rejection, and coordinate boundary clamping.
+- `input_self_test()`: FIFO event ordering, mouse motion coalescing, and 128-element queue capacity overflow rejection.
+- `wm_self_test()`: Z-order traversal, `wm_cycle_focus`, `Alt+Tab`, and `Alt+F4` active window closure.
+- `desktop_self_test()`: Super key toggle, Ctrl+Esc launcher open, and Esc dismissal.

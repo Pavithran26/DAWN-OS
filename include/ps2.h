@@ -36,10 +36,13 @@
 #define KEY_SPACE      0x39U
 #define KEY_CAPSLOCK   0x3AU
 #define KEY_F1         0x3BU
+#define KEY_F4         0x3EU
 #define KEY_UP         0x48U
 #define KEY_LEFT       0x4BU
 #define KEY_RIGHT      0x4DU
 #define KEY_DOWN       0x50U
+#define KEY_DELETE     0x53U
+#define KEY_SUPER      0x5BU
 
 struct key_event {
     uint8_t scancode;
@@ -49,6 +52,7 @@ struct key_event {
     bool    shift;
     bool    ctrl;
     bool    alt;
+    bool    gui;
 };
 
 struct mouse_event {
@@ -64,6 +68,7 @@ struct mouse_event {
 bool ps2_initialize(void);
 bool ps2_has_keyboard(void);
 bool ps2_has_mouse(void);
+void ps2_reset_state(void);
 
 /* Keyboard interface */
 void ps2_handle_keyboard_scancode(uint8_t scancode, struct key_event *out_event);

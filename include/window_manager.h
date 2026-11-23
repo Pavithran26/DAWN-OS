@@ -45,6 +45,7 @@ struct window {
     uint32_t client_pitch;
     void (*on_click)(int32_t local_x, int32_t local_y);
     void (*on_close)(struct window *win);
+    void (*on_key)(struct window *win, const struct key_event *kevt);
     bool active;
 };
 
@@ -52,6 +53,7 @@ bool wm_initialize(void);
 struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_t w, uint32_t h, uint32_t flags);
 int wm_destroy_window(uint32_t id);
 int wm_focus_window(uint32_t id);
+int wm_cycle_focus(bool forward);
 int wm_move_window(uint32_t id, int32_t x, int32_t y);
 int wm_resize_window(uint32_t id, uint32_t w, uint32_t h);
 int wm_minimize_window(uint32_t id);
@@ -65,6 +67,7 @@ struct window *wm_find_window_at(int32_t x, int32_t y);
 size_t wm_get_window_count(void);
 
 void wm_handle_mouse(const struct mouse_event *mevt);
+void wm_handle_key(const struct key_event *kevt);
 void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y);
 
 bool wm_self_test(void);

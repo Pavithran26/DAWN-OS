@@ -122,7 +122,19 @@ int wm_focus_window(uint32_t id) {
     for (size_t i = 0; i < z_count; i++) {
         z_order[i]->focused = (z_order[i] == target);
     }
+    if (target->minimized) {
+        target->minimized = false;
+    }
     return 0;
+}
+
+int wm_cycle_focus(bool forward) {
+    if (z_count <= 1U) return 0;
+    if (forward) {
+        return wm_focus_window(z_order[z_count - 2U]->id);
+    } else {
+        return wm_focus_window(z_order[0]->id);
+    }
 }
 
 int wm_move_window(uint32_t id, int32_t x, int32_t y) {
@@ -298,6 +310,33 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
     }
 }
 
+void wm_handle_key(const struct key_event *kevt) {
+    if (kevt == NULL) return;
+
+    if (kevt->pressed) {
+        /* Alt + Tab: Window Focus Cycling */
+        if (kevt->alt && kevt->keycode == KEY_TAB) {
+            (void)wm_cycle_focus(!kevt->shift);
+            return;
+        }
+
+        /* Alt + F4: Close Active Window */
+        if (kevt->alt && kevt->keycode == KEY_F4) {
+            struct window *top = wm_get_top_window();
+            if (top != NULL) {
+                (void)wm_destroy_window(top->id);
+            }
+            return;
+        }
+    }
+
+    /* Pass key event to focused window callback if registered */
+    struct window *top = wm_get_top_window();
+    if (top != NULL && top->on_key != NULL) {
+        top->on_key(top, kevt);
+    }
+}
+
 void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) {
     if (surf == NULL) return;
 
@@ -314,6 +353,11 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
 
         /* Window frame (frosted glass) */
         gfx_draw_glass_panel(surf, (uint32_t)win->x, (uint32_t)win->y, win->width, win->height, GFX_COLOR_GLASS_PANEL);
+
+        /* Focus ring indication for active keyboard and window focus */
+        if (win->focused) {
+            gfx_draw_rect_outline(surf, (uint32_t)win->x, (uint32_t)win->y, win->width, win->height, GFX_COLOR_FOCUS_RING);
+        }
 
         /* Titlebar */
         uint32_t tb_color = win->focused ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
@@ -410,8 +454,45 @@ bool wm_self_test(void) {
     if (wm_minimize_window(w1->id) != 0) return false;
     if (!w1->minimized) return false;
 
-    /* Destroy windows */
-    if (wm_destroy_window(w1->id) != 0) return false;
+    /* Un-minimize w1 by focusing it */
+    if (wm_focus_window(w1->id) != 0) return false;
+    if (w1->minimized) return false;
+
+    /* Focus cycling (Alt+Tab equivalent) */
+    /* w1 is top, w2 is background */
+    if (wm_get_top_window() != w1) return false;
+    if (wm_cycle_focus(true) != 0) return false;
+    if (wm_get_top_window() != w2 || !w2->focused || w1->focused) return false;
+
+    /* wm_handle_key with Alt+Tab */
+    struct key_event alt_tab = {
+        .scancode = 0x0FU,
+        .keycode = KEY_TAB,
+        .ascii = '\t',
+        .pressed = true,
+        .shift = false,
+        .ctrl = false,
+        .alt = true,
+        .gui = false
+    };
+    wm_handle_key(&alt_tab);
+    if (wm_get_top_window() != w1 || !w1->focused || w2->focused) return false;
+
+    /* wm_handle_key with Alt+F4 closes active window */
+    struct key_event alt_f4 = {
+        .scancode = 0x3EU,
+        .keycode = KEY_F4,
+        .pressed = true,
+        .shift = false,
+        .ctrl = false,
+        .alt = true,
+        .gui = false
+    };
+    wm_handle_key(&alt_f4);
+    if (wm_get_top_window() != w2) return false;
+    if (wm_get_window_count() != prev_count + 1U) return false;
+
+    /* Destroy remaining window w2 */
     if (wm_destroy_window(w2->id) != 0) return false;
     if (wm_get_window_count() != prev_count) return false;
 

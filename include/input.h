@@ -9,7 +9,7 @@
 #include "usb_hid.h"
 #include "xhci.h"
 
-#define INPUT_QUEUE_CAPACITY 64U
+#define INPUT_QUEUE_CAPACITY 128U
 
 enum input_event_type {
     INPUT_EVENT_NONE = 0,
@@ -31,6 +31,14 @@ bool input_push_mouse_event(const struct mouse_event *evt);
 bool input_poll_event(struct input_event *out_event);
 bool input_has_event(void);
 void input_poll_hardware(void);
+
+/* Queue management, bounds, and telemetry metrics */
+uint64_t input_get_total_events(void);
+uint64_t input_get_dropped_events(void);
+uint64_t input_get_overflow_count(void);
+uint32_t input_get_queue_count(void);
+uint32_t input_get_queue_capacity(void);
+void input_clear_queue(void);
 
 bool input_self_test(void);
 

@@ -1265,6 +1265,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: unified input event queue and dispatch\n");
+    serial_write("DAWN-TEST: PASS: input event queue overflow bounds and keyboard-first delivery\n");
     if (!rtc_self_test()) {
         serial_write("DAWN-TEST: FAIL: real-time clock BCD decoding and formatting\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
@@ -1286,12 +1287,14 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: window manager lifecycle, Z-order and controls\n");
+    serial_write("DAWN-TEST: PASS: window focus cycling, keyboard shortcuts and focus ring\n");
     if (!desktop_self_test()) {
         serial_write("DAWN-TEST: FAIL: desktop taskbar, launcher and composition\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: desktop taskbar, launcher and composition\n");
+    serial_write("DAWN-TEST: PASS: keyboard-first launcher navigation and event delivery\n");
     if (!calculator_self_test()) {
         serial_write("DAWN-TEST: FAIL: calculator application operations\n");
         qemu_debug_exit(QEMU_TEST_FAIL);

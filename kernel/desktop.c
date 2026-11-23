@@ -95,6 +95,25 @@ void desktop_show_notification(const char *title, const char *msg) {
 void desktop_handle_input_event(const struct input_event *event) {
     if (event == NULL) return;
 
+    if (event->type == INPUT_EVENT_KEYBOARD) {
+        const struct key_event *kevt = &event->key;
+        if (kevt->pressed) {
+            /* Super key (Windows/GUI key) or Ctrl+Escape: toggle application launcher */
+            if (kevt->keycode == KEY_SUPER || (kevt->ctrl && kevt->keycode == KEY_ESCAPE)) {
+                desktop_toggle_launcher();
+                return;
+            }
+            /* Escape key: dismiss application launcher if currently open */
+            if (kevt->keycode == KEY_ESCAPE && state.launcher_open) {
+                state.launcher_open = false;
+                return;
+            }
+        }
+        /* Forward all keyboard events to window manager for focus cycling, shortcuts, and active window dispatch */
+        wm_handle_key(kevt);
+        return;
+    }
+
     if (event->type == INPUT_EVENT_MOUSE) {
         const struct mouse_event *mevt = &event->mouse;
         state.mouse_x = mevt->x;
@@ -563,6 +582,61 @@ bool desktop_self_test(void) {
         mouse_release.mouse.x = 30;
         mouse_release.mouse.y = 35;
         desktop_handle_input_event(&mouse_release);
+    }
+
+    /* Keyboard-first launcher navigation tests */
+    {
+        /* 1. Super key toggles launcher open */
+        struct input_event super_press = {
+            .type = INPUT_EVENT_KEYBOARD,
+            .key = {
+                .scancode = 0x5BU,
+                .keycode = KEY_SUPER,
+                .pressed = true,
+                .shift = false,
+                .ctrl = false,
+                .alt = false,
+                .gui = true
+            }
+        };
+        desktop_handle_input_event(&super_press);
+        if (!state.launcher_open) return false;
+
+        /* 2. Escape key dismisses launcher */
+        struct input_event esc_press = {
+            .type = INPUT_EVENT_KEYBOARD,
+            .key = {
+                .scancode = 0x01U,
+                .keycode = KEY_ESCAPE,
+                .pressed = true,
+                .shift = false,
+                .ctrl = false,
+                .alt = false,
+                .gui = false
+            }
+        };
+        desktop_handle_input_event(&esc_press);
+        if (state.launcher_open) return false;
+
+        /* 3. Ctrl+Escape opens launcher */
+        struct input_event ctrl_esc = {
+            .type = INPUT_EVENT_KEYBOARD,
+            .key = {
+                .scancode = 0x01U,
+                .keycode = KEY_ESCAPE,
+                .pressed = true,
+                .shift = false,
+                .ctrl = true,
+                .alt = false,
+                .gui = false
+            }
+        };
+        desktop_handle_input_event(&ctrl_esc);
+        if (!state.launcher_open) return false;
+
+        /* 4. Super key toggles launcher closed */
+        desktop_handle_input_event(&super_press);
+        if (state.launcher_open) return false;
     }
 
     /* Render test into a 640x480 test surface */
