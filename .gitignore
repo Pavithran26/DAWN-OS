@@ -4,3 +4,5 @@
 *.iso
 *.elf
 *.o
+__pycache__/
+*.pyc
