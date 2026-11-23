@@ -1,0 +1,73 @@
+DAWN-OS SeaBIOS Boot Execution Summary
+Source Commit: b331bef8d30093f529be4312aa1f4b04a1b07e87
+Timestamp: 2026-11-23T06:37:26Z
+Status: PASS (QEMU exit code 33)
+
+Executed Tests (67):
+  - PASS: memory-map validator edge cases
+  - PASS: physical page allocator edge cases
+  - PASS: virtual-memory map/translate/unmap tests
+  - PASS: separate user roots, private user mappings and address-space teardown
+  - PASS: kernel-callable syscall dispatcher and user-memory helper unit tests (no ring-3 entry)
+  - PASS: process address-space and kernel-stack ownership, lifecycle, reaping and slot reuse
+  - PASS: user-mode entry validates active process mappings and stack alignment
+  - PASS: ELF64 header, load segments, permissions and bounds validation
+  - PASS: GDT/TSS descriptor, TR and RSP0 validation
+  - PASS: breakpoint, PIC mask, IRQ-vector dispatch and PIT counter tests
+  - PASS: ACPI MADT parser edge cases
+  - PASS: real IOAPIC-routed PIT IRQ delivery
+  - PASS: Local APIC one-shot timer interrupt
+  - PASS: Local APIC timer calibration accuracy and repeatability tolerance
+  - PASS: Local APIC timer calibration
+  - PASS: SMP multi-core detection, BSP initialization and AP boot
+  - PASS: kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards
+  - PASS: repeated timer-driven kernel-thread preemption
+  - PASS: thread stack guard detection, state machine transitions and cleanup
+  - PASS: scheduler heavy preemption stress, non-yielding workers and timer churn
+  - PASS: process-bound kernel-thread CR3/TSS switching, yield, exit and reaping
+  - PASS: process-owned user IRETQ frame, code/stack permissions and trap-stack bounds
+  - PASS: controlled CPL3 ELF64 launch, syscall exit, scheduler return and process reaping
+  - PASS: parent child wait, blocking and collection
+  - PASS: process spawning from in-memory ELF image and thread binding
+  - PASS: Local APIC periodic stop/restart checks
+  - PASS: Local APIC timer invalid-argument checks
+  - PASS: VFS mount, hierarchy, path resolution and operations
+  - PASS: FAT32 filesystem parsing, read and write
+  - PASS: ISO9660 primary volume descriptor and read
+  - PASS: VFS dentry cache
+  - PASS: File explorer backend enumeration, search and copy
+  - PASS: block device registration and read/write
+  - PASS: PCI bus scan and configuration space access
+  - PASS: AHCI SATA controller and port detection
+  - PASS: NVMe controller and namespace queues
+  - PASS: MBR/GPT partition management and slice translation
+  - PASS: storage manager disk inventory and operations
+  - PASS: device manager registry and driver binding
+  - PASS: PS/2 keyboard/mouse scancode decoding
+  - PASS: USB xHCI controller registers and TRB parsing
+  - PASS: USB HID keyboard/mouse report parsing
+  - PASS: unified input event queue and dispatch
+  - PASS: real-time clock BCD decoding and formatting
+  - PASS: graphics primitives, alpha blending and font rendering
+  - PASS: window manager lifecycle, Z-order and controls
+  - PASS: desktop taskbar, launcher and composition
+  - PASS: calculator application operations and button layout
+  - PASS: calendar date calculations and month navigation
+  - PASS: shell command parser, built-in commands and history
+  - PASS: terminal emulator text grid, scrolling and render buffer
+  - PASS: task manager process list, performance graphs and controls
+  - PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle
+  - PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping
+  - PASS: audio mixer, master volume, stream mixing and tone generation
+  - PASS: settings serialization, defaults, clamping and window navigation
+  - PASS: metadata validation, URL handling and safe text
+  - PASS: system information from kernel APIs
+  - PASS: installer disk verification, partition formatting, file copy and rescue shell
+  - PASS: security password hashing, user authentication, permissions and address boundaries
+  - PASS: dlibc strings, memory ops, heap allocator, package registry and app lifecycle
+  - PASS: service manager dependencies, daemon lifecycle, IPC queue and event pub/sub
+  - PASS: ACPI power states, reboot vectors and kernel panic diagnostics
+  - PASS: multi-language catalog, keymap translation tables and accessibility scaling
+  - PASS: spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules
+  - PASS: init process spawning and user stack setup
+  - PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer

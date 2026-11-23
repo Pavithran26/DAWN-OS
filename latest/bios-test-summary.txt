@@ -1,9 +1,9 @@
 DAWN-OS SeaBIOS Boot Execution Summary
-Source Commit: 9bf1ca3436aea9ebf7d71b552deb57701a12a86f
-Timestamp: 2026-11-23T06:08:28Z
+Source Commit: b331bef8d30093f529be4312aa1f4b04a1b07e87
+Timestamp: 2026-11-23T06:37:26Z
 Status: PASS (QEMU exit code 33)
 
-Executed Tests (64):
+Executed Tests (67):
   - PASS: memory-map validator edge cases
   - PASS: physical page allocator edge cases
   - PASS: virtual-memory map/translate/unmap tests
@@ -17,10 +17,13 @@ Executed Tests (64):
   - PASS: ACPI MADT parser edge cases
   - PASS: real IOAPIC-routed PIT IRQ delivery
   - PASS: Local APIC one-shot timer interrupt
+  - PASS: Local APIC timer calibration accuracy and repeatability tolerance
   - PASS: Local APIC timer calibration
   - PASS: SMP multi-core detection, BSP initialization and AP boot
   - PASS: kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards
   - PASS: repeated timer-driven kernel-thread preemption
+  - PASS: thread stack guard detection, state machine transitions and cleanup
+  - PASS: scheduler heavy preemption stress, non-yielding workers and timer churn
   - PASS: process-bound kernel-thread CR3/TSS switching, yield, exit and reaping
   - PASS: process-owned user IRETQ frame, code/stack permissions and trap-stack bounds
   - PASS: controlled CPL3 ELF64 launch, syscall exit, scheduler return and process reaping
