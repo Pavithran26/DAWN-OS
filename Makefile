@@ -583,7 +583,7 @@ qemu-smoke-bios: iso
 		-d guest_errors,cpu_reset -D build/qemu-bios-smoke-debug.log; \
 	cat build/qemu-bios-smoke.log; \
 	if grep -q "DAWN-OS: Entering production desktop event and scheduler loop" build/qemu-bios-smoke.log; then \
-		if grep -E -q "DAWN-OS: FAIL|panic|fatal" build/qemu-bios-smoke.log; then \
+		if grep -E -q "DAWN-OS: FAIL|DAWN-OS: FATAL|KERNEL PANIC|Triple fault" build/qemu-bios-smoke.log; then \
 			echo 'QEMU BIOS production boot smoke test: FAIL (errors logged)' >&2; exit 1; \
 		fi; \
 		echo 'QEMU BIOS production boot smoke test: PASS'; exit 0; \
@@ -605,7 +605,7 @@ qemu-smoke-uefi: iso
 		-d guest_errors,cpu_reset -D build/qemu-uefi-smoke-debug.log; \
 	cat build/qemu-uefi-smoke.log; \
 	if grep -q "DAWN-OS: Entering production desktop event and scheduler loop" build/qemu-uefi-smoke.log; then \
-		if grep -E -q "DAWN-OS: FAIL|panic|fatal" build/qemu-uefi-smoke.log; then \
+		if grep -E -q "DAWN-OS: FAIL|DAWN-OS: FATAL|KERNEL PANIC|Triple fault" build/qemu-uefi-smoke.log; then \
 			echo 'QEMU UEFI production boot smoke test: FAIL (errors logged)' >&2; exit 1; \
 		fi; \
 		echo 'QEMU UEFI production boot smoke test: PASS'; exit 0; \

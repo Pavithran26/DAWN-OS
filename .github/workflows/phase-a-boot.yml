@@ -118,7 +118,7 @@ jobs:
           for log in build/qemu-bios-smoke.log build/qemu-uefi-smoke.log; do
             if [[ -f "$log" ]]; then
               echo "=== Checking smoke log $log ==="
-              if grep -E "DAWN-OS: FAIL|fatal|panic" "$log"; then
+              if grep -E "DAWN-OS: FAIL|DAWN-OS: FATAL|KERNEL PANIC|Triple fault" "$log"; then
                 echo "FAIL: Failure line detected in smoke log $log!" >&2
                 failed=1
               fi

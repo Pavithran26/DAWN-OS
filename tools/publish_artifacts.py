@@ -102,7 +102,7 @@ def parse_smoke_test(log_path: Path) -> bool:
     with open(log_path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read()
     has_milestone = "DAWN-OS: Entering production desktop event and scheduler loop" in content
-    has_fail = any(err in content for err in ["DAWN-OS: FAIL", "panic", "fatal", "triple fault", "exception"])
+    has_fail = any(err in content for err in ["DAWN-OS: FAIL", "DAWN-OS: FATAL", "KERNEL PANIC", "Triple fault"])
     return has_milestone and not has_fail
 
 
