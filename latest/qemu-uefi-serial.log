@@ -14,8 +14,8 @@ DAWN-OS: bootloader-reclaimable MiB: 42
 DAWN-OS: unknown memory-map types (not allocatable): 0
 DAWN-OS: HHDM response validated; dynamic offset accepted
 DAWN-TEST: PASS: physical page allocator edge cases
-DAWN-OS: physical allocator managed frames: 47658
-DAWN-OS: physical allocator free frames: 47658
+DAWN-OS: physical allocator managed frames: 47655
+DAWN-OS: physical allocator free frames: 47655
 DAWN-OS: physical allocator tracking limit MiB: 4096
 DAWN-OS: x86_64 four-level page-table manager initialized
 DAWN-TEST: PASS: virtual-memory map/translate/unmap tests
@@ -58,7 +58,7 @@ DAWN-OS: ACPI MADT: PIT IRQ0 override GSI 2
 DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked
 DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery
 DAWN-TEST: PASS: Local APIC one-shot timer interrupt
-DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624824
+DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624710
 DAWN-TEST: PASS: Local APIC timer calibration
 DAWN-OS: SMP initialized; detected CPU count: 2, online: 2
 DAWN-TEST: PASS: SMP multi-core detection, BSP initialization and AP boot
