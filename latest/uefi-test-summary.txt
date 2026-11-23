@@ -1,9 +1,9 @@
 DAWN-OS OVMF UEFI Boot Execution Summary
-Source Commit: ae51f7fc2569f4c2c4d54a02c4b854452165fa79
-Timestamp: 2026-11-23T08:48:36Z
+Source Commit: cd95efd2afd3ea0eb4b793814fcf64435ea33f7f
+Timestamp: 2026-11-23T10:14:26Z
 Status: PASS (QEMU exit code 33)
 
-Executed Tests (69):
+Executed Tests (73):
   - PASS: memory-map validator edge cases
   - PASS: physical page allocator edge cases
   - PASS: virtual-memory map/translate/unmap tests
@@ -59,6 +59,7 @@ Executed Tests (69):
   - PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle
   - PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping
   - PASS: virtio-blk PCI driver, request queue, read-only bounds and sector read
+  - PASS: actual VirtIO device-backed ISO9660 file read
   - PASS: audio mixer, master volume, stream mixing and tone generation
   - PASS: settings serialization, defaults, clamping and window navigation
   - PASS: metadata validation, URL handling and safe text
@@ -72,4 +73,7 @@ Executed Tests (69):
   - PASS: spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules
   - PASS: init process spawning and user stack setup
   - PASS: userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation
+  - PASS: userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle
+  - PASS: userspace CPL3 SYS_EXEC image replacement and address space reset
+  - PASS: userspace CPL3 filesystem access on mounted VirtIO disk
   - PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer
