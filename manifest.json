@@ -8,19 +8,19 @@
   "target_architecture": "x86_64",
   "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
   "bootloader": "Limine v12.10.0",
-  "source_commit": "b331bef8d30093f529be4312aa1f4b04a1b07e87",
-  "source_commit_short": "b331bef",
-  "build_timestamp_utc": "2026-11-23T06:37:26Z",
+  "source_commit": "b80d048a2e38774b47749f40f61ff8b421fcd0e7",
+  "source_commit_short": "b80d048",
+  "build_timestamp_utc": "2026-11-23T07:29:51Z",
   "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45125180689",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45131330303",
   "validation": {
     "status": "PASSED",
     "bios_boot": "PASSED (exit 33, 0 FAIL)",
     "uefi_boot": "PASSED (exit 33, 0 FAIL)",
     "production_bios_boot": "PASSED (desktop loop reached)",
     "production_uefi_boot": "PASSED (desktop loop reached)",
-    "bios_tests_passed_count": 67,
-    "uefi_tests_passed_count": 67
+    "bios_tests_passed_count": 69,
+    "uefi_tests_passed_count": 69
   },
   "artifacts": [
     {
