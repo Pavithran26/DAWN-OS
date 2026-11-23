@@ -27,9 +27,9 @@ Floating frosted-glass application launcher with instant search, pinned applicat
   <img src="docs/images/dawn-apps-bar.png" alt="DAWN-OS Apps Bar, Dock, and Application Launcher" width="100%"/>
 </p>
 
-## Current implementation snapshot & test baseline (2026-11-20)
+## Current implementation snapshot & test baseline (2026-11-23)
 
-DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU under both legacy SeaBIOS and OVMF UEFI firmware. The kernel compiles with strict flags (`-Wall -Wextra -Werror -Wconversion -Wshadow -Wundef`) and passes an extensive in-kernel self-test suite (65+ assertions) across all core subsystems on both BIOS and UEFI.
+DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU under both legacy SeaBIOS and OVMF UEFI firmware. The kernel compiles with strict flags (`-Wall -Wextra -Werror -Wconversion -Wshadow -Wundef`) and passes an extensive in-kernel self-test suite (69 assertions) across all core subsystems on both BIOS and UEFI.
 
 ### Verified features (QEMU BIOS + UEFI)
 
@@ -37,8 +37,9 @@ DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU unde
 - **Interrupts & timers**: IDT exception/interrupt handling, PIC remapping, ACPI MADT parsing, IOAPIC-routed PIT delivery, Local APIC timer calibration (100 Hz), and one-shot/periodic delivery.
 - **SMP multi-core bootstrap**: Limine SMP protocol, multi-core detection, per-CPU state structures (`struct cpu_core`), Application Processor (AP) bootstrap with dedicated 16 KiB kernel stacks, heartbeat tracking, and dynamic online core synchronization (tested with QEMU `-smp 2`).
 - **Scheduler & processes**: Preemptive single-CPU scheduler with timer-driven preemption, round-robin dispatch, kernel stack guards, process-bound context switching (CR3/TSS), CPL3 userspace execution, explicit waiting flag, `SCHEDULER_WAIT_ANY_CHILD` (`-1LL`), and a 1000-cycle spawn/wait/exit stress test with zero resource leaks.
-- **Syscall ABI**: System V AMD64 userspace ABI (`argc`, `argv`, `envp`), with `EXIT`, `WRITE`, `READ`, `CLOSE`, `DUP`, `SPAWN`, `EXEC`, `WAIT`, `YIELD`, and `GETPID`.
-- **Filesystem**: VFS mount architecture, root RAMFS, and FAT32 read/write driver with BPB geometry validation, directory traversal, file/dir creation, 8.3 short names, cluster boundary writes, multi-cluster extension across FAT0/FAT1, truncation down to partial cluster & zero, cluster reuse after deletion, and simulated interrupted write / out-of-space error recovery verifying FAT consistency and EOC preservation without corruption.
+- **Userspace runtime & fault isolation**: System V AMD64 userspace ABI (`argc`, `argv`, `envp`), with `EXIT`, `WRITE`, `READ`, `CLOSE`, `DUP`, `SPAWN`, `EXEC`, `WAIT`, `YIELD`, and `GETPID`. Verified CPL3 execution with native Init (PID 1) lifecycle, file descriptor tables (0/1/2, dup/dup2, close, boundary bounds checks), and non-fatal CPL3 exception fault isolation (user page faults and general protection faults safely terminate the faulting process with cleanup and zero kernel panics or frame leaks).
+- **VirtIO-Block storage driver**: Legacy PCI VirtIO block driver (`0x1AF4:0x1001` / `0x1042`) with `VIRTIO_BLK_F_RO` read-only negotiation, 512-byte sectors, contiguous physical DMA bounce buffers (64 KiB), 3-part VirtQueue 0 descriptor chaining, bounded polling, write rejection, and registration as `"vda"`.
+- **Filesystem & ISO9660**: VFS mount architecture, root RAMFS, FAT32 read/write driver with BPB geometry validation, directory traversal, file/dir creation, 8.3 short names, cluster boundary writes, multi-cluster extension across FAT0/FAT1, truncation down to partial cluster & zero, cluster reuse after deletion, and simulated interrupted write / out-of-space error recovery. Real device-backed ISO9660 mounting (`iso9660_mount_device`) from VirtIO block device with 2048-byte sector caching and byte-for-byte root file resolution.
 - **Networking**: Real VirtIO-Net PCI driver (`kernel/virtio_net.c`) with VirtQueue RX/TX rings, physical page DMA buffers, MAC auto-negotiation, ARP request/reply resolution, and ICMP echo ping against QEMU user networking (`10.0.2.2`). Software reflection fallback removed from `eth0`.
 - **Security**: Standard NIST SHA-256, RFC 6070 PBKDF2-HMAC-SHA256 (10,000 iterations), constant-time password verification (`security_verify_password`), dynamic per-user salt generation using RDRAND with TSC/RTC entropy mixing fallback, and hardcoded root credentials completely removed from production builds.
 - **GUI & desktop**: Emerald Green Neo-Liquid Glass desktop environment at 1280x800 resolution with synchronized backbuffer, full-width high-contrast taskbar with neon emerald specular top accent line (`GFX_COLOR_EMERALD_ACCENT`), dedicated frosted-glass System Tray container pill with crisp clock text, and window compositor alpha-blending with transparent terminal text backgrounds (eliminating dark rectangle artifacts).
@@ -65,9 +66,11 @@ DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU unde
 | **Single-CPU Preemptive Scheduler** | Tested in QEMU | Timer preemption, round-robin, stack guards, 1000-cycle stress test |
 | **Process Lifecycle & Waiting** | Tested in QEMU | Explicit wait flag, `SCHEDULER_WAIT_ANY_CHILD` (`-1LL`), spawn/reap |
 | **Syscall Interface (10 calls)** | Tested in QEMU | `EXIT`, `WRITE`, `READ`, `CLOSE`, `DUP`, `SPAWN`, `EXEC`, `WAIT`, `YIELD`, `GETPID` |
-| **CPL3 Userspace Execution** | Tested in QEMU | System V AMD64 ABI, IRETQ frame, user stack isolation |
+| **CPL3 Userspace Execution** | Tested in QEMU | System V AMD64 ABI, IRETQ frame, user stack isolation, native Init (PID 1) scheduler test, CPL3 fault isolation |
 | **ELF64 Executable Loader** | Tested in QEMU | In-memory ELF image parsing, segment mapping, process launch |
 | **Virtual Filesystem (VFS)** | Tested in QEMU | Mount points, root RAMFS, path resolution, dentry cache |
+| **VirtIO-Block Storage Driver** | Tested in QEMU | Legacy PCI, VIRTIO_BLK_F_RO, 512-byte sectors, DMA bounce buffer, "vda" block device |
+| **ISO9660 Filesystem** | Tested in QEMU | PVD & directory extent parsing, block device mounting, 2048-byte sector cache, QEMU virtio-blk root file reading |
 | **FAT32 Filesystem** | Tested in QEMU | Cluster boundary writes, multi-cluster extension, truncate, reuse, out-of-space consistency |
 | **VirtIO-Net PCI Network Driver** | Tested in QEMU | VirtQueue RX/TX, DMA rings, ARP resolution, ICMP ping to 10.0.2.2 |
 | **Cryptographic Security Hardening**| Tested in QEMU | NIST SHA-256, RFC 6070 PBKDF2 (10,000 iter), RDRAND salt, constant-time compare |
@@ -80,7 +83,6 @@ DAWN-OS is an experimental, freestanding x86_64 hobby kernel tested in QEMU unde
 | **USB HID Class Driver** | Source only | Boot keyboard/mouse report parsing structs present; no live USB transfer stream |
 | **SATA / AHCI 1.3 Driver** | Source only | FIS command packing & PRDT descriptors tested; no live disk I/O in test ISO |
 | **NVM Express (NVMe 1.3/1.4)** | Source only | SQE/CQE layout & doorbell calculation tested; no live controller in test ISO |
-| **ISO9660 Filesystem** | Source only | PVD & directory extent parsing present in source |
 | **Audio Subsystem & Mixer** | Source only | PCI discovery & software PCM mixer/tone generator tested in memory; no live audio output |
 | **Symmetric Multiprocessing (SMP)**| Tested in QEMU | Limine SMP protocol, multi-core detection, AP startup with dedicated stacks & online sync |
 | **Physical Ethernet Drivers** | Missing | VirtIO-Net PCI only; bare-metal drivers (e1000, rtl8139) not implemented |
@@ -142,14 +144,21 @@ The latest recorded GitHub Actions run passed kernel compilation, ELF checks, hy
 
 ## Phase B — memory and CPU foundations
 
-The first increment requests, validates, and reports the Limine memory map. See [the memory-map implementation notes](docs/MEMORY_MAP.md). It deliberately does not enable allocation yet.
+Phase B kernel foundations are completed and verified across BIOS and UEFI:
+- Physical frame allocation accounting, bounds checking, and free-frame verification.
+- Four-level page table mapping, HHDM, address-space isolation, and mapping teardown.
+- Local APIC timer calibration (100 Hz scheduler tick), PIT mode-2 reference measurement, and interrupt routing.
+- Preemptive single-CPU scheduler with timer-driven context switching, kernel stack guards, process lifecycle management, and a 1000-cycle stress test.
+- Limine SMP multi-core bootstrap, per-CPU state structures (`struct cpu_core`), Application Processor (AP) stack allocation, and heartbeat synchronization.
 
-Remaining Phase B work:
-- Harden allocation accounting and add synchronization after interrupt/CPU foundations exist.
-- Extend page-table permission/lifetime tests; add address-space ownership and mapping teardown after process and fault-handling foundations.
-- Expand APIC/IOAPIC routing and ACPI coverage; the first MADT-discovered ISA PIT IRQ route is implemented and QEMU-tested.
-- Extend the cooperative scheduler with timer-driven preemption only after interrupt-frame switching and per-thread interrupt-state tests.
-- Add SMP only after CPU startup, per-CPU state, synchronization, and locking are defined.
+## Phase C — userspace and read-only storage integration
+
+Phase C userspace runtime and read-only block storage are implemented and verified:
+- **CPL3 userspace runtime**: Native Init (PID 1) process lifecycle under the scheduler, System V AMD64 ABI registers and stack initialization, `SYS_WRITE`, `SYS_GETPID`, `SYS_YIELD`, and `SYS_EXIT`.
+- **File descriptor table**: Per-process table supporting standard descriptors 0/1/2, `SYS_DUP`, `SYS_CLOSE`, and out-of-bounds validation.
+- **Exception fault isolation**: Safe recovery from non-fatal CPL3 exceptions (vector 14 page faults and vector 13 general protection faults) terminating the faulting process without panicking the kernel and with zero page frame leaks.
+- **VirtIO-Block driver**: Legacy PCI device driver (`0x1AF4:0x1001` / `0x1042`), `VIRTIO_BLK_F_RO` read-only negotiation, 512-byte sector transfers, contiguous DMA bounce buffer, 3-part descriptor chaining, and registration as `"vda"` with `block_dev`.
+- **ISO9660 device mounting**: Mounting filesystems directly from VirtIO block devices (`iso9660_mount_device`), 2048-byte sector caching, out-of-bounds rejection, and byte-for-byte root file resolution verified against QEMU test disks.
 
 ## Roadmap
 

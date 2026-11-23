@@ -60,7 +60,8 @@ bool virtio_net_initialize(void) {
 
     for (size_t i = 0; i < dev_count; i++) {
         const struct pci_device *pdev = pci_get_device(i);
-        if (pdev != NULL && pdev->vendor_id == VIRTIO_PCI_VENDOR_ID) {
+        if (pdev != NULL && pdev->vendor_id == VIRTIO_PCI_VENDOR_ID &&
+            (pdev->device_id == VIRTIO_NET_PCI_DEVICE_ID || pdev->device_id == 0x1041U)) {
             target_pci = pdev;
             break;
         }

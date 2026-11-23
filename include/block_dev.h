@@ -15,7 +15,8 @@ enum block_dev_type {
     BLOCK_DEV_TYPE_NVME = 2,
     BLOCK_DEV_TYPE_PARTITION = 3,
     BLOCK_DEV_TYPE_RAMDISK = 4,
-    BLOCK_DEV_TYPE_OPTICAL = 5
+    BLOCK_DEV_TYPE_OPTICAL = 5,
+    BLOCK_DEV_TYPE_VIRTIO = 6
 };
 
 struct block_device;

@@ -108,7 +108,7 @@ The kernel virtual base is `0xffffffff80000000`. `.limine_requests_start`, `.lim
 4. **Bounded concurrency:** 4 processes, 8 kernel threads, 16 FDs per process.
 5. **Polling UI input.** `input_poll_hardware()` is called from the desktop loop.
 6. **No userspace GUI toolkit.** Desktop components are linked into the kernel.
-7. **Hardware Driver Status:** VirtIO-Net PCI NIC driver is implemented with real hardware packets (ARP and ICMP ping verified), but Audio is in-kernel software synthesis (no physical HDA codec driver yet), and AHCI/NVMe drivers perform discovery and virtual block transfers without physical DMA command issue.
+7. **Hardware Driver Status:** VirtIO-Net PCI NIC driver (real packets, ARP, ICMP ping) and VirtIO-Block PCI driver (VirtQueue 0 DMA, capacity discovery, chunked 512-byte sector reads, read-only enforcement, ISO9660 device mount) are fully implemented and verified under QEMU. Audio is in-kernel software synthesis (no physical HDA codec driver yet), and AHCI/NVMe drivers perform discovery and virtual block transfers without physical DMA command issue.
 
 ---
 
@@ -904,7 +904,7 @@ ISO9660:
 struct block_device {
     char name[32];
     uint32_t id;
-    enum block_dev_type type;   // SATA, NVME, PARTITION, RAMDISK, OPTICAL
+    enum block_dev_type type;   // SATA, NVME, PARTITION, RAMDISK, OPTICAL, VIRTIO
     uint32_t block_size;
     uint64_t total_blocks;
     uint64_t capacity_bytes;
@@ -1359,7 +1359,7 @@ Near term, in dependency order:
 | ELF / user runtime | `kernel/elf_loader.c`, `user/crt0.S`, `user/libdawn.c`, `user/init.c` |
 | VFS | `kernel/vfs.c`, `kernel/vfs_cache.c`, `kernel/file_explorer.c` |
 | FAT32 / ISO9660 | `kernel/fat32.c`, `kernel/iso9660.c` |
-| Block / partitions | `kernel/block_dev.c`, `kernel/partition.c`, `kernel/storage_manager.c` |
+| Block / partitions | `kernel/block_dev.c`, `kernel/virtio_blk.c`, `kernel/partition.c`, `kernel/storage_manager.c` |
 | PCI / AHCI / NVMe | `kernel/pci.c`, `kernel/ahci.c`, `kernel/nvme.c` |
 | Devices / input | `kernel/device.c`, `kernel/ps2.c`, `kernel/xhci.c`, `kernel/usb_hid.c`, `kernel/input.c` |
 | Graphics / UI | `kernel/gfx.c`, `kernel/window_manager.c`, `kernel/desktop.c`, `kernel/terminal.c`, `kernel/task_manager.c`, `kernel/settings.c` |

@@ -5,6 +5,7 @@
 #include "vfs.h"
 #include "fat32.h"
 #include "iso9660.h"
+#include "virtio_blk.h"
 
 static struct storage_disk_desc discovered_disks[STORAGE_MAX_DISKS];
 static size_t discovered_disk_count = 0;
@@ -90,6 +91,7 @@ bool storage_manager_initialize(void) {
 
     block_dev_initialize();
     pci_initialize();
+    virtio_blk_initialize();
     ahci_initialize();
     nvme_initialize();
     partition_initialize();
@@ -105,12 +107,15 @@ bool storage_manager_initialize(void) {
         struct block_device *bdev = block_dev_get_by_index(i);
         if (bdev == NULL) continue;
 
-        if (bdev->type == BLOCK_DEV_TYPE_SATA || bdev->type == BLOCK_DEV_TYPE_NVME || bdev->type == BLOCK_DEV_TYPE_OPTICAL) {
+        if (bdev->type == BLOCK_DEV_TYPE_SATA || bdev->type == BLOCK_DEV_TYPE_NVME ||
+            bdev->type == BLOCK_DEV_TYPE_OPTICAL || bdev->type == BLOCK_DEV_TYPE_VIRTIO) {
             struct storage_disk_desc *desc = &discovered_disks[discovered_disk_count];
             *desc = (struct storage_disk_desc){0};
             str_copy(desc->name, bdev->name, BLOCK_DEV_NAME_MAX);
             str_copy(desc->model, (bdev->type == BLOCK_DEV_TYPE_SATA) ? "SATA Mass Storage" :
-                                  (bdev->type == BLOCK_DEV_TYPE_NVME) ? "NVMe Solid State Drive" : "Optical Media", sizeof(desc->model));
+                                  (bdev->type == BLOCK_DEV_TYPE_NVME) ? "NVMe Solid State Drive" :
+                                  (bdev->type == BLOCK_DEV_TYPE_OPTICAL) ? "Optical Media" :
+                                  "VirtIO Block Device", sizeof(desc->model));
             desc->type = bdev->type;
             desc->block_size = bdev->block_size;
             desc->total_blocks = bdev->total_blocks;

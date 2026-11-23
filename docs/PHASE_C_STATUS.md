@@ -221,3 +221,30 @@
 - Directory size aggregation checks 64-bit overflow. File copy validates short/oversized reads and removes a partially written destination on failure.
 - Move now removes the destination again if source deletion fails, avoiding a false successful copy-only move. Delete-file rejects directory targets.
 - Source-only update. File Explorer tests and VFS integration were not executed.
+
+## Phase C — Complete Userspace Runtime and VirtIO Block Read-Only Storage (2026-11-23)
+
+- **VirtIO Block Device Driver (`virtio_blk.c`, `include/virtio_blk.h`):**
+  - PCI legacy transport device discovery for vendor `0x1AF4`, device `0x1001` / `0x1042`, preventing collision with VirtIO net (`0x1000`).
+  - Enabled Bus Master and I/O Space decoding, BAR0 resolution, device reset, Acknowledge, and Driver negotiation.
+  - Negotiated read-only feature `VIRTIO_BLK_F_RO` and read 512-byte disk capacity from config offset `0x14`.
+  - Allocated physically contiguous DMA pages for VirtQueue 0 descriptor ring, available ring, used ring, request headers, status bytes, and a 64 KiB (128-sector) bounce buffer.
+  - Implemented 3-descriptor request submission chains (`VIRTIO_BLK_T_IN`), bounded timeout polling, and buffer transfer.
+  - Registered device with `block_dev` subsystem as `"vda"`, with strict write rejection on read-only block devices.
+  - Added deterministic negative self-tests (null pointer, zero count, past capacity, integer overflow, write rejection).
+
+- **ISO9660 Device-Backed Filesystem Integration (`iso9660.c`, `include/iso9660.h`):**
+  - Added `iso9660_mount_device(struct block_device *bdev)` to mount filesystems from block devices via `block_dev_read`.
+  - Implemented cached block reading with 2048-byte sector caching for directory parsing and chunked file streaming.
+  - Verified mounting and byte-for-byte reading of `/test.txt` from the attached VirtIO block disk in QEMU.
+
+- **Userspace Runtime and Fault Isolation (`userspace_test.c`, `include/userspace_test.h`):**
+  - Native Init (PID 1) execution under the preemptive scheduler: verifies real CPL3 execution, System V AMD64 ABI registers and stack, `SYS_WRITE`, `SYS_GETPID`, `SYS_YIELD`, and `SYS_EXIT(0)`.
+  - Child process lifecycle and exit status: parent spawns child (`SYS_SPAWN`), child executes at CPL3, exits with status 42 (`SYS_EXIT`), parent collects status, and verifies complete memory cleanup.
+  - Process file descriptor lifecycle: verified standard descriptors (0, 1, 2), `process_fd_dup`, `process_fd_dup2`, `process_fd_close`, and negative invalid descriptor rejections.
+  - Exception and fault isolation: verified that user Page Faults (vector 14) and General Protection Faults (vector 13 from privileged instructions) executing at CPL3 safely terminate only the offending process via `scheduler_user_exit` without kernel panic, allowing the system to continue operating stably.
+  - Verified zero page frame leaks across all process creation, execution, fault, and reap lifecycles.
+
+- **Deterministic QEMU Disk & Build Integration:**
+  - Added `build/test-disk.iso` target in `Makefile` generated via `xorriso -as mkisofs` containing verified `/test.txt` payload.
+  - Integrated `-drive file=build/test-disk.iso,if=none,id=d0,format=raw,readonly=on -device virtio-blk-pci,drive=d0` across all BIOS, UEFI, and smoke QEMU invocations.

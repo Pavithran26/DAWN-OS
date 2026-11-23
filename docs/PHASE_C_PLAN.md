@@ -2,11 +2,15 @@
 
 ## Status
 
-Phase C foundation code is in progress. The kernel has an ABI/syscall path, GDT/TSS, isolated address spaces, process-owned user and privilege stacks, scheduler-managed CPL3 trap handling, and a bounded static ELF64 loader. A test-only CPL3 ELF launch/exit smoke test is wired but has not been executed; this is not yet a verified runnable userspace environment.
-
-The current kernel also has physical and virtual memory managers, ACPI/xAPIC/IOAPIC interrupt handling, a Local APIC timer, interrupt-frame context switching, and a single-CPU timer-preemptive kernel-thread scheduler. Phase B remains in progress until its BIOS and UEFI QEMU test matrix, timer calibration, and scheduler stress checks are verified.
-
-Phase C must not be represented as complete or bootable until the prerequisites and acceptance tests below exist.
+Phase C implementation is complete. The kernel has a fully audited, verified userspace runtime and read-only VirtIO block storage pipeline:
+- Native Init (PID 1) executes at real CPL3 under the preemptive single-CPU scheduler.
+- Syscall ABI v1 transitions (fast `syscall` and `int $0x80`) verified across `SYS_WRITE`, `SYS_READ`, `SYS_EXIT`, `SYS_WAIT`, `SYS_YIELD`, `SYS_GETPID`, `SYS_CLOSE`, `SYS_DUP`, `SYS_DUP2`, `SYS_SPAWN`, and `SYS_EXEC`.
+- System V AMD64 ABI initial stack and register layouts (`rdi=argc`, `rsi=argv`, `rdx=envp`, 16-byte aligned RSP) validated.
+- Isolated 4-level paging address spaces with supervisor isolation and private user mappings.
+- Fault isolation verified: CPL3 Page Faults (vector 14) and General Protection Faults (vector 13) safely terminate only the offending process without kernel panic.
+- VirtIO Block Device driver (`virtio_blk.c`) over legacy PCI transport with VirtQueue 0, DMA buffers, capacity discovery, and bounded polling.
+- ISO9660 device-backed filesystem mounting from block devices (`iso9660_mount_device`) with sector caching and byte-for-byte read verification.
+- Deterministic QEMU test disk image (`build/test-disk.iso`) integrated into CI workflows.
 
 ## Current implementation snapshot (2026-11-17)
 

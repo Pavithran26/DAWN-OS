@@ -39,6 +39,8 @@
 #include "task_manager.h"
 #include "net.h"
 #include "virtio_net.h"
+#include "virtio_blk.h"
+#include "userspace_test.h"
 #include "audio.h"
 #include "settings.h"
 #include "installer.h"
@@ -1340,6 +1342,14 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping\n");
 
+    /* VirtIO Block PCI Driver & Read-Only Storage Test */
+    if (!virtio_blk_self_test()) {
+        serial_write("DAWN-TEST: FAIL: virtio-blk PCI driver, request queue, read-only bounds and sector read\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: virtio-blk PCI driver, request queue, read-only bounds and sector read\n");
+
     /* Phase K: Audio */
     if (!audio_self_test()) {
         serial_write("DAWN-TEST: FAIL: audio mixer, volume control and stream mixing\n");
@@ -1457,6 +1467,13 @@ void kernel_main(void) {
             cpu_halt_forever();
         }
     }
+
+    if (!userspace_runtime_self_test()) {
+        serial_write("DAWN-TEST: FAIL: userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation\n");
 
     serial_write("DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer\n");
     serial_write("DAWN-TEST: RESULT=PASS\n");

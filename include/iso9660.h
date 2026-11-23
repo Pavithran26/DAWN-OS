@@ -60,7 +60,9 @@ struct iso9660_dirent {
     char name[1];
 } __attribute__((packed));
 
+struct block_device;
 struct vfs_node *iso9660_mount_image(void *image_data, size_t image_size);
+struct vfs_node *iso9660_mount_device(struct block_device *bdev);
 
 #ifdef DAWN_KERNEL_TEST
 bool iso9660_self_test(void);
