@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planning and dependency definition only. No graphical renderer, desktop, input driver, window manager, or desktop application is implemented by this document.**
+**Milestones D0 (Desktop Specification & Design System) and D1 (Safe Framebuffer & CPU 2D Renderer) are fully implemented and verified.** Input event delivery (D2), window manager (D3), and desktop applications (D4-D6) follow in sequential dependency order.
 
 Phase D is the optional local-console desktop for DAWN-OS. It must not become a boot requirement: headless/server mode remains the default and must continue to work without graphics or input devices.
 
@@ -115,4 +115,4 @@ A successful build or a framebuffer pointer alone is not a graphical-shell pass.
 
 ## Current next step
 
-Continue completing Phase B (allocator, virtual memory, exceptions/interrupts, timer, scheduler) and Phase C userspace/storage prerequisites. D0 design work can proceed in parallel, but D1–D6 runtime milestones must respect their dependency gates.
+Phase B, Phase C, and Phase D milestones D0 and D1 are complete and verified across QEMU BIOS and UEFI. Proceed to Milestone D2 (Input and Event Delivery: PS/2 / VirtIO keyboard and mouse drivers with bounded event queues).

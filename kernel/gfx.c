@@ -8,6 +8,24 @@ static uint32_t backbuffer_storage[DEFAULT_FB_WIDTH * DEFAULT_FB_HEIGHT];
 static struct gfx_surface fb_surface = {0};
 static struct gfx_surface backbuffer_surface = {0};
 static bool gfx_initialized = false;
+static bool gfx_hardware_fb_valid = false;
+
+/* Bounded damage tracking state */
+struct gfx_damage {
+    bool dirty;
+    uint32_t min_x;
+    uint32_t min_y;
+    uint32_t max_x;
+    uint32_t max_y;
+};
+
+static struct gfx_damage g_damage = {
+    .dirty = false,
+    .min_x = 0U,
+    .min_y = 0U,
+    .max_x = 0U,
+    .max_y = 0U
+};
 
 /* 8x16 Monospace Font (Standard ASCII 32..126) */
 static const uint8_t font_8x16[95][16] = {
@@ -108,101 +126,223 @@ static const uint8_t font_8x16[95][16] = {
     {0x00,0x76,0xDC,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}  /* 126 '~' */
 };
 
+/* Validate framebuffer metadata strictly according to Phase D1 requirements */
+bool gfx_validate_framebuffer(const struct limine_framebuffer *lfb) {
+    if (lfb == NULL) return false;
+    if (lfb->address == NULL) return false;
+
+    /* Framebuffer virtual address must reside in higher-half canonical supervisor address space */
+    if ((uintptr_t)lfb->address < 0xFFFF800000000000ULL) return false;
+
+    /* Non-zero and reasonable display bounds */
+    if (lfb->width == 0ULL || lfb->height == 0ULL) return false;
+    if (lfb->width > (uint64_t)DESKTOP_MAX_WIDTH || lfb->height > (uint64_t)DESKTOP_MAX_HEIGHT) return false;
+
+    /* Require 32 bits per pixel linear framebuffer */
+    if (lfb->bpp != 32U) return false;
+
+    /* Pitch must be at least width * 4 bytes and 4-byte aligned */
+    if (lfb->pitch < lfb->width * 4ULL) return false;
+    if ((lfb->pitch & 3ULL) != 0ULL) return false;
+
+    /* Arithmetic overflow check for pitch * height */
+    if (lfb->pitch > UINT64_MAX / lfb->height) return false;
+
+    /* Total size must not exceed safety limit (256 MiB) */
+    uint64_t total_size = lfb->pitch * lfb->height;
+    if (total_size > 256ULL * 1024ULL * 1024ULL) return false;
+
+    /* Require 8-bit standard color channel sizes */
+    if (lfb->red_mask_size != 8U || lfb->green_mask_size != 8U || lfb->blue_mask_size != 8U) {
+        return false;
+    }
+
+    return true;
+}
+
+bool gfx_surface_init(struct gfx_surface *surf, uint32_t *buffer,
+                      uint32_t width, uint32_t height, uint32_t pitch,
+                      size_t buffer_size, bool is_hardware_fb, uint8_t format) {
+    if (surf == NULL || buffer == NULL) return false;
+    if (width == 0U || height == 0U) return false;
+    if (pitch < width * sizeof(uint32_t) || (pitch & 3U) != 0U) return false;
+
+    /* Size bounds verification */
+    size_t min_needed = (size_t)pitch * (size_t)height;
+    if (buffer_size < min_needed) return false;
+
+    surf->buffer = buffer;
+    surf->width = width;
+    surf->height = height;
+    surf->pitch = pitch;
+    surf->buffer_size = buffer_size;
+    surf->is_hardware_fb = is_hardware_fb;
+    surf->format = format;
+
+    return true;
+}
+
+bool gfx_surface_is_valid(const struct gfx_surface *surf) {
+    if (surf == NULL || surf->buffer == NULL) return false;
+    if (surf->width == 0U || surf->height == 0U) return false;
+    if (surf->pitch < surf->width * sizeof(uint32_t) || (surf->pitch & 3U) != 0U) return false;
+    if (surf->buffer_size > 0U) {
+        size_t min_needed = (size_t)surf->pitch * (size_t)surf->height;
+        if (surf->buffer_size < min_needed) return false;
+    }
+    return true;
+}
+
 bool gfx_initialize(void) {
     if (gfx_initialized) return true;
 
-    backbuffer_surface.buffer = backbuffer_storage;
-    backbuffer_surface.width = DEFAULT_FB_WIDTH;
-    backbuffer_surface.height = DEFAULT_FB_HEIGHT;
-    backbuffer_surface.pitch = DEFAULT_FB_WIDTH * sizeof(uint32_t);
+    /* 1. Initialize memory-backed backbuffer */
+    (void)gfx_surface_init(&backbuffer_surface, backbuffer_storage,
+                           DEFAULT_FB_WIDTH, DEFAULT_FB_HEIGHT,
+                           DEFAULT_FB_WIDTH * sizeof(uint32_t),
+                           sizeof(backbuffer_storage), false,
+                           (uint8_t)GFX_FORMAT_ARGB8888);
 
+    /* 2. Validate and initialize hardware framebuffer if provided by bootloader */
+    gfx_hardware_fb_valid = false;
     if (framebuffer_response_valid()) {
-        struct limine_framebuffer *lfb = limine_framebuffer_request.response->framebuffers[0];
-        fb_surface.buffer = (uint32_t *)lfb->address;
-        fb_surface.width = (uint32_t)lfb->width;
-        fb_surface.height = (uint32_t)lfb->height;
-        fb_surface.pitch = (uint32_t)lfb->pitch;
+        const struct limine_framebuffer *lfb = limine_framebuffer_request.response->framebuffers[0];
+        if (gfx_validate_framebuffer(lfb)) {
+            uint8_t fmt = (lfb->blue_mask_shift == 16U && lfb->red_mask_shift == 0U)
+                          ? (uint8_t)GFX_FORMAT_ABGR8888
+                          : (uint8_t)GFX_FORMAT_ARGB8888;
 
-        if (fb_surface.width <= DEFAULT_FB_WIDTH && fb_surface.height <= DEFAULT_FB_HEIGHT) {
-            backbuffer_surface.width = fb_surface.width;
-            backbuffer_surface.height = fb_surface.height;
-            backbuffer_surface.pitch = fb_surface.width * sizeof(uint32_t);
+            size_t fb_size = (size_t)(lfb->pitch * lfb->height);
+            if (gfx_surface_init(&fb_surface, (uint32_t *)lfb->address,
+                                 (uint32_t)lfb->width, (uint32_t)lfb->height,
+                                 (uint32_t)lfb->pitch, fb_size, true, fmt)) {
+                gfx_hardware_fb_valid = true;
+
+                /* Constrain backbuffer to match display dimensions if smaller than maximum storage */
+                if (fb_surface.width <= DEFAULT_FB_WIDTH && fb_surface.height <= DEFAULT_FB_HEIGHT) {
+                    backbuffer_surface.width = fb_surface.width;
+                    backbuffer_surface.height = fb_surface.height;
+                    backbuffer_surface.pitch = fb_surface.width * sizeof(uint32_t);
+                }
+            }
         }
-    } else {
+    }
+
+    if (!gfx_hardware_fb_valid) {
         fb_surface = backbuffer_surface;
     }
 
+    gfx_damage_clear();
     gfx_initialized = true;
     return true;
 }
 
 struct gfx_surface *gfx_get_framebuffer(void) {
-    if (!gfx_initialized) gfx_initialize();
+    if (!gfx_initialized) (void)gfx_initialize();
     return &fb_surface;
 }
 
 struct gfx_surface *gfx_get_backbuffer(void) {
-    if (!gfx_initialized) gfx_initialize();
+    if (!gfx_initialized) (void)gfx_initialize();
     return &backbuffer_surface;
 }
 
-void gfx_flip(void) {
-    if (fb_surface.buffer == NULL || backbuffer_surface.buffer == NULL) return;
-    if (fb_surface.buffer == backbuffer_surface.buffer) return;
-
-    uint32_t w = (backbuffer_surface.width < fb_surface.width) ? backbuffer_surface.width : fb_surface.width;
-    uint32_t h = (backbuffer_surface.height < fb_surface.height) ? backbuffer_surface.height : fb_surface.height;
-
-    for (uint32_t y = 0; y < h; y++) {
-        uint32_t *src_line = backbuffer_surface.buffer + (y * (backbuffer_surface.pitch / 4U));
-        uint32_t *dst_line = fb_surface.buffer + (y * (fb_surface.pitch / 4U));
-        for (uint32_t x = 0; x < w; x++) {
-            dst_line[x] = src_line[x];
-        }
-    }
-}
-
 void gfx_clear(struct gfx_surface *surf, uint32_t color) {
-    if (surf == NULL || surf->buffer == NULL) return;
+    if (!gfx_surface_is_valid(surf)) return;
+
+    uint32_t out_color = color;
+    if (surf->format == (uint8_t)GFX_FORMAT_ABGR8888) {
+        uint32_t r = (color >> 16) & 0xFFU;
+        uint32_t b = color & 0xFFU;
+        out_color = (color & 0xFF00FF00U) | (b << 16) | r;
+    }
+
+    uint32_t stride = surf->pitch / 4U;
     for (uint32_t y = 0; y < surf->height; y++) {
-        uint32_t *line = &surf->buffer[y * (surf->pitch / 4U)];
+        size_t line_offset = (size_t)y * stride;
+        if (surf->buffer_size > 0U && (line_offset + surf->width) * sizeof(uint32_t) > surf->buffer_size) break;
+        uint32_t *line = &surf->buffer[line_offset];
         for (uint32_t x = 0; x < surf->width; x++) {
-            line[x] = color;
+            line[x] = out_color;
         }
     }
 }
 
 void gfx_put_pixel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t color) {
-    if (surf == NULL || surf->buffer == NULL || x >= surf->width || y >= surf->height) return;
-    surf->buffer[y * (surf->pitch / 4U) + x] = color;
+    if (!gfx_surface_is_valid(surf)) return;
+    if (x >= surf->width || y >= surf->height) return;
+
+    uint32_t stride = surf->pitch / 4U;
+    size_t offset = (size_t)y * stride + x;
+    if (surf->buffer_size > 0U && (offset + 1U) * sizeof(uint32_t) > surf->buffer_size) return;
+
+    if (surf->format == (uint8_t)GFX_FORMAT_ABGR8888) {
+        uint32_t r = (color >> 16) & 0xFFU;
+        uint32_t b = color & 0xFFU;
+        color = (color & 0xFF00FF00U) | (b << 16) | r;
+    }
+
+    surf->buffer[offset] = color;
 }
 
 void gfx_blend_pixel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t color) {
-    if (surf == NULL || surf->buffer == NULL || x >= surf->width || y >= surf->height) return;
+    if (!gfx_surface_is_valid(surf)) return;
+    if (x >= surf->width || y >= surf->height) return;
+
     uint32_t a = (color >> 24) & 0xFFU;
     if (a == 255U) {
-        surf->buffer[y * (surf->pitch / 4U) + x] = color;
+        gfx_put_pixel(surf, x, y, color);
     } else if (a > 0U) {
-        uint32_t *dst = &surf->buffer[y * (surf->pitch / 4U) + x];
-        uint32_t bg = *dst;
-        uint32_t rb = (((color & 0x00FF00FFU) * a) + ((bg & 0x00FF00FFU) * (255U - a))) >> 8;
-        uint32_t g  = (((color & 0x0000FF00U) * a) + ((bg & 0x0000FF00U) * (255U - a))) >> 8;
-        *dst = 0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U);
+        uint32_t stride = surf->pitch / 4U;
+        size_t offset = (size_t)y * stride + x;
+        if (surf->buffer_size > 0U && (offset + 1U) * sizeof(uint32_t) > surf->buffer_size) return;
+
+        uint32_t bg = surf->buffer[offset];
+        if (surf->format == (uint8_t)GFX_FORMAT_ABGR8888) {
+            uint32_t r = (bg >> 16) & 0xFFU;
+            uint32_t b = bg & 0xFFU;
+            bg = (bg & 0xFF00FF00U) | (b << 16) | r;
+        }
+
+        uint32_t inv_a = 255U - a;
+        uint32_t rb = (((color & 0x00FF00FFU) * a) + ((bg & 0x00FF00FFU) * inv_a)) >> 8;
+        uint32_t g  = (((color & 0x0000FF00U) * a) + ((bg & 0x0000FF00U) * inv_a)) >> 8;
+        uint32_t result = 0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U);
+
+        if (surf->format == (uint8_t)GFX_FORMAT_ABGR8888) {
+            uint32_t res_r = (result >> 16) & 0xFFU;
+            uint32_t res_b = result & 0xFFU;
+            result = (result & 0xFF00FF00U) | (res_b << 16) | res_r;
+        }
+
+        surf->buffer[offset] = result;
     }
 }
 
 void gfx_draw_rect_filled(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    if (surf == NULL || surf->buffer == NULL) return;
-    if (x >= surf->width || y >= surf->height) return;
-    if (x + w > surf->width) w = surf->width - x;
-    if (y + h > surf->height) h = surf->height - y;
+    if (!gfx_surface_is_valid(surf)) return;
+    if (x >= surf->width || y >= surf->height || w == 0U || h == 0U) return;
+
+    /* Bounded subtraction to prevent uint32_t wrap-around */
+    if (w > surf->width - x) w = surf->width - x;
+    if (h > surf->height - y) h = surf->height - y;
 
     uint32_t a = (color >> 24) & 0xFFU;
+    uint32_t stride = surf->pitch / 4U;
+
     if (a == 255U) {
+        uint32_t out_color = color;
+        if (surf->format == (uint8_t)GFX_FORMAT_ABGR8888) {
+            uint32_t r = (color >> 16) & 0xFFU;
+            uint32_t b = color & 0xFFU;
+            out_color = (color & 0xFF00FF00U) | (b << 16) | r;
+        }
         for (uint32_t r = 0; r < h; r++) {
-            uint32_t *line = &surf->buffer[(y + r) * (surf->pitch / 4U) + x];
+            size_t row_offset = (size_t)(y + r) * stride + x;
+            if (surf->buffer_size > 0U && (row_offset + w) * sizeof(uint32_t) > surf->buffer_size) break;
+            uint32_t *line = &surf->buffer[row_offset];
             for (uint32_t c = 0; c < w; c++) {
-                line[c] = color;
+                line[c] = out_color;
             }
         }
     } else if (a > 0U) {
@@ -214,19 +354,47 @@ void gfx_draw_rect_filled(struct gfx_surface *surf, uint32_t x, uint32_t y, uint
     }
 }
 
+void gfx_draw_rect_filled_signed(struct gfx_surface *surf, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
+    if (surf == NULL || w <= 0 || h <= 0) return;
+
+    /* Clip left edge */
+    if (x < 0) {
+        int32_t clip = -x;
+        if (clip >= w) return;
+        w -= clip;
+        x = 0;
+    }
+    /* Clip top edge */
+    if (y < 0) {
+        int32_t clip = -y;
+        if (clip >= h) return;
+        h -= clip;
+        y = 0;
+    }
+
+    gfx_draw_rect_filled(surf, (uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h, color);
+}
+
 void gfx_draw_rect_outline(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    if (w == 0 || h == 0) return;
+    if (!gfx_surface_is_valid(surf)) return;
+    if (x >= surf->width || y >= surf->height || w == 0U || h == 0U) return;
+
+    if (w > surf->width - x) w = surf->width - x;
+    if (h > surf->height - y) h = surf->height - y;
+
     for (uint32_t c = 0; c < w; c++) {
         gfx_blend_pixel(surf, x + c, y, color);
-        gfx_blend_pixel(surf, x + c, y + h - 1, color);
+        if (h > 1U) gfx_blend_pixel(surf, x + c, y + h - 1U, color);
     }
     for (uint32_t r = 0; r < h; r++) {
         gfx_blend_pixel(surf, x, y + r, color);
-        gfx_blend_pixel(surf, x + w - 1, y + r, color);
+        if (w > 1U) gfx_blend_pixel(surf, x + w - 1U, y + r, color);
     }
 }
 
 void gfx_draw_line(struct gfx_surface *surf, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t color) {
+    if (!gfx_surface_is_valid(surf)) return;
+
     int32_t dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
     int32_t sx = (x0 < x1) ? 1 : -1;
     int32_t dy = (y1 > y0) ? -(y1 - y0) : -(y0 - y1);
@@ -245,7 +413,8 @@ void gfx_draw_line(struct gfx_surface *surf, int32_t x0, int32_t y0, int32_t x1,
 }
 
 void gfx_draw_gradient_v(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t top_col, uint32_t bot_col) {
-    if (surf == NULL || h == 0) return;
+    if (!gfx_surface_is_valid(surf) || h == 0U) return;
+
     uint32_t r0 = (top_col >> 16) & 0xFFU, g0 = (top_col >> 8) & 0xFFU, b0 = top_col & 0xFFU;
     uint32_t r1 = (bot_col >> 16) & 0xFFU, g1 = (bot_col >> 8) & 0xFFU, b1 = bot_col & 0xFFU;
 
@@ -258,30 +427,256 @@ void gfx_draw_gradient_v(struct gfx_surface *surf, uint32_t x, uint32_t y, uint3
         uint32_t cg = (uint32_t)((int32_t)g0 + (dg * (int32_t)r) / (int32_t)h) & 0xFFU;
         uint32_t cb = (uint32_t)((int32_t)b0 + (db * (int32_t)r) / (int32_t)h) & 0xFFU;
         uint32_t col = 0xFF000000U | (cr << 16) | (cg << 8) | cb;
-        gfx_draw_rect_filled(surf, x, y + r, w, 1, col);
+        gfx_draw_rect_filled(surf, x, y + r, w, 1U, col);
     }
 }
 
 void gfx_draw_glass_panel(struct gfx_surface *surf, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t base_color) {
-    if (w < 4 || h < 4) return;
+    if (w < 4U || h < 4U) return;
     /* Soft ambient drop shadow */
-    gfx_draw_rect_filled(surf, x + 2, y + 2, w, h, 0x30000000U);
+    gfx_draw_rect_filled(surf, x + 2U, y + 2U, w, h, 0x30000000U);
     /* Frosted glass body */
     gfx_draw_rect_filled(surf, x, y, w, h, base_color);
     /* Top specular highlight line */
-    gfx_draw_line(surf, (int32_t)(x + 1), (int32_t)y, (int32_t)(x + w - 2), (int32_t)y, GFX_COLOR_GLASS_BORDER);
+    gfx_draw_line(surf, (int32_t)(x + 1U), (int32_t)y, (int32_t)(x + w - 2U), (int32_t)y, GFX_COLOR_GLASS_BORDER);
     /* Frosted border */
     gfx_draw_rect_outline(surf, x, y, w, h, GFX_COLOR_GLASS_BORDER);
 }
 
-void gfx_draw_char(struct gfx_surface *surf, uint32_t x, uint32_t y, char c, uint32_t color) {
-    if ((uint8_t)c < 32 || (uint8_t)c > 126) c = ' ';
-    const uint8_t *glyph = font_8x16[(uint8_t)c - 32];
+/* Clipped Blit Primitives */
+bool gfx_blit(struct gfx_surface *dst, int32_t dst_x, int32_t dst_y,
+              const struct gfx_surface *src, int32_t src_x, int32_t src_y,
+              uint32_t width, uint32_t height) {
+    if (!gfx_surface_is_valid(dst) || !gfx_surface_is_valid(src)) return false;
+    if (width == 0U || height == 0U) return true;
 
-    for (uint32_t r = 0; r < 16; r++) {
+    /* Source clipping */
+    if (src_x < 0) {
+        int32_t clip = -src_x;
+        if ((uint32_t)clip >= width) return true;
+        width -= (uint32_t)clip;
+        dst_x += clip;
+        src_x = 0;
+    }
+    if (src_y < 0) {
+        int32_t clip = -src_y;
+        if ((uint32_t)clip >= height) return true;
+        height -= (uint32_t)clip;
+        dst_y += clip;
+        src_y = 0;
+    }
+    if ((uint32_t)src_x >= src->width || (uint32_t)src_y >= src->height) return true;
+    if (width > src->width - (uint32_t)src_x) width = src->width - (uint32_t)src_x;
+    if (height > src->height - (uint32_t)src_y) height = src->height - (uint32_t)src_y;
+
+    /* Destination clipping */
+    if (dst_x < 0) {
+        int32_t clip = -dst_x;
+        if ((uint32_t)clip >= width) return true;
+        width -= (uint32_t)clip;
+        src_x += clip;
+        dst_x = 0;
+    }
+    if (dst_y < 0) {
+        int32_t clip = -dst_y;
+        if ((uint32_t)clip >= height) return true;
+        height -= (uint32_t)clip;
+        dst_y += clip;
+        src_y = 0;
+    }
+    if ((uint32_t)dst_x >= dst->width || (uint32_t)dst_y >= dst->height) return true;
+    if (width > dst->width - (uint32_t)dst_x) width = dst->width - (uint32_t)dst_x;
+    if (height > dst->height - (uint32_t)dst_y) height = dst->height - (uint32_t)dst_y;
+
+    if (width == 0U || height == 0U) return true;
+
+    uint32_t src_stride = src->pitch / 4U;
+    uint32_t dst_stride = dst->pitch / 4U;
+    bool reformat = (dst->format != src->format);
+
+    for (uint32_t r = 0; r < height; r++) {
+        size_t src_off = (size_t)((uint32_t)src_y + r) * src_stride + (uint32_t)src_x;
+        size_t dst_off = (size_t)((uint32_t)dst_y + r) * dst_stride + (uint32_t)dst_x;
+        if (src->buffer_size > 0U && (src_off + width) * sizeof(uint32_t) > src->buffer_size) break;
+        if (dst->buffer_size > 0U && (dst_off + width) * sizeof(uint32_t) > dst->buffer_size) break;
+
+        const uint32_t *src_line = &src->buffer[src_off];
+        uint32_t *dst_line = &dst->buffer[dst_off];
+
+        if (!reformat) {
+            for (uint32_t c = 0; c < width; c++) {
+                dst_line[c] = src_line[c];
+            }
+        } else {
+            for (uint32_t c = 0; c < width; c++) {
+                uint32_t col = src_line[c];
+                uint32_t red = (col >> 16) & 0xFFU;
+                uint32_t blue = col & 0xFFU;
+                dst_line[c] = (col & 0xFF00FF00U) | (blue << 16) | red;
+            }
+        }
+    }
+    return true;
+}
+
+bool gfx_blit_alpha(struct gfx_surface *dst, int32_t dst_x, int32_t dst_y,
+                    const struct gfx_surface *src, int32_t src_x, int32_t src_y,
+                    uint32_t width, uint32_t height) {
+    if (!gfx_surface_is_valid(dst) || !gfx_surface_is_valid(src)) return false;
+    if (width == 0U || height == 0U) return true;
+
+    /* Source clipping */
+    if (src_x < 0) {
+        int32_t clip = -src_x;
+        if ((uint32_t)clip >= width) return true;
+        width -= (uint32_t)clip;
+        dst_x += clip;
+        src_x = 0;
+    }
+    if (src_y < 0) {
+        int32_t clip = -src_y;
+        if ((uint32_t)clip >= height) return true;
+        height -= (uint32_t)clip;
+        dst_y += clip;
+        src_y = 0;
+    }
+    if ((uint32_t)src_x >= src->width || (uint32_t)src_y >= src->height) return true;
+    if (width > src->width - (uint32_t)src_x) width = src->width - (uint32_t)src_x;
+    if (height > src->height - (uint32_t)src_y) height = src->height - (uint32_t)src_y;
+
+    /* Destination clipping */
+    if (dst_x < 0) {
+        int32_t clip = -dst_x;
+        if ((uint32_t)clip >= width) return true;
+        width -= (uint32_t)clip;
+        src_x += clip;
+        dst_x = 0;
+    }
+    if (dst_y < 0) {
+        int32_t clip = -dst_y;
+        if ((uint32_t)clip >= height) return true;
+        height -= (uint32_t)clip;
+        dst_y += clip;
+        src_y = 0;
+    }
+    if ((uint32_t)dst_x >= dst->width || (uint32_t)dst_y >= dst->height) return true;
+    if (width > dst->width - (uint32_t)dst_x) width = dst->width - (uint32_t)dst_x;
+    if (height > dst->height - (uint32_t)dst_y) height = dst->height - (uint32_t)dst_y;
+
+    if (width == 0U || height == 0U) return true;
+
+    uint32_t src_stride = src->pitch / 4U;
+
+    for (uint32_t r = 0; r < height; r++) {
+        size_t src_off = (size_t)((uint32_t)src_y + r) * src_stride + (uint32_t)src_x;
+        if (src->buffer_size > 0U && (src_off + width) * sizeof(uint32_t) > src->buffer_size) break;
+        const uint32_t *src_line = &src->buffer[src_off];
+
+        for (uint32_t c = 0; c < width; c++) {
+            uint32_t color = src_line[c];
+            if (src->format == (uint8_t)GFX_FORMAT_ABGR8888) {
+                uint32_t red = (color >> 16) & 0xFFU;
+                uint32_t blue = color & 0xFFU;
+                color = (color & 0xFF00FF00U) | (blue << 16) | red;
+            }
+            gfx_blend_pixel(dst, (uint32_t)dst_x + c, (uint32_t)dst_y + r, color);
+        }
+    }
+    return true;
+}
+
+/* Dirty Region Damage Tracking & Scheduled Frame Flushing */
+void gfx_damage_add(uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    if (width == 0U || height == 0U) return;
+    if (x >= backbuffer_surface.width || y >= backbuffer_surface.height) return;
+    if (width > backbuffer_surface.width - x) width = backbuffer_surface.width - x;
+    if (height > backbuffer_surface.height - y) height = backbuffer_surface.height - y;
+
+    uint32_t x2 = x + width;
+    uint32_t y2 = y + height;
+
+    if (!g_damage.dirty) {
+        g_damage.dirty = true;
+        g_damage.min_x = x;
+        g_damage.min_y = y;
+        g_damage.max_x = x2;
+        g_damage.max_y = y2;
+    } else {
+        if (x < g_damage.min_x) g_damage.min_x = x;
+        if (y < g_damage.min_y) g_damage.min_y = y;
+        if (x2 > g_damage.max_x) g_damage.max_x = x2;
+        if (y2 > g_damage.max_y) g_damage.max_y = y2;
+    }
+}
+
+void gfx_damage_add_fullscreen(void) {
+    g_damage.dirty = true;
+    g_damage.min_x = 0U;
+    g_damage.min_y = 0U;
+    g_damage.max_x = backbuffer_surface.width;
+    g_damage.max_y = backbuffer_surface.height;
+}
+
+bool gfx_damage_is_dirty(void) {
+    return g_damage.dirty;
+}
+
+struct gfx_rect gfx_damage_get_bounds(void) {
+    struct gfx_rect r = {0U, 0U, 0U, 0U};
+    if (g_damage.dirty && g_damage.max_x >= g_damage.min_x && g_damage.max_y >= g_damage.min_y) {
+        r.x = g_damage.min_x;
+        r.y = g_damage.min_y;
+        r.width = g_damage.max_x - g_damage.min_x;
+        r.height = g_damage.max_y - g_damage.min_y;
+    }
+    return r;
+}
+
+void gfx_damage_clear(void) {
+    g_damage.dirty = false;
+    g_damage.min_x = 0U;
+    g_damage.min_y = 0U;
+    g_damage.max_x = 0U;
+    g_damage.max_y = 0U;
+}
+
+void gfx_flush(void) {
+    if (!g_damage.dirty) return;
+    if (fb_surface.buffer == NULL || backbuffer_surface.buffer == NULL) return;
+    if (fb_surface.buffer == backbuffer_surface.buffer) {
+        gfx_damage_clear();
+        return;
+    }
+
+    uint32_t w = g_damage.max_x - g_damage.min_x;
+    uint32_t h = g_damage.max_y - g_damage.min_y;
+
+    (void)gfx_blit(&fb_surface, (int32_t)g_damage.min_x, (int32_t)g_damage.min_y,
+                   &backbuffer_surface, (int32_t)g_damage.min_x, (int32_t)g_damage.min_y,
+                   w, h);
+
+    gfx_damage_clear();
+}
+
+void gfx_flip(void) {
+    gfx_damage_add_fullscreen();
+    gfx_flush();
+}
+
+void gfx_draw_char(struct gfx_surface *surf, uint32_t x, uint32_t y, char c, uint32_t color) {
+    if (!gfx_surface_is_valid(surf)) return;
+    if (x >= surf->width || y >= surf->height) return;
+
+    if ((uint8_t)c < 32U || (uint8_t)c > 126U) c = ' ';
+    const uint8_t *glyph = font_8x16[(uint8_t)c - 32U];
+
+    uint32_t max_r = (16U > surf->height - y) ? (surf->height - y) : 16U;
+    uint32_t max_c = (8U > surf->width - x) ? (surf->width - x) : 8U;
+
+    for (uint32_t r = 0; r < max_r; r++) {
         uint8_t row = glyph[r];
-        for (uint32_t col = 0; col < 8; col++) {
-            if ((row & (0x80U >> col)) != 0) {
+        for (uint32_t col = 0; col < max_c; col++) {
+            if ((row & (0x80U >> col)) != 0U) {
                 gfx_blend_pixel(surf, x + col, y + r, color);
             }
         }
@@ -289,129 +684,312 @@ void gfx_draw_char(struct gfx_surface *surf, uint32_t x, uint32_t y, char c, uin
 }
 
 void gfx_draw_string(struct gfx_surface *surf, uint32_t x, uint32_t y, const char *str, uint32_t color) {
-    if (str == NULL) return;
+    if (!gfx_surface_is_valid(surf) || str == NULL) return;
     uint32_t cx = x;
     uint32_t cy = y;
 
     for (size_t i = 0; str[i] != '\0'; i++) {
         if (str[i] == '\n') {
             cx = x;
-            cy += 16;
+            cy += 16U;
+            if (cy >= surf->height) break;
             continue;
         }
-        gfx_draw_char(surf, cx, cy, str[i], color);
-        cx += 8;
+        if (cx < surf->width && cy < surf->height) {
+            gfx_draw_char(surf, cx, cy, str[i], color);
+        }
+        cx += 8U;
     }
 }
 
 void gfx_draw_icon(struct gfx_surface *surf, uint32_t x, uint32_t y, enum gfx_icon icon, uint32_t color) {
+    if (!gfx_surface_is_valid(surf)) return;
+
     switch (icon) {
         case GFX_ICON_TERMINAL:
             /* Terminal box with prompt '>_' */
-            gfx_draw_glass_panel(surf, x, y, 16, 16, GFX_COLOR_EMERALD_DEEP);
-            gfx_draw_char(surf, x + 2, y, '>', color);
-            gfx_draw_line(surf, (int32_t)(x + 9), (int32_t)(y + 11), (int32_t)(x + 13), (int32_t)(y + 11), color);
+            gfx_draw_glass_panel(surf, x, y, 16U, 16U, GFX_COLOR_EMERALD_DEEP);
+            gfx_draw_char(surf, x + 2U, y, '>', color);
+            gfx_draw_line(surf, (int32_t)(x + 9U), (int32_t)(y + 11U), (int32_t)(x + 13U), (int32_t)(y + 11U), color);
             break;
         case GFX_ICON_FILE_EXPLORER:
             /* Folder shape */
-            gfx_draw_rect_filled(surf, x + 1, y + 2, 6, 3, color);
-            gfx_draw_glass_panel(surf, x, y + 4, 16, 11, GFX_COLOR_EMERALD_SURFACE);
+            gfx_draw_rect_filled(surf, x + 1U, y + 2U, 6U, 3U, color);
+            gfx_draw_glass_panel(surf, x, y + 4U, 16U, 11U, GFX_COLOR_EMERALD_SURFACE);
             break;
         case GFX_ICON_TASK_MANAGER:
             /* Activity graph */
-            gfx_draw_glass_panel(surf, x, y, 16, 16, GFX_COLOR_EMERALD_DEEP);
-            gfx_draw_line(surf, (int32_t)(x + 2), (int32_t)(y + 10), (int32_t)(x + 5), (int32_t)(y + 4), color);
-            gfx_draw_line(surf, (int32_t)(x + 5), (int32_t)(y + 4), (int32_t)(x + 9), (int32_t)(y + 12), color);
-            gfx_draw_line(surf, (int32_t)(x + 9), (int32_t)(y + 12), (int32_t)(x + 14), (int32_t)(y + 3), color);
+            gfx_draw_glass_panel(surf, x, y, 16U, 16U, GFX_COLOR_EMERALD_DEEP);
+            gfx_draw_line(surf, (int32_t)(x + 2U), (int32_t)(y + 10U), (int32_t)(x + 5U), (int32_t)(y + 4U), color);
+            gfx_draw_line(surf, (int32_t)(x + 5U), (int32_t)(y + 4U), (int32_t)(x + 9U), (int32_t)(y + 12U), color);
+            gfx_draw_line(surf, (int32_t)(x + 9U), (int32_t)(y + 12U), (int32_t)(x + 14U), (int32_t)(y + 3U), color);
             break;
         case GFX_ICON_SETTINGS:
             /* Cog / gear */
-            gfx_draw_glass_panel(surf, x + 3, y + 3, 10, 10, GFX_COLOR_EMERALD_SURFACE);
-            gfx_draw_rect_outline(surf, x + 1, y + 1, 14, 14, color);
-            gfx_draw_rect_filled(surf, x + 6, y + 6, 4, 4, color);
+            gfx_draw_glass_panel(surf, x + 3U, y + 3U, 10U, 10U, GFX_COLOR_EMERALD_SURFACE);
+            gfx_draw_rect_outline(surf, x + 1U, y + 1U, 14U, 14U, color);
+            gfx_draw_rect_filled(surf, x + 6U, y + 6U, 4U, 4U, color);
             break;
         case GFX_ICON_COMPUTER:
             /* Monitor */
-            gfx_draw_rect_filled(surf, x + 1, y + 2, 14, 9, color);
-            gfx_draw_rect_filled(surf, x + 3, y + 4, 10, 5, GFX_COLOR_EMERALD_DEEP);
-            gfx_draw_line(surf, (int32_t)(x + 7), (int32_t)(y + 11), (int32_t)(x + 7), (int32_t)(y + 13), color);
-            gfx_draw_line(surf, (int32_t)(x + 4), (int32_t)(y + 14), (int32_t)(x + 11), (int32_t)(y + 14), color);
+            gfx_draw_rect_filled(surf, x + 1U, y + 2U, 14U, 9U, color);
+            gfx_draw_rect_filled(surf, x + 3U, y + 4U, 10U, 5U, GFX_COLOR_EMERALD_DEEP);
+            gfx_draw_line(surf, (int32_t)(x + 7U), (int32_t)(y + 11U), (int32_t)(x + 7U), (int32_t)(y + 13U), color);
+            gfx_draw_line(surf, (int32_t)(x + 4U), (int32_t)(y + 14U), (int32_t)(x + 11U), (int32_t)(y + 14U), color);
             break;
         case GFX_ICON_SHUTDOWN:
             /* Power circle with vertical notch */
-            gfx_draw_rect_outline(surf, x + 2, y + 2, 12, 12, color);
-            gfx_draw_line(surf, (int32_t)(x + 7), (int32_t)(y + 1), (int32_t)(x + 7), (int32_t)(y + 6), color);
+            gfx_draw_rect_outline(surf, x + 2U, y + 2U, 12U, 12U, color);
+            gfx_draw_line(surf, (int32_t)(x + 7U), (int32_t)(y + 1U), (int32_t)(x + 7U), (int32_t)(y + 6U), color);
             break;
         case GFX_ICON_CALCULATOR:
             /* Calculator body with screen and 4 buttons */
-            gfx_draw_glass_panel(surf, x + 1, y + 1, 14, 14, GFX_COLOR_EMERALD_BASE);
-            gfx_draw_rect_outline(surf, x + 1, y + 1, 14, 14, color);
-            gfx_draw_rect_filled(surf, x + 3, y + 3, 10, 3, GFX_COLOR_EMERALD_DEEP);
-            gfx_draw_rect_filled(surf, x + 3, y + 8, 3, 2, color);
-            gfx_draw_rect_filled(surf, x + 7, y + 8, 3, 2, color);
-            gfx_draw_rect_filled(surf, x + 3, y + 11, 3, 2, color);
-            gfx_draw_rect_filled(surf, x + 7, y + 11, 6, 2, GFX_COLOR_EMERALD_HIGHLIGHT);
+            gfx_draw_glass_panel(surf, x + 1U, y + 1U, 14U, 14U, GFX_COLOR_EMERALD_BASE);
+            gfx_draw_rect_outline(surf, x + 1U, y + 1U, 14U, 14U, color);
+            gfx_draw_rect_filled(surf, x + 3U, y + 3U, 10U, 3U, GFX_COLOR_EMERALD_DEEP);
+            gfx_draw_rect_filled(surf, x + 3U, y + 8U, 3U, 2U, color);
+            gfx_draw_rect_filled(surf, x + 7U, y + 8U, 3U, 2U, color);
+            gfx_draw_rect_filled(surf, x + 3U, y + 11U, 3U, 2U, color);
+            gfx_draw_rect_filled(surf, x + 7U, y + 11U, 6U, 2U, GFX_COLOR_EMERALD_HIGHLIGHT);
             break;
         case GFX_ICON_CALENDAR:
             /* Calendar sheet with red/emerald top bar and date grid */
-            gfx_draw_glass_panel(surf, x + 1, y + 2, 14, 13, GFX_COLOR_EMERALD_BASE);
-            gfx_draw_rect_outline(surf, x + 1, y + 2, 14, 13, color);
-            gfx_draw_rect_filled(surf, x + 1, y + 2, 14, 4, GFX_COLOR_EMERALD_PRIMARY);
-            gfx_draw_line(surf, (int32_t)(x + 4), (int32_t)y, (int32_t)(x + 4), (int32_t)(y + 2), color);
-            gfx_draw_line(surf, (int32_t)(x + 11), (int32_t)y, (int32_t)(x + 11), (int32_t)(y + 2), color);
-            gfx_draw_rect_filled(surf, x + 4, y + 8, 2, 2, color);
-            gfx_draw_rect_filled(surf, x + 8, y + 8, 2, 2, color);
-            gfx_draw_rect_filled(surf, x + 6, y + 11, 4, 3, GFX_COLOR_EMERALD_HIGHLIGHT);
+            gfx_draw_glass_panel(surf, x + 1U, y + 2U, 14U, 13U, GFX_COLOR_EMERALD_BASE);
+            gfx_draw_rect_outline(surf, x + 1U, y + 2U, 14U, 13U, color);
+            gfx_draw_rect_filled(surf, x + 1U, y + 2U, 14U, 4U, GFX_COLOR_EMERALD_PRIMARY);
+            gfx_draw_line(surf, (int32_t)(x + 4U), (int32_t)y, (int32_t)(x + 4U), (int32_t)(y + 2U), color);
+            gfx_draw_line(surf, (int32_t)(x + 11U), (int32_t)y, (int32_t)(x + 11U), (int32_t)(y + 2U), color);
+            gfx_draw_rect_filled(surf, x + 4U, y + 8U, 2U, 2U, color);
+            gfx_draw_rect_filled(surf, x + 8U, y + 8U, 2U, 2U, color);
+            gfx_draw_rect_filled(surf, x + 6U, y + 11U, 4U, 3U, GFX_COLOR_EMERALD_HIGHLIGHT);
             break;
         case GFX_ICON_DAWN_LOGO:
         default:
             /* Emerald diamond / dawn sun symbol */
-            gfx_draw_line(surf, (int32_t)(x + 7), (int32_t)(y + 1), (int32_t)(x + 14), (int32_t)(y + 7), color);
-            gfx_draw_line(surf, (int32_t)(x + 14), (int32_t)(y + 7), (int32_t)(x + 7), (int32_t)(y + 14), color);
-            gfx_draw_line(surf, (int32_t)(x + 7), (int32_t)(y + 14), (int32_t)x, (int32_t)(y + 7), color);
-            gfx_draw_line(surf, (int32_t)x, (int32_t)(y + 7), (int32_t)(x + 7), (int32_t)(y + 1), color);
-            gfx_draw_rect_filled(surf, x + 6, y + 6, 3, 3, GFX_COLOR_EMERALD_HIGHLIGHT);
+            gfx_draw_line(surf, (int32_t)(x + 7U), (int32_t)(y + 1U), (int32_t)(x + 14U), (int32_t)(y + 7U), color);
+            gfx_draw_line(surf, (int32_t)(x + 14U), (int32_t)(y + 7U), (int32_t)(x + 7U), (int32_t)(y + 14U), color);
+            gfx_draw_line(surf, (int32_t)(x + 7U), (int32_t)(y + 14U), (int32_t)x, (int32_t)(y + 7U), color);
+            gfx_draw_line(surf, (int32_t)x, (int32_t)(y + 7U), (int32_t)(x + 7U), (int32_t)(y + 1U), color);
+            gfx_draw_rect_filled(surf, x + 6U, y + 6U, 3U, 3U, GFX_COLOR_EMERALD_HIGHLIGHT);
             break;
     }
 }
 
-/* Self-test */
-static uint32_t test_surface_buf[64 * 64];
+/* ========================================================================= */
+/* Deterministic Headless Self-Test Harness for Phase D1                     */
+/* ========================================================================= */
+
+static uint32_t test_surface_buf_a[128 * 128];
+static uint32_t test_surface_buf_b[128 * 128];
 
 bool gfx_self_test(void) {
     if (!gfx_initialize()) return false;
 
-    struct gfx_surface test_surf = {
-        .buffer = test_surface_buf,
-        .width = 64,
-        .height = 64,
-        .pitch = 64 * sizeof(uint32_t)
-    };
+    /* --- Subtest 1: Framebuffer Metadata Validation --- */
+    {
+        /* Null pointer rejection */
+        if (gfx_validate_framebuffer(NULL)) return false;
 
-    /* Clear surface with black */
-    gfx_draw_rect_filled(&test_surf, 0, 0, 64, 64, GFX_COLOR_BLACK);
-    if (test_surf.buffer[0] != GFX_COLOR_BLACK) return false;
+        struct limine_framebuffer invalid_fb = {
+            .address = (void *)0xFFFF8000000B8000ULL,
+            .width = 1024ULL,
+            .height = 768ULL,
+            .pitch = 1024ULL * 4ULL,
+            .bpp = 32U,
+            .memory_model = 1U,
+            .red_mask_size = 8U,
+            .red_mask_shift = 16U,
+            .green_mask_size = 8U,
+            .green_mask_shift = 8U,
+            .blue_mask_size = 8U,
+            .blue_mask_shift = 0U,
+            .unused = {0},
+            .edid_size = 0ULL,
+            .edid = NULL,
+            .mode_count = 0ULL,
+            .modes = NULL
+        };
 
-    /* Plot single pixel */
-    gfx_put_pixel(&test_surf, 10, 10, GFX_COLOR_WHITE);
-    if (test_surf.buffer[10 * 64 + 10] != GFX_COLOR_WHITE) return false;
+        /* Null address */
+        invalid_fb.address = NULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
 
-    /* Alpha blending: 50% white over black -> ~0xFF7F7F7F */
-    gfx_put_pixel(&test_surf, 20, 20, GFX_COLOR_BLACK);
-    gfx_blend_pixel(&test_surf, 20, 20, 0x80FFFFFFU);
-    uint32_t blended = test_surf.buffer[20 * 64 + 20];
+        /* Lower canonical / unmapped address */
+        invalid_fb.address = (void *)0x0000000000100000ULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+        invalid_fb.address = (void *)0xFFFF8000000B8000ULL;
+
+        /* Zero width / height */
+        invalid_fb.width = 0ULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+        invalid_fb.width = 1024ULL;
+
+        invalid_fb.height = 0ULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+        invalid_fb.height = 768ULL;
+
+        /* Non-32 bpp */
+        invalid_fb.bpp = 16U;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+        invalid_fb.bpp = 24U;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+        invalid_fb.bpp = 32U;
+
+        /* Pitch smaller than width * 4 */
+        invalid_fb.pitch = (1024ULL * 4ULL) - 4ULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+
+        /* Unaligned pitch */
+        invalid_fb.pitch = (1024ULL * 4ULL) + 1ULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+        invalid_fb.pitch = 1024ULL * 4ULL;
+
+        /* Pitch * height arithmetic overflow */
+        invalid_fb.pitch = 0xFFFFFFFF00000000ULL;
+        invalid_fb.height = 0xFFFFFFFFULL;
+        if (gfx_validate_framebuffer(&invalid_fb)) return false;
+
+        /* Valid synthetic FB */
+        invalid_fb.pitch = 1024ULL * 4ULL;
+        invalid_fb.height = 768ULL;
+        if (!gfx_validate_framebuffer(&invalid_fb)) return false;
+
+        /* Validate live QEMU Limine FB if reported */
+        if (framebuffer_response_valid()) {
+            const struct limine_framebuffer *live = limine_framebuffer_request.response->framebuffers[0];
+            if (!gfx_validate_framebuffer(live)) return false;
+        }
+    }
+
+    /* --- Subtest 2: Safe Surface Creation and Validation --- */
+    struct gfx_surface surf_a;
+    struct gfx_surface surf_b;
+
+    if (!gfx_surface_init(&surf_a, test_surface_buf_a, 64U, 64U, 64U * 4U,
+                          sizeof(test_surface_buf_a), false, (uint8_t)GFX_FORMAT_ARGB8888)) {
+        return false;
+    }
+    if (!gfx_surface_init(&surf_b, test_surface_buf_b, 64U, 64U, 64U * 4U,
+                          sizeof(test_surface_buf_b), false, (uint8_t)GFX_FORMAT_ARGB8888)) {
+        return false;
+    }
+
+    /* Reject invalid surface parameters */
+    if (gfx_surface_init(NULL, test_surface_buf_a, 64U, 64U, 64U * 4U, sizeof(test_surface_buf_a), false, 0)) return false;
+    if (gfx_surface_init(&surf_a, NULL, 64U, 64U, 64U * 4U, sizeof(test_surface_buf_a), false, 0)) return false;
+    if (gfx_surface_init(&surf_a, test_surface_buf_a, 0U, 64U, 64U * 4U, sizeof(test_surface_buf_a), false, 0)) return false;
+    if (gfx_surface_init(&surf_a, test_surface_buf_a, 64U, 64U, 16U, sizeof(test_surface_buf_a), false, 0)) return false;
+
+    /* --- Subtest 3: Pixel Plotting & Alpha Blending --- */
+    gfx_clear(&surf_a, GFX_COLOR_BLACK);
+    if (surf_a.buffer[0] != GFX_COLOR_BLACK) return false;
+
+    gfx_put_pixel(&surf_a, 10U, 10U, GFX_COLOR_WHITE);
+    if (surf_a.buffer[10U * 64U + 10U] != GFX_COLOR_WHITE) return false;
+
+    /* Alpha blend 50% white over black */
+    gfx_put_pixel(&surf_a, 20U, 20U, GFX_COLOR_BLACK);
+    gfx_blend_pixel(&surf_a, 20U, 20U, 0x80FFFFFFU);
+    uint32_t blended = surf_a.buffer[20U * 64U + 20U];
     uint8_t red = (uint8_t)((blended >> 16) & 0xFFU);
-    if (red < 120 || red > 135) return false;
+    if (red < 120U || red > 135U) return false;
 
-    /* Draw glass panel */
-    gfx_draw_glass_panel(&test_surf, 5, 5, 30, 20, GFX_COLOR_GLASS_PANEL);
+    /* Out of bounds pixel plotting must be safely ignored */
+    gfx_put_pixel(&surf_a, 64U, 64U, GFX_COLOR_WHITE);
+    gfx_put_pixel(&surf_a, 0xFFFFFFFFU, 0xFFFFFFFFU, GFX_COLOR_WHITE);
+    gfx_blend_pixel(&surf_a, 64U, 64U, GFX_COLOR_WHITE);
+    gfx_blend_pixel(&surf_a, 0xFFFFFFFFU, 0xFFFFFFFFU, GFX_COLOR_WHITE);
 
-    /* Render text */
-    gfx_draw_string(&test_surf, 2, 2, "DAWN", GFX_COLOR_EMERALD_ACCENT);
+    /* --- Subtest 4: Clipped Primitives & Integer Overflow Safety --- */
+    /* Draw oversized rect that would overflow uint32_t if added without subtraction bounds */
+    gfx_clear(&surf_a, GFX_COLOR_BLACK);
+    gfx_draw_rect_filled(&surf_a, 50U, 50U, 0xFFFFFFFFU, 0xFFFFFFFFU, GFX_COLOR_EMERALD_ACCENT);
+    /* Should clip to remaining (14x14) */
+    if (surf_a.buffer[50U * 64U + 50U] != GFX_COLOR_EMERALD_ACCENT) return false;
+    if (surf_a.buffer[63U * 64U + 63U] != GFX_COLOR_EMERALD_ACCENT) return false;
+    if (surf_a.buffer[49U * 64U + 50U] != GFX_COLOR_BLACK) return false;
 
-    /* Render icons */
-    gfx_draw_icon(&test_surf, 40, 40, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_icon(&test_surf, 40, 20, GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_HIGHLIGHT);
+    /* Signed rect drawing with negative coordinates (partially offscreen) */
+    gfx_clear(&surf_a, GFX_COLOR_BLACK);
+    gfx_draw_rect_filled_signed(&surf_a, -10, -10, 20, 20, GFX_COLOR_WHITE);
+    /* Clipped visible region is (0, 0) to (9, 9) */
+    if (surf_a.buffer[0] != GFX_COLOR_WHITE) return false;
+    if (surf_a.buffer[9U * 64U + 9U] != GFX_COLOR_WHITE) return false;
+    if (surf_a.buffer[10U * 64U + 10U] != GFX_COLOR_BLACK) return false;
+
+    /* Completely offscreen signed rect */
+    gfx_draw_rect_filled_signed(&surf_a, -100, -100, 20, 20, GFX_COLOR_WHITE);
+    gfx_draw_rect_filled_signed(&surf_a, 100, 100, 20, 20, GFX_COLOR_WHITE);
+
+    /* Outline drawing */
+    gfx_clear(&surf_a, GFX_COLOR_BLACK);
+    gfx_draw_rect_outline(&surf_a, 10U, 10U, 20U, 20U, GFX_COLOR_WHITE);
+    if (surf_a.buffer[10U * 64U + 10U] != GFX_COLOR_WHITE) return false;
+    if (surf_a.buffer[15U * 64U + 15U] != GFX_COLOR_BLACK) return false;
+
+    /* Line drawing */
+    gfx_draw_line(&surf_a, 0, 0, 63, 63, GFX_COLOR_EMERALD_HIGHLIGHT);
+    if (surf_a.buffer[0] != GFX_COLOR_EMERALD_HIGHLIGHT) return false;
+    if (surf_a.buffer[63U * 64U + 63U] != GFX_COLOR_EMERALD_HIGHLIGHT) return false;
+
+    /* --- Subtest 5: Clipped Blit and Alpha Blit --- */
+    gfx_clear(&surf_a, GFX_COLOR_EMERALD_PRIMARY);
+    gfx_clear(&surf_b, GFX_COLOR_BLACK);
+
+    /* Normal blit from surf_a (10, 10, 20x20) to surf_b (5, 5) */
+    if (!gfx_blit(&surf_b, 5, 5, &surf_a, 10, 10, 20U, 20U)) return false;
+    if (surf_b.buffer[5U * 64U + 5U] != GFX_COLOR_EMERALD_PRIMARY) return false;
+    if (surf_b.buffer[4U * 64U + 5U] != GFX_COLOR_BLACK) return false;
+
+    /* Negative destination blit */
+    gfx_clear(&surf_b, GFX_COLOR_BLACK);
+    if (!gfx_blit(&surf_b, -5, -5, &surf_a, 0, 0, 20U, 20U)) return false;
+    /* Clipped destination starts at (0, 0), getting source (5, 5) */
+    if (surf_b.buffer[0] != GFX_COLOR_EMERALD_PRIMARY) return false;
+
+    /* Out-of-bounds blit returns true and does not corrupt */
+    if (!gfx_blit(&surf_b, 200, 200, &surf_a, 0, 0, 20U, 20U)) return false;
+    if (!gfx_blit(&surf_b, 0, 0, &surf_a, 200, 200, 20U, 20U)) return false;
+
+    /* Alpha blit */
+    gfx_clear(&surf_a, 0x80FFFFFFU); /* 50% white */
+    gfx_clear(&surf_b, GFX_COLOR_BLACK);
+    if (!gfx_blit_alpha(&surf_b, 0, 0, &surf_a, 0, 0, 10U, 10U)) return false;
+    uint32_t alpha_pixel = surf_b.buffer[0];
+    uint8_t alpha_red = (uint8_t)((alpha_pixel >> 16) & 0xFFU);
+    if (alpha_red < 120U || alpha_red > 135U) return false;
+
+    /* --- Subtest 6: Damage Tracking and Scheduled Flush --- */
+    gfx_damage_clear();
+    if (gfx_damage_is_dirty()) return false;
+
+    gfx_damage_add(10U, 10U, 20U, 20U);
+    if (!gfx_damage_is_dirty()) return false;
+    struct gfx_rect bounds = gfx_damage_get_bounds();
+    if (bounds.x != 10U || bounds.y != 10U || bounds.width != 20U || bounds.height != 20U) return false;
+
+    /* Expand damage */
+    gfx_damage_add(5U, 5U, 50U, 50U);
+    bounds = gfx_damage_get_bounds();
+    if (bounds.x != 5U || bounds.y != 5U || bounds.width != 50U || bounds.height != 50U) return false;
+
+    gfx_damage_clear();
+    if (gfx_damage_is_dirty()) return false;
+
+    /* --- Subtest 7: Glyph & String Rendering --- */
+    gfx_clear(&surf_a, GFX_COLOR_BLACK);
+    gfx_draw_char(&surf_a, 10U, 10U, 'A', GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(&surf_a, 0U, 0U, "DAWN-OS\nGFX", GFX_COLOR_WHITE);
+
+    /* Render at boundary edge to verify safe glyph clipping */
+    gfx_draw_char(&surf_a, 60U, 60U, 'X', GFX_COLOR_WHITE);
+    gfx_draw_string(&surf_a, 50U, 55U, "LONGSTRING", GFX_COLOR_WHITE);
+
+    /* --- Subtest 8: Glass Panel & Icons --- */
+    gfx_draw_glass_panel(&surf_a, 5U, 5U, 30U, 20U, GFX_COLOR_GLASS_PANEL);
+    gfx_draw_icon(&surf_a, 40U, 40U, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_icon(&surf_a, 40U, 20U, GFX_ICON_TERMINAL, GFX_COLOR_EMERALD_HIGHLIGHT);
+    gfx_draw_icon(&surf_a, 20U, 40U, GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
 
     return true;
 }

@@ -1,105 +1,110 @@
-# Phase D — Virtual Filesystem and Filesystem Drivers Status
+# Phase D — Graphical Desktop Shell & Safe Framebuffer Renderer Status
 
 ## 1. Phase Summary
 
-Phase D implements the complete Virtual Filesystem (VFS) layer, filesystem drivers, directory caching, and file exploration backend for DAWN-OS. DAWN-OS is an independent, custom bare-metal x86_64 operating system built completely from scratch without Linux or Windows NT kernel code or dependencies.
+Phase D implements the optional local-console graphical desktop shell for DAWN-OS, strictly governed by `docs/PHASE_D_PLAN.md` and downstream of the validated Phase B (kernel memory & CPU foundations) and Phase C (userspace runtime & storage integration) milestones. Headless/server operation remains the core default, while graphical console mode provides an emerald-green liquid-neomorphic administrative interface.
 
-## 2. Completed Features
+---
 
-### VFS Architecture and Mount Subsystem (`include/vfs.h`, `kernel/vfs.c`)
-- Unified node model (`struct vfs_node`) supporting `VFS_TYPE_FILE`, `VFS_TYPE_DIRECTORY`, `VFS_TYPE_CHARDEVICE`, and `VFS_TYPE_BLOCKDEVICE`.
-- Standard POSIX-compatible node operations (`read`, `write`, `open`, `close`, `readdir`, `finddir`, `create`, `mkdir`, `unlink`).
-- System-wide Mount Table supporting up to `VFS_MAX_MOUNTS` (32 active mount points).
-- Root filesystem mounted at `/` backed by an in-memory RAMFS.
-- Standard Unix-style root directory hierarchy initialized at boot:
-  - `/boot`: Kernel images, configuration, and bootloader files.
-  - `/dev`: Character and block device nodes.
-  - `/mnt`: Mount points for external partitions and optical media.
-  - `/tmp`: Temporary runtime file storage.
-  - `/bin`: Native userland executables.
-- Path resolution engine (`vfs_resolve_path`) resolving absolute paths with `.` (current) and `..` (parent) normalization across active filesystem mount boundaries.
-- Standard VFS API:
-  - `vfs_open(path, flags, out_node)`
-  - `vfs_read(node, offset, size, buffer)`
-  - `vfs_write(node, offset, size, buffer)`
-  - `vfs_close(node)`
-  - `vfs_readdir(node, index, out_dirent)`
-  - `vfs_mkdir(path, mode)`
-  - `vfs_create(path, mode, out_node)`
-  - `vfs_unlink(path)`
-- Integrated self-test (`vfs_self_test`) validating directory hierarchy creation, file creation, read/write data integrity, nested directory creation, path resolution, and unlinking.
+## 2. Milestone D0 — Desktop Specification & Design System
 
-### FAT32 Read/Write Driver (`include/fat32.h`, `kernel/fat32.c`)
-- BIOS Parameter Block (BPB) and Extended Boot Record (EBR) parsing:
-  - Validates bytes per sector (512-4096), sectors per cluster (power of two), reserved sector count, FAT count (1-4), and `0xAA55` boot signature.
-  - Calculates FAT region offsets, data region offsets, root cluster (`root_cluster`), and total cluster count.
-- Cluster chain traversal, allocation, and FAT entry management:
-  - 32-bit FAT entry reading and decoding (`fat32_get_fat_entry`).
-  - Synchronized FAT mirroring (`fat32_set_fat_entry`) across all active FAT tables (`table_count`), preserving upper 4 reserved bits.
-  - Free cluster discovery and allocation (`fat32_alloc_free_cluster`) scanning cluster chain for `0x00000000`, setting EOC marker, and zeroing cluster contents.
-  - Safe cluster chain extension (`fat32_extend_chain`) with allocation failure rollback.
-  - Cluster chain freeing (`fat32_free_chain`) clearing linked clusters across all mirrored FATs.
-- 8.3 short filename encoding/decoding and normalization:
-  - Reads directory entries, filters deleted (`0xE5`) and unused entries, skips volume labels and LFN entries.
-  - Converts canonical filenames to 11-byte FAT format (`fat32_to_short_name`) with uppercase normalization and character validation.
-- Directory traversal, creation, and lookup:
-  - Directory enumeration (`fat32_readdir`) and lookup (`fat32_finddir`).
-  - Free directory entry slot discovery and dynamic directory cluster chain extension (`fat32_find_free_dirent`).
-  - Directory creation (`fat32_mkdir`) initializing `.` and `..` parent cluster references.
-- File I/O and Lifecycle:
-  - Sequential and offset cluster reading (`fat32_read`).
-  - Dynamic cluster-allocated writing (`fat32_write`) handling multi-cluster spans and cluster chain growth.
-  - Directory entry metadata updates (`fat32_update_dirent_meta`) synchronizing file size and starting cluster.
-  - File truncation (`fat32_truncate`) safely deallocating trailing clusters in FAT tables.
-  - File and empty directory deletion (`fat32_unlink`) marking dirent `0xE5` and freeing cluster chains.
-- VFS and Block Device Integration:
-  - Block device mount helper `fat32_mount(bdev, &out_root)` and in-memory image mount `fat32_mount_image(image, size)`.
-  - Process file descriptor integration: userspace `read` and `write` syscalls dispatch directly to underlying VFS file nodes with offset management.
-- Comprehensive Self-Test (`fat32_self_test`):
-  - Validates synthetic 64KB FAT32 volume mounting with mirrored FAT tables.
-  - Exercises reading existing file, creating new file, multi-cluster writing, read-back verification, and FAT mirror consistency.
-  - Tests nested subdirectory creation (`DOCS`), creating and writing nested file (`SUB.TXT`), directory enumeration, non-empty directory unlink rejection, sub-file deletion, directory deletion, and cluster free verification.
-  - Enforces malformed BPB rejection matrix (null image, undersized image, bad signature, invalid sector size, zero sectors per cluster, invalid root cluster).
+### Design Tokens (`include/gfx.h`)
+- **Emerald Green Liquid-Neomorphism Palette (ARGB8888):**
+  - **Surfaces & Canvas:**
+    - Deep Background: `GFX_COLOR_EMERALD_DEEP` (`0xFF051B11U`)
+    - Base Canvas: `GFX_COLOR_EMERALD_BASE` (`0xFF0A2E1FU`)
+    - Inset Surface: `GFX_COLOR_EMERALD_SURFACE` (`0xFF0E3D2AU`)
+    - Primary Accent: `GFX_COLOR_EMERALD_PRIMARY` (`0xFF0F5A3BU`)
+    - Neon Accent: `GFX_COLOR_EMERALD_ACCENT` (`0xFF10B981U`)
+    - Specular Highlight / Glow: `GFX_COLOR_EMERALD_HIGHLIGHT` (`0xFF34D399U`)
+    - Mint / Cyan Accent: `GFX_COLOR_EMERALD_CYAN` (`0xFF06D6A0U`)
+  - **Glass & Translucency:**
+    - Translucent Frosted Panel: `GFX_COLOR_GLASS_PANEL` (`0xD00D281EU`)
+    - Semi-Translucent Surface: `GFX_COLOR_GLASS_SURFACE` (`0xC00A251BU`)
+    - Specular Glass Border: `GFX_COLOR_GLASS_BORDER` (`0x6034D399U`)
+    - Ambient Drop Shadow: `GFX_COLOR_GLASS_SHADOW` (`0x80000000U`)
+  - **Typography & States:**
+    - Crisp Off-White Text: `GFX_COLOR_TEXT_PRIMARY` (`0xFFF0FDF4U`)
+    - Sage Secondary Text: `GFX_COLOR_TEXT_SECONDARY` (`0xFFA7F3D0U`)
+    - Dimmed Muted Text: `GFX_COLOR_TEXT_MUTED` (`0xFF6EE7B7U`)
+    - High-Contrast Focus Ring: `GFX_COLOR_FOCUS_RING` (`0xFF38BDF8U`)
+    - Muted Disabled Control: `GFX_COLOR_DISABLED` (`0x80374151U`)
+    - Semantic Indicators: Warning Amber (`0xFFF59E0BU`), Error Ruby (`0xFFEF4444U`), Success Emerald (`0xFF10B981U`)
+  - **Window Chrome Controls:**
+    - Close: Ruby Red (`0xFFEF4444U`)
+    - Minimize: Amber (`0xFFF59E0BU`)
+    - Maximize: Emerald (`0xFF10B981U`)
 
-### ISO9660 (CD-ROM / Optical Media) Read-Only Driver (`include/iso9660.h`, `kernel/iso9660.c`)
-- ISO9660 Primary Volume Descriptor (PVD) parsing:
-  - Sector 16 (offset `0x8000`) probe with `CD001` identifier and version 1 verification.
-  - Extracts logical block size (2048 bytes), volume space size, and root directory record extent.
-- Extent and directory record parsing (`struct iso9660_dir_record`):
-  - Both-endian (little-endian + big-endian) 16-bit and 32-bit field reading.
-  - Parses extent LBA, data length, file flags (directory vs. regular file), and name length.
-  - Converts ISO9660 filenames (stripping version numbers like `;1`).
-- Directory traversal (`iso9660_readdir`, `iso9660_finddir`).
-- File reading across contiguous ISO9660 extents (`iso9660_read_file`).
-- VFS integration (`iso9660_mount` producing a read-only VFS root node).
-- Integrated self-test (`iso9660_self_test`) with a synthetic ISO9660 PVD image, validating volume descriptor validation, directory entry traversal, and file extent reading.
+- **Spatial & Radii Tokens (4px / 8px Grid):**
+  - Spacing: `GFX_SPACE_XS` (2px), `GFX_SPACE_SM` (4px), `GFX_SPACE_MD` (8px), `GFX_SPACE_LG` (16px), `GFX_SPACE_XL` (24px), `GFX_SPACE_2XL` (32px).
+  - Radii: `GFX_RADIUS_SM` (4px buttons/badges), `GFX_RADIUS_MD` (8px panels/controls), `GFX_RADIUS_LG` (12px dialogs/windows).
 
-### VFS Directory Entry (Dentry) Cache (`include/vfs_cache.h`, `kernel/vfs_cache.c`)
-- High-performance directory entry cache (`struct vfs_cache_entry`) with LRU replacement policy (`VFS_CACHE_SIZE = 64`).
-- Caches path-to-inode and path-to-node resolutions to eliminate repeated tree traversals.
-- Cache operations:
-  - `vfs_cache_lookup(path)`: Fast hash/path lookup, increments hit count and updates LRU age.
-  - `vfs_cache_insert(path, node)`: Adds or replaces cache entries, evicting the oldest LRU entry when full.
-  - `vfs_cache_invalidate(path)`: Exact path and subtree prefix invalidation for unlinks and directory mutations.
-  - `vfs_cache_clear()`: Clears entire cache.
-- Integrated self-test (`vfs_cache_self_test`) testing cache insert, lookup, eviction, prefix invalidation, and metrics.
+- **Desktop Geometry & Layout Contracts:**
+  - Screen resolution range: 640x480 minimum to 7680x4320 (8K) maximum; standard target 1280x800 / 1920x1080.
+  - Top Status Bar: Height 28px (`DESKTOP_STATUSBAR_HEIGHT = 28U`), glass frosted body, workspace indicator, system metrics, RTC clock, and session status.
+  - Bottom Dock / Launcher: Height 48px (`DESKTOP_TASKBAR_HEIGHT = 48U`), pinned app icons with glowing active indicators.
+  - Window Chrome: Titlebar height 28px (`WM_TITLEBAR_HEIGHT = 28U`), border width 2px (`WM_BORDER_WIDTH = 2U`), minimum client dimensions 160x100.
+  - Notifications: Stacked toast panels (up to 4 active) anchored at top-right (width 244px, height 52px), timeout countdown, and smooth dismiss.
+  - Keyboard Navigation & Motion: Tab/Shift-Tab focus traversal, Enter to activate, Esc to dismiss, Super/Meta for launcher; instantaneous state updates under reduced-motion mode.
 
-### File Explorer Backend (`include/file_explorer.h`, `kernel/file_explorer.c`)
-- Native backend engine for the upcoming Emerald Green desktop File Explorer application.
-- Directory listing and metadata aggregation:
-  - Enumerates directory entries into structured arrays (`struct explorer_entry`).
-  - Gathers file type, size, attributes, and permissions.
-  - Sort modes: by name (alphabetical), by size, by date, by type.
-- Recursive file search engine:
-  - Substring search across directory trees (`explorer_search`).
-  - Configurable recursion depth limit (`EXPLORER_MAX_SEARCH_DEPTH = 8`).
-- File management operations:
-  - File copying (`explorer_copy_file`) using chunked 4096-byte streaming I/O.
-  - File moving/renaming (`explorer_move_file`).
-  - Recursive directory and file deletion (`explorer_delete`).
-- Integrated self-test (`explorer_self_test`) validating directory enumeration, alphabetical and size sorting, recursive search, copy, move, and recursive delete.
+---
 
-## 3. Kernel Integration
-- Added Phase D headers and self-test invocations in `kernel/main.c`.
-- Updated `Makefile` with `vfs.o`, `fat32.o`, `iso9660.o`, `vfs-cache.o`, `file-explorer.o` and corresponding `-test.o` rules.
-- Linked all Phase D objects into both `build/dawn-kernel.elf` and `build/dawn-kernel-test.elf`.
+## 3. Milestone D1 — Safe Framebuffer & CPU 2D Renderer
+
+### Framebuffer Metadata Validation (`kernel/gfx.c`, `include/gfx.h`)
+- Implemented `gfx_validate_framebuffer(const struct limine_framebuffer *lfb)`:
+  - Validates non-null framebuffer structure and memory address.
+  - Enforces canonical supervisor higher-half address check (`(uintptr_t)address >= 0xFFFF800000000000ULL`).
+  - Rejects zero width and height; bounds dimensions within `[640..7680] x [480..4320]`.
+  - Rejects non-32 bpp modes (only 32 bpp linear framebuffers supported).
+  - Requires scanline pitch at least `width * 4` bytes and strictly 4-byte aligned.
+  - Checks 64-bit multiplication overflow (`pitch * height`) and limits total size to 256 MiB.
+  - Validates 8-bit standard channel mask sizes and resolves pixel layout (`GFX_FORMAT_ARGB8888` vs `GFX_FORMAT_ABGR8888`).
+  - Safely falls back to internal memory-backed backbuffer if metadata is invalid, preventing unsafe writes to raw video memory.
+
+### Safe Bounded 2D Primitives
+- **`struct gfx_surface`**:
+  - Contains `buffer`, `width`, `height`, `pitch`, `buffer_size` (in bytes), `is_hardware_fb`, and `format`.
+  - Verified by `gfx_surface_is_valid()` before any memory access.
+- **Checked Pixel Plotting & Alpha Blending:**
+  - `gfx_put_pixel`: Boundary checks `x < surf->width && y < surf->height`, buffer size offset bounds, and format color packing.
+  - `gfx_blend_pixel`: Fixed-point alpha blending `((color * a + bg * (255 - a)) >> 8)` with zero integer overflow risk.
+- **Bounded Clipping & Integer Overflow Prevention:**
+  - `gfx_draw_rect_filled`: Uses subtraction-based clipping `if (w > surf->width - x) w = surf->width - x` to eliminate `uint32_t` arithmetic wrap-around vulnerability when huge widths/heights (e.g. `0xFFFFFFFF`) are passed.
+  - `gfx_draw_rect_filled_signed`: Clips negative coordinates `(x < 0, y < 0)` safely against screen origin.
+  - `gfx_draw_rect_outline`: Perimeter drawing with safe bounds subtraction.
+  - `gfx_draw_line`: Bresenham line algorithm with per-pixel clipping checks.
+  - `gfx_draw_char` / `gfx_draw_string`: Bounded glyph rendering with monospace font 8x16, newline handling, and clipping at screen edges.
+
+### Clipped Blit Primitives
+- **`gfx_blit(dst, dst_x, dst_y, src, src_x, src_y, w, h)`**:
+  - Two-sided clipping: clips source rectangle to source surface dimensions, and clips destination rectangle to destination surface dimensions.
+  - Handles negative destination offsets (`dst_x < 0`, `dst_y < 0`) by sliding source offsets and reducing width/height.
+  - Re-formats color channels on the fly if source and destination have mismatched formats (e.g., ARGB to ABGR).
+  - Row-by-row memory copy respecting pitch and buffer bounds.
+- **`gfx_blit_alpha`**:
+  - Combines clipped blitting with alpha-blending for translucent glass panels and floating UI components.
+
+### Bounded Dirty Region Damage Tracking & Scheduling
+- Keeps rendering out of interrupt context: drawing executes exclusively in scheduler/task context.
+- Maintains `struct gfx_damage` recording dirty bounding box (`min_x`, `min_y`, `max_x`, `max_y`).
+- `gfx_damage_add(x, y, w, h)`: Expands bounding box, clipped to backbuffer resolution.
+- `gfx_damage_add_fullscreen()`: Marks entire backbuffer dirty.
+- `gfx_flush()`:
+  - If not dirty: no-op, zero memory copies performed.
+  - If dirty: uses `gfx_blit` to copy only the damaged sub-rectangle to the hardware framebuffer.
+  - Clears dirty flag.
+  - Drastically conserves memory bus bandwidth on virtual and physical hardware.
+
+### Deterministic Headless Test Harness
+- `gfx_self_test()` verifies:
+  1. Rejection of null framebuffer pointer, null address, lower canonical address, zero width/height, non-32 bpp, unaligned pitch, undersized pitch, and multiplication overflow.
+  2. Acceptance of valid synthetic and live Limine framebuffer metadata.
+  3. Safe surface creation and parameter validation.
+  4. Pixel plotting and 50% alpha blend accuracy.
+  5. Overflow-proof clipped rect fill with `0xFFFFFFFF` dimensions.
+  6. Signed rect clipping with negative coordinates.
+  7. Full and clipped `gfx_blit` with negative destination coordinates, offscreen blits, and `gfx_blit_alpha`.
+  8. Damage tracking accumulation, bounding box expansion, and `gfx_flush` lifecycle.
+  9. Glyph rendering and boundary text clipping.
+  10. Glass panel and icon generation.

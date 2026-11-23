@@ -1272,13 +1272,14 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: real-time clock BCD decoding and formatting\n");
 
-    /* Phase G: Graphics and Desktop Environment */
+    /* Phase D: Desktop Shell & Safe CPU 2D Renderer (D0/D1) */
     if (!gfx_self_test()) {
         serial_write("DAWN-TEST: FAIL: graphics primitives and font rendering\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: graphics primitives, alpha blending and font rendering\n");
+    serial_write("DAWN-TEST: PASS: safe framebuffer metadata validation, clipped blit and damage tracking\n");
     if (!wm_self_test()) {
         serial_write("DAWN-TEST: FAIL: window manager lifecycle and controls\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
