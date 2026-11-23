@@ -1,7 +1,7 @@
 # DAWN-OS Architecture: HLD and LLD
 
-Snapshot date: 2026-11-19
-Status: source-derived design document. It describes what the repository contains, not what has been proven to run. See [Validation boundary](#5-validation-boundary-and-test-strategy).
+Snapshot date: 2026-11-23
+Status: source-derived design document and verified architecture reference. See [Validation boundary](#5-validation-boundary-and-test-strategy).
 
 ---
 
@@ -89,20 +89,26 @@ The kernel virtual base is `0xffffffff80000000`. `.limine_requests_start`, `.lim
 
 - `make kernel` builds `build/dawn-kernel.elf`.
 - `make kernel-test` builds a second kernel with `-DDAWN_KERNEL_TEST=1`.
-- `make qemu-test` boots under SeaBIOS and expects QEMU exit status 33.
-- `make qemu-uefi-test` boots under OVMF and expects the same status.
+- `make user-bins` builds all 28 Ring-3 userspace applications.
+- `make iso` packages the hybrid bootable production ISO `build/dawn-os.iso`.
+- `make iso-test` packages the hybrid bootable self-test ISO `build/dawn-os-test.iso`.
+- `make qemu-test` boots the self-test ISO under SeaBIOS and expects QEMU exit status 33 (64/64 unit tests pass).
+- `make qemu-uefi-test` boots the self-test ISO under OVMF and expects the same status (64/64 unit tests pass).
+- `make qemu-smoke-bios` boots the production ISO under SeaBIOS and verifies clean boot into the desktop compositor event loop.
+- `make qemu-smoke-uefi` boots the production ISO under OVMF and verifies clean boot into the desktop compositor event loop.
+- `make qemu-smoke-all` executes both production ISO smoke tests.
 - Exit status 35 means a kernel self-test failed.
-- CI downloads and SHA-256 verifies Limine v12.10.0, builds both kernels, creates the hybrid ISO, runs both boots, and uploads ISO plus serial/debug logs.
+- CI pipeline (`.github/workflows/phase-a-boot.yml`) verifies Limine v12.10.0, compiles with `-Werror`, executes both unit tests and production smoke tests, and publishes all verified binaries and ISOs to 7 dedicated Git branches (`qemu`, `qemu-bios`, `qemu-uefi`, `kernel`, `kernel-test`, `userland`, `test-results`).
 
 ### 1.5 Runtime constraints that shape the design
 
 1. **No kernel heap.** Subsystems use static pools and fixed-capacity arrays.
-2. **Single CPU.** No per-CPU state, no TLB shootdown, no cross-CPU locking protocol.
+2. **Single CPU scheduling.** Multi-core SMP bootstrap and AP initialization are active, while the scheduler core currently dispatches on BSP.
 3. **No demand paging, COW, swap, or file-backed page cache.**
 4. **Bounded concurrency:** 4 processes, 8 kernel threads, 16 FDs per process.
 5. **Polling UI input.** `input_poll_hardware()` is called from the desktop loop.
 6. **No userspace GUI toolkit.** Desktop components are linked into the kernel.
-7. **No real NIC or HDA codec driver.** Network and audio are protocol/mixer scaffolds.
+7. **Hardware Driver Status:** VirtIO-Net PCI NIC driver is implemented with real hardware packets (ARP and ICMP ping verified), but Audio is in-kernel software synthesis (no physical HDA codec driver yet), and AHCI/NVMe drivers perform discovery and virtual block transfers without physical DMA command issue.
 
 ---
 

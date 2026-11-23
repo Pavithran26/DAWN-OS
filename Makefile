@@ -41,7 +41,7 @@ USER_BINARIES = build/user/init.elf build/user/sh.elf build/user/echo.elf \
                 build/user/free.elf build/user/whoami.elf build/user/sleep.elf \
                 build/user/grep.elf
 
-.PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all metadata user-bins
+.PHONY: all kernel clean check kernel-test iso iso-test run qemu-test qemu-uefi-test qemu-test-all qemu-smoke-bios qemu-smoke-uefi qemu-smoke-all metadata user-bins
 
 metadata: include/dawn_metadata_generated.h
 
@@ -573,6 +573,47 @@ qemu-uefi-test: iso-test
 	else echo "QEMU UEFI boot test: FAIL (exit status $$status)"; exit 1; fi
 
 qemu-test-all: qemu-test qemu-uefi-test
+
+qemu-smoke-bios: iso
+	@command -v $(QEMU) >/dev/null 2>&1 || { echo 'QEMU not found' >&2; exit 1; }
+	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
+	@set +e; timeout 8s $(QEMU) -M q35 -m 256M -smp 2 -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+		-cdrom build/dawn-os.iso -boot order=d,menu=off -vga std \
+		-serial file:build/qemu-bios-smoke.log -display none -no-reboot -no-shutdown \
+		-d guest_errors,cpu_reset -D build/qemu-bios-smoke-debug.log; \
+	cat build/qemu-bios-smoke.log; \
+	if grep -q "DAWN-OS: Entering production desktop event and scheduler loop" build/qemu-bios-smoke.log; then \
+		if grep -E -q "DAWN-OS: FAIL|panic|fatal" build/qemu-bios-smoke.log; then \
+			echo 'QEMU BIOS production boot smoke test: FAIL (errors logged)' >&2; exit 1; \
+		fi; \
+		echo 'QEMU BIOS production boot smoke test: PASS'; exit 0; \
+	else \
+		echo 'QEMU BIOS production boot smoke test: FAIL (desktop loop not reached)' >&2; exit 1; \
+	fi
+
+qemu-smoke-uefi: iso
+	@command -v $(QEMU) >/dev/null 2>&1 || { echo 'QEMU not found' >&2; exit 1; }
+	@test -f "$(OVMF_CODE)" || { echo 'OVMF UEFI code image not found: $(OVMF_CODE)' >&2; exit 1; }
+	@test -f "$(OVMF_VARS)" || { echo 'OVMF UEFI variables image not found: $(OVMF_VARS)' >&2; exit 1; }
+	@command -v timeout >/dev/null 2>&1 || { echo 'timeout command not found' >&2; exit 1; }
+	cp "$(OVMF_VARS)" build/OVMF_VARS_SMOKE.fd
+	@set +e; timeout 10s $(QEMU) -M q35 -m 256M -smp 2 -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+		-drive if=pflash,format=raw,unit=0,file="$(OVMF_CODE)",readonly=on \
+		-drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS_SMOKE.fd \
+		-cdrom build/dawn-os.iso -boot order=d,menu=off -vga std \
+		-serial file:build/qemu-uefi-smoke.log -display none -no-reboot -no-shutdown \
+		-d guest_errors,cpu_reset -D build/qemu-uefi-smoke-debug.log; \
+	cat build/qemu-uefi-smoke.log; \
+	if grep -q "DAWN-OS: Entering production desktop event and scheduler loop" build/qemu-uefi-smoke.log; then \
+		if grep -E -q "DAWN-OS: FAIL|panic|fatal" build/qemu-uefi-smoke.log; then \
+			echo 'QEMU UEFI production boot smoke test: FAIL (errors logged)' >&2; exit 1; \
+		fi; \
+		echo 'QEMU UEFI production boot smoke test: PASS'; exit 0; \
+	else \
+		echo 'QEMU UEFI production boot smoke test: FAIL (desktop loop not reached)' >&2; exit 1; \
+	fi
+
+qemu-smoke-all: qemu-smoke-bios qemu-smoke-uefi
 
 clean:
 	rm -rf build

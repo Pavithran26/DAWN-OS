@@ -93,7 +93,9 @@ jobs:
           make iso-test LIMINE_DIR=limine-binary
 
       - name: Run full QEMU test suite (BIOS + UEFI)
-        run: make qemu-test-all LIMINE_DIR=limine-binary
+        run: |
+          make qemu-test-all LIMINE_DIR=limine-binary
+          make qemu-smoke-all LIMINE_DIR=limine-binary
 
       - name: Verify zero failures in serial logs
         shell: bash
@@ -102,7 +104,7 @@ jobs:
           failed=0
           for log in build/qemu-bios-serial.log build/qemu-uefi-serial.log; do
             if [[ -f "$log" ]]; then
-              echo "=== Checking $log ==="
+              echo "=== Checking test log $log ==="
               if grep -E "DAWN-TEST: FAIL|DAWN-OS: FAIL|boot test: FAIL" "$log"; then
                 echo "FAIL: Test failure line detected in $log!" >&2
                 failed=1
@@ -112,11 +114,29 @@ jobs:
               failed=1
             fi
           done
+
+          for log in build/qemu-bios-smoke.log build/qemu-uefi-smoke.log; do
+            if [[ -f "$log" ]]; then
+              echo "=== Checking smoke log $log ==="
+              if grep -E "DAWN-OS: FAIL|fatal|panic" "$log"; then
+                echo "FAIL: Failure line detected in smoke log $log!" >&2
+                failed=1
+              fi
+              if ! grep -q "DAWN-OS: Entering production desktop event and scheduler loop" "$log"; then
+                echo "FAIL: Production desktop milestone not reached in $log!" >&2
+                failed=1
+              fi
+            else
+              echo "FAIL: Expected smoke log $log not found!" >&2
+              failed=1
+            fi
+          done
+
           if [[ $failed -ne 0 ]]; then
-            echo "CI FAIL: One or more kernel self-tests failed." >&2
+            echo "CI FAIL: One or more test/smoke validations failed." >&2
             exit 1
           fi
-          echo "CI PASS: Both BIOS and UEFI passed with zero failures."
+          echo "CI PASS: All test suites and production smoke tests passed with zero failures."
 
       - name: Publish build artifacts to dedicated Git branches
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -149,3 +169,7 @@ jobs:
             build/qemu-bios-debug.log
             build/qemu-uefi-serial.log
             build/qemu-uefi-debug.log
+            build/qemu-bios-smoke.log
+            build/qemu-bios-smoke-debug.log
+            build/qemu-uefi-smoke.log
+            build/qemu-uefi-smoke-debug.log
