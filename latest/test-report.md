@@ -1,8 +1,8 @@
 # DAWN-OS Automated Test Suite Report
 
-- **Source Commit:** `9bf1ca3436aea9ebf7d71b552deb57701a12a86f`
-- **Timestamp (UTC):** `2026-11-23T06:08:28Z`
-- **CI Run:** [GitHub Actions Run #45121979973](https://github.com/Pavithran26/DAWN-OS/actions/runs/45121979973)
+- **Source Commit:** `b331bef8d30093f529be4312aa1f4b04a1b07e87`
+- **Timestamp (UTC):** `2026-11-23T06:37:26Z`
+- **CI Run:** [GitHub Actions Run #45125180689](https://github.com/Pavithran26/DAWN-OS/actions/runs/45125180689)
 - **Status:** **ALL PASSED**
 
 ---
@@ -25,7 +25,7 @@
 
 ---
 
-## Verified Kernel Subsystems & Tests (64 Total)
+## Verified Kernel Subsystems & Tests (67 Total)
 
 | Subsystem | Verified Test Name | Status |
 |---|---|---|
@@ -40,6 +40,7 @@
 | Interrupts & APIC | ACPI MADT parser edge cases | PASS |
 | Interrupts & APIC | real IOAPIC-routed PIT IRQ delivery | PASS |
 | Interrupts & APIC | Local APIC one-shot timer interrupt | PASS |
+| Interrupts & APIC | Local APIC timer calibration accuracy and repeatability tolerance | PASS |
 | Interrupts & APIC | Local APIC timer calibration | PASS |
 | Interrupts & APIC | SMP multi-core detection, BSP initialization and AP boot | PASS |
 | Interrupts & APIC | kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards | PASS |
@@ -52,6 +53,8 @@
 | Process & Scheduler | ELF64 header, load segments, permissions and bounds validation | PASS |
 | Process & Scheduler | kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards | PASS |
 | Process & Scheduler | repeated timer-driven kernel-thread preemption | PASS |
+| Process & Scheduler | thread stack guard detection, state machine transitions and cleanup | PASS |
+| Process & Scheduler | scheduler heavy preemption stress, non-yielding workers and timer churn | PASS |
 | Process & Scheduler | process-bound kernel-thread CR3/TSS switching, yield, exit and reaping | PASS |
 | Process & Scheduler | process-owned user IRETQ frame, code/stack permissions and trap-stack bounds | PASS |
 | Process & Scheduler | controlled CPL3 ELF64 launch, syscall exit, scheduler return and process reaping | PASS |
