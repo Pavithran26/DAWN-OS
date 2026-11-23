@@ -1,9 +1,9 @@
 DAWN-OS OVMF UEFI Boot Execution Summary
-Source Commit: ac3db5c6c62c8793c1eac50d2f0aa9bf3e187949
-Timestamp: 2026-11-23T11:57:31Z
+Source Commit: 94d4b3e03341203f8da68400017af5e8903baafd
+Timestamp: 2026-11-23T12:43:37Z
 Status: PASS (QEMU exit code 33)
 
-Executed Tests (77):
+Executed Tests (79):
   - PASS: memory-map validator edge cases
   - PASS: physical page allocator edge cases
   - PASS: virtual-memory map/translate/unmap tests
@@ -53,8 +53,10 @@ Executed Tests (77):
   - PASS: safe framebuffer metadata validation, clipped blit and damage tracking
   - PASS: window manager lifecycle, Z-order and controls
   - PASS: window focus cycling, keyboard shortcuts and focus ring
+  - PASS: window resizing, multi-workspace isolation and damage tracking
   - PASS: desktop taskbar, launcher and composition
   - PASS: keyboard-first launcher navigation and event delivery
+  - PASS: desktop status bar, dock, workspace switcher and scheduled redraw
   - PASS: calculator application operations and button layout
   - PASS: calendar date calculations and month navigation
   - PASS: shell command parser, built-in commands and history

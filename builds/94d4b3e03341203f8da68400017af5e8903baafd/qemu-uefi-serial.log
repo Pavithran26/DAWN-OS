@@ -1,0 +1,134 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+[01;01H[01;01HDAWN-OS: kernel entry reached
+DAWN-OS: x86_64 freestanding bootstrap
+DAWN-OS: Limine base revision 6 accepted
+DAWN-OS: Limine 4-level paging mode confirmed
+DAWN-TEST: PASS: memory-map validator edge cases
+DAWN-OS: Limine memory map validated
+DAWN-OS: memory map entries: 36
+DAWN-OS: usable regions: 10
+DAWN-OS: usable RAM MiB: 185
+DAWN-OS: bootloader-reclaimable regions: 11
+DAWN-OS: bootloader-reclaimable MiB: 42
+DAWN-OS: unknown memory-map types (not allocatable): 0
+DAWN-OS: HHDM response validated; dynamic offset accepted
+DAWN-TEST: PASS: physical page allocator edge cases
+DAWN-OS: physical allocator managed frames: 47567
+DAWN-OS: physical allocator free frames: 47567
+DAWN-OS: physical allocator tracking limit MiB: 4096
+DAWN-OS: x86_64 four-level page-table manager initialized
+DAWN-TEST: PASS: virtual-memory map/translate/unmap tests
+DAWN-TEST: PASS: separate user roots, private user mappings and address-space teardown
+DAWN-TEST: PASS: kernel-callable syscall dispatcher and user-memory helper unit tests (no ring-3 entry)
+DAWN-OS: kernel GDT and 64-bit TSS loaded; privilege stack ready
+DAWN-OS: x86-64 hardware fast syscall (MSR STAR/LSTAR/FMASK) initialized
+DAWN-TEST: PASS: process address-space and kernel-stack ownership, lifecycle, reaping and slot reuse
+DAWN-TEST: PASS: user-mode entry validates active process mappings and stack alignment
+DAWN-TEST: PASS: ELF64 header, load segments, permissions and bounds validation
+DAWN-TEST: PASS: GDT/TSS descriptor, TR and RSP0 validation
+DAWN-OS: 256-entry IDT loaded; legacy PIC remapped and masked
+DAWN-OS: VFS root, mounts and standard directory hierarchy initialized
+DAWN-OS: storage manager, block devices, PCI storage, AHCI, NVMe and partitions initialized
+DAWN-OS: device manager and driver framework initialized
+DAWN-OS: CMOS real-time clock driver initialized
+DAWN-OS: input subsystem, PS/2 fallback, xHCI and USB HID initialized
+DAWN-OS: graphics abstraction layer and 2D drawing engine ready
+DAWN-OS: window manager and compositor ready
+DAWN-OS: Emerald Green Neo-Liquid Glass desktop environment initialized
+DAWN-OS: terminal emulator and shell engine ready
+DAWN-OS: task manager and resource monitor ready
+DAWN-OS: network stack, loopback, ARP, IPv4, UDP, TCP and sockets ready
+DAWN-OS: audio subsystem, PCI audio, mixer and tone generator ready
+DAWN-OS: settings subsystem, persistent configuration and UI controls ready
+DAWN-OS: installer workflow, partition deployment and rescue shell ready
+DAWN-OS: security subsystem, user accounts, authentication and audit logging ready
+DAWN-OS: application runtime, dlibc heap pool and package manager ready
+DAWN-OS: service manager, background daemons, IPC bus and event dispatch ready
+DAWN-OS: ACPI power management, reboot/shutdown and panic diagnostics ready
+DAWN-OS: localization, multi-language catalog, keymaps and accessibility ready
+DAWN-OS: advanced features, spinlocks, ticketlocks, semaphores, shm, mmap and modules ready
+DAWN-OS: centralized OS metadata validated
+DAWN-OS: system information provider ready
+DAWN-TEST: PASS: breakpoint, PIC mask, IRQ-vector dispatch and PIT counter tests
+DAWN-TEST: PASS: ACPI MADT parser edge cases
+DAWN-OS: ACPI MADT: BSP APIC ID 0
+DAWN-OS: ACPI MADT: IOAPIC GSI base 0
+DAWN-OS: ACPI MADT: PIT IRQ0 override GSI 2
+DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked
+DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery
+DAWN-TEST: PASS: Local APIC one-shot timer interrupt
+DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624663
+DAWN-TEST: PASS: Local APIC timer calibration accuracy and repeatability tolerance
+DAWN-TEST: PASS: Local APIC timer calibration
+DAWN-OS: SMP initialized; detected CPU count: 2, online: 2
+DAWN-TEST: PASS: SMP multi-core detection, BSP initialization and AP boot
+DAWN-OS: single-CPU kernel-thread scheduler initialized
+DAWN-TEST: PASS: kernel thread creation, interrupt-frame switching, round-robin yield, exit and stack guards
+DAWN-TEST: PASS: repeated timer-driven kernel-thread preemption
+DAWN-TEST: PASS: thread stack guard detection, state machine transitions and cleanup
+DAWN-TEST: PASS: scheduler heavy preemption stress, non-yielding workers and timer churn
+DAWN-TEST: PASS: process-bound kernel-thread CR3/TSS switching, yield, exit and reaping
+DAWN-TEST: PASS: process-owned user IRETQ frame, code/stack permissions and trap-stack bounds
+DAWN-USER-OK
+DAWN-TEST: PASS: controlled CPL3 ELF64 launch, syscall exit, scheduler return and process reaping
+DAWN-TEST: PASS: parent child wait, blocking and collection
+DAWN-TEST: PASS: process spawning from in-memory ELF image and thread binding
+DAWN-TEST: PASS: Local APIC periodic stop/restart checks
+DAWN-TEST: PASS: Local APIC timer invalid-argument checks
+DAWN-TEST: PASS: VFS mount, hierarchy, path resolution and operations
+DAWN-TEST: PASS: FAT32 filesystem parsing, read and write
+DAWN-TEST: PASS: ISO9660 primary volume descriptor and read
+DAWN-TEST: PASS: VFS dentry cache
+DAWN-TEST: PASS: File explorer backend enumeration, search and copy
+DAWN-TEST: PASS: block device registration and read/write
+DAWN-TEST: PASS: PCI bus scan and configuration space access
+DAWN-TEST: PASS: AHCI SATA controller and port detection
+DAWN-TEST: PASS: NVMe controller and namespace queues
+DAWN-TEST: PASS: MBR/GPT partition management and slice translation
+DAWN-TEST: PASS: storage manager disk inventory and operations
+DAWN-TEST: PASS: device manager registry and driver binding
+DAWN-TEST: PASS: PS/2 keyboard/mouse scancode decoding
+DAWN-TEST: PASS: USB xHCI controller registers and TRB parsing
+DAWN-TEST: PASS: USB HID keyboard/mouse report parsing
+DAWN-TEST: PASS: unified input event queue and dispatch
+DAWN-TEST: PASS: input event queue overflow bounds and keyboard-first delivery
+DAWN-TEST: PASS: real-time clock BCD decoding and formatting
+DAWN-TEST: PASS: graphics primitives, alpha blending and font rendering
+DAWN-TEST: PASS: safe framebuffer metadata validation, clipped blit and damage tracking
+DAWN-TEST: PASS: window manager lifecycle, Z-order and controls
+DAWN-TEST: PASS: window focus cycling, keyboard shortcuts and focus ring
+DAWN-TEST: PASS: window resizing, multi-workspace isolation and damage tracking
+DAWN-TEST: PASS: desktop taskbar, launcher and composition
+DAWN-TEST: PASS: keyboard-first launcher navigation and event delivery
+DAWN-TEST: PASS: desktop status bar, dock, workspace switcher and scheduled redraw
+DAWN-TEST: PASS: calculator application operations and button layout
+DAWN-TEST: PASS: calendar date calculations and month navigation
+DAWN-TEST: PASS: shell command parser, built-in commands and history
+DAWN-TEST: PASS: terminal emulator text grid, scrolling and render buffer
+DAWN-TEST: PASS: task manager process list, performance graphs and controls
+DAWN-TEST: PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle
+DAWN-TEST: PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping
+DAWN-TEST: PASS: virtio-blk PCI driver, request queue, read-only bounds and sector read
+DAWN-TEST: PASS: actual VirtIO device-backed ISO9660 file read
+DAWN-TEST: PASS: audio mixer, master volume, stream mixing and tone generation
+DAWN-TEST: PASS: settings serialization, defaults, clamping and window navigation
+DAWN-TEST: PASS: metadata validation, URL handling and safe text
+DAWN-TEST: PASS: system information from kernel APIs
+DAWN-TEST: PASS: installer disk verification, partition formatting, file copy and rescue shell
+DAWN-TEST: PASS: security password hashing, user authentication, permissions and address boundaries
+DAWN-TEST: PASS: dlibc strings, memory ops, heap allocator, package registry and app lifecycle
+DAWN-TEST: PASS: service manager dependencies, daemon lifecycle, IPC queue and event pub/sub
+DAWN-TEST: PASS: ACPI power states, reboot vectors and kernel panic diagnostics
+DAWN-TEST: PASS: multi-language catalog, keymap translation tables and accessibility scaling
+DAWN-TEST: PASS: spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules
+DAWN-OS: framebuffer request fulfilled
+DAWN-OS: spawning native init process (PID 1)...
+DAWN-TEST: PASS: init process spawning and user stack setup
+-INIT] PID 1 active.
+      DAWN-TEST: PASS: userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation
+DAWN-TEST: PASS: userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle
+DAWN-TEST: PASS: userspace CPL3 SYS_EXEC image replacement and address space reset
+DAWN-TEST: PASS: userspace CPL3 filesystem access on mounted VirtIO disk
+DAWN-TEST: PASS: Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer
+DAWN-TEST: RESULT=PASS
