@@ -1,8 +1,8 @@
 # DAWN-OS Automated Test Suite Report
 
-- **Source Commit:** `ae51f7fc2569f4c2c4d54a02c4b854452165fa79`
-- **Timestamp (UTC):** `2026-11-23T08:48:36Z`
-- **CI Run:** [GitHub Actions Run #45141439390](https://github.com/Pavithran26/DAWN-OS/actions/runs/45141439390)
+- **Source Commit:** `cd95efd2afd3ea0eb4b793814fcf64435ea33f7f`
+- **Timestamp (UTC):** `2026-11-23T10:14:26Z`
+- **CI Run:** [GitHub Actions Run #45153537649](https://github.com/Pavithran26/DAWN-OS/actions/runs/45153537649)
 - **Status:** **ALL PASSED**
 
 ---
@@ -25,7 +25,7 @@
 
 ---
 
-## Verified Kernel Subsystems & Tests (69 Total)
+## Verified Kernel Subsystems & Tests (73 Total)
 
 | Subsystem | Verified Test Name | Status |
 |---|---|---|
@@ -63,6 +63,7 @@
 | Process & Scheduler | task manager process list, performance graphs and controls | PASS |
 | Process & Scheduler | init process spawning and user stack setup | PASS |
 | Process & Scheduler | userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation | PASS |
+| Process & Scheduler | userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle | PASS |
 | Process & Scheduler | Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer | PASS |
 | Storage & Filesystem | parent child wait, blocking and collection | PASS |
 | Storage & Filesystem | VFS mount, hierarchy, path resolution and operations | PASS |
@@ -73,6 +74,7 @@
 | Storage & Filesystem | AHCI SATA controller and port detection | PASS |
 | Storage & Filesystem | NVMe controller and namespace queues | PASS |
 | Storage & Filesystem | MBR/GPT partition management and slice translation | PASS |
+| Storage & Filesystem | actual VirtIO device-backed ISO9660 file read | PASS |
 | Storage & Filesystem | installer disk verification, partition formatting, file copy and rescue shell | PASS |
 | Networking & Drivers | PS/2 keyboard/mouse scancode decoding | PASS |
 | Networking & Drivers | USB HID keyboard/mouse report parsing | PASS |

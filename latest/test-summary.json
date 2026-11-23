@@ -1,12 +1,12 @@
 {
-  "source_commit": "ae51f7fc2569f4c2c4d54a02c4b854452165fa79",
-  "timestamp_utc": "2026-11-23T08:48:36Z",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45141439390",
+  "source_commit": "cd95efd2afd3ea0eb4b793814fcf64435ea33f7f",
+  "timestamp_utc": "2026-11-23T10:14:26Z",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45153537649",
   "bios_self_test": {
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 69,
+    "tests_passed": 73,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -63,6 +63,7 @@
       "network checksum, loopback, UDP packet dispatch and socket lifecycle",
       "virtio-net PCI driver, ARP resolution and ICMP echo ping",
       "virtio-blk PCI driver, request queue, read-only bounds and sector read",
+      "actual VirtIO device-backed ISO9660 file read",
       "audio mixer, master volume, stream mixing and tone generation",
       "settings serialization, defaults, clamping and window navigation",
       "metadata validation, URL handling and safe text",
@@ -76,6 +77,9 @@
       "spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules",
       "init process spawning and user stack setup",
       "userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation",
+      "userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle",
+      "userspace CPL3 SYS_EXEC image replacement and address space reset",
+      "userspace CPL3 filesystem access on mounted VirtIO disk",
       "Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer"
     ]
   },
@@ -83,7 +87,7 @@
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 69,
+    "tests_passed": 73,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -140,6 +144,7 @@
       "network checksum, loopback, UDP packet dispatch and socket lifecycle",
       "virtio-net PCI driver, ARP resolution and ICMP echo ping",
       "virtio-blk PCI driver, request queue, read-only bounds and sector read",
+      "actual VirtIO device-backed ISO9660 file read",
       "audio mixer, master volume, stream mixing and tone generation",
       "settings serialization, defaults, clamping and window navigation",
       "metadata validation, URL handling and safe text",
@@ -153,6 +158,9 @@
       "spinlocks, ticket locks, semaphores, rwlocks, shm, mmap and kernel modules",
       "init process spawning and user stack setup",
       "userspace CPL3 runtime, init process execution, syscall lifecycle and fault isolation",
+      "userspace CPL3 SYS_SPAWN and SYS_WAIT process lifecycle",
+      "userspace CPL3 SYS_EXEC image replacement and address space reset",
+      "userspace CPL3 filesystem access on mounted VirtIO disk",
       "Limine revision, 4-level paging, memory map, HHDM, allocator, VM manager, IDT, ACPI MADT, xAPIC, IOAPIC, PIT IRQ, LAPIC timer, preemptive scheduler and framebuffer"
     ]
   },
