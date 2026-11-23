@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "os_name": "DAWN-OS",
+  "version": "1.0.0",
+  "channel": "development",
+  "branch": "qemu-bios",
+  "build_type": "bios-validation-evidence",
+  "target_architecture": "x86_64",
+  "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
+  "bootloader": "Limine v12.10.0",
+  "source_commit": "cd95efd2afd3ea0eb4b793814fcf64435ea33f7f",
+  "source_commit_short": "cd95efd",
+  "build_timestamp_utc": "2026-11-23T10:14:26Z",
+  "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45153537649",
+  "validation": {
+    "status": "PASSED",
+    "bios_boot": "PASSED (exit 33, 0 FAIL)",
+    "uefi_boot": "PASSED (exit 33, 0 FAIL)",
+    "production_bios_boot": "PASSED (desktop loop reached)",
+    "production_uefi_boot": "PASSED (desktop loop reached)",
+    "bios_tests_passed_count": 73,
+    "uefi_tests_passed_count": 73
+  },
+  "artifacts": [
+    {
+      "filename": "qemu-bios-serial.log",
+      "size_bytes": 8352,
+      "sha256": "656d33f816297cca20c5178b730d26a88d3586f990565ebde58ddc8cb390771b"
+    },
+    {
+      "filename": "bios-test-summary.txt",
+      "size_bytes": 5024,
+      "sha256": "af607857c1b8e543b76ac01f077d6410ee7da6d6219698470bcfbfd43cb0bf47"
+    },
+    {
+      "filename": "qemu-bios-smoke.log",
+      "size_bytes": 3100,
+      "sha256": "b5e4c54174e9a8d3aa9cac16d8a485bb179d8573bf1e31a5f95e19313f1f0d4f"
+    }
+  ]
+}
