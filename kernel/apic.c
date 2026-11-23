@@ -385,8 +385,6 @@ bool apic_local_timer_calibrate_measure(uint32_t target_hz, uint32_t *out_period
 
 bool apic_local_timer_calibrate(uint32_t target_hz) {
     uint32_t period_count=0U;
-    local_timer_calibrated_hz=0U;
-    local_timer_calibrated_period_count=0U;
     if (!apic_local_timer_calibrate_measure(target_hz,&period_count)) {
         return false;
     }
