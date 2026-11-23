@@ -767,11 +767,25 @@ bool userspace_exec_test(void) {
     return true;
 }
 
-bool userspace_filesystem_test(void) {
-    struct physical_allocator_stats before = {0};
-    struct physical_allocator_stats after = {0};
-    physical_allocator_get_stats(&before);
+static inline uint8_t fs_test_inb(uint16_t port) {
+    uint8_t value = 0;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
 
+static inline void fs_test_outb(uint16_t port, uint8_t value) {
+    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static void fs_test_log(const char *msg) {
+    if (msg == NULL) return;
+    for (size_t i = 0; msg[i] != '\0'; i++) {
+        while ((fs_test_inb(0x3f8 + 5) & 0x20) == 0) {}
+        fs_test_outb(0x3f8, (uint8_t)msg[i]);
+    }
+}
+
+bool userspace_filesystem_test(void) {
     /* Ensure /mnt/testdisk is mounted */
     struct block_device *vda = block_dev_lookup("vda");
     if (vda != NULL) {
@@ -785,6 +799,10 @@ bool userspace_filesystem_test(void) {
             }
         }
     }
+
+    struct physical_allocator_stats before = {0};
+    struct physical_allocator_stats after = {0};
+    physical_allocator_get_stats(&before);
 
     /* 1. Code for filesystem test */
     static const uint8_t fs_code[] = {
@@ -883,29 +901,52 @@ bool userspace_filesystem_test(void) {
     uint64_t fs_pid = 0;
     const char *fs_args[] = {"fs_task", NULL};
     if (!process_spawn(fs_elf, fs_size, 1, fs_args, NULL, &fs_pid) || fs_pid == 0) {
+        fs_test_log("DAWN-TEST: FAIL: userspace_filesystem_test process_spawn failed\n");
         return false;
     }
 
     if (!scheduler_run_until_idle()) {
+        fs_test_log("DAWN-TEST: FAIL: userspace_filesystem_test scheduler_run_until_idle failed\n");
         return false;
     }
 
     struct process_info fsinfo = {0};
     if (!process_get_info(fs_pid, &fsinfo)) {
+        fs_test_log("DAWN-TEST: FAIL: userspace_filesystem_test process_get_info failed\n");
         return false;
     }
 
     if (fsinfo.state != PROCESS_STATE_EXITED || fsinfo.exit_status != 0) {
+        fs_test_log("DAWN-TEST: FAIL: userspace_filesystem_test: state=");
+        fs_test_outb(0x3f8, (uint8_t)('0' + (uint8_t)fsinfo.state));
+        fs_test_log(" exit_status=");
+        int status = (int)fsinfo.exit_status;
+        if (status < 0) {
+            fs_test_outb(0x3f8, (uint8_t)'-');
+            status = -status;
+        }
+        if (status >= 100) {
+            fs_test_outb(0x3f8, (uint8_t)('0' + (status / 100)));
+            status %= 100;
+        }
+        if (status >= 10) {
+            fs_test_outb(0x3f8, (uint8_t)('0' + (status / 10)));
+            status %= 10;
+        }
+        fs_test_outb(0x3f8, (uint8_t)('0' + status));
+        fs_test_log("\n");
         return false;
     }
 
     if (!process_reap(fs_pid)) {
+        fs_test_log("DAWN-TEST: FAIL: userspace_filesystem_test process_reap failed\n");
         return false;
     }
 
     /* Verify no physical frame leaks */
     physical_allocator_get_stats(&after);
     if (before.free_frames != after.free_frames) {
+        fs_test_log("DAWN-TEST: FAIL: userspace_filesystem_test physical frame leak\n");
         return false;
     }
 

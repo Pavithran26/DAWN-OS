@@ -1358,6 +1358,17 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: actual VirtIO device-backed ISO9660 file read\n");
 
+    /* Mount VirtIO test disk to VFS at /mnt/testdisk for subsequent userspace file access */
+    struct block_device *vda_dev = block_dev_lookup("vda");
+    if (vda_dev != NULL) {
+        struct vfs_node *vda_root = iso9660_mount_device(vda_dev);
+        if (vda_root != NULL) {
+            (void)vfs_mkdir("/mnt", 0755U, NULL);
+            (void)vfs_mkdir("/mnt/testdisk", 0755U, NULL);
+            (void)vfs_mount("/mnt/testdisk", vda_root, "iso9660");
+        }
+    }
+
     /* Phase K: Audio */
     if (!audio_self_test()) {
         serial_write("DAWN-TEST: FAIL: audio mixer, volume control and stream mixing\n");

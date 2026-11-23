@@ -91,7 +91,7 @@ static int64_t syscall_write(uint64_t descriptor,uint64_t user_buffer,
     } else {
         if (!process_fd_get(active_pid,(int)descriptor,&fd_entry))
             return -(int64_t)DAWN_ERRNO_EBADF;
-        if ((fd_entry.flags&DAWN_O_WRONLY)==0U && (fd_entry.flags&DAWN_O_RDWR)==0U)
+        if ((fd_entry.flags & DAWN_O_WRONLY) == 0U)
             return -(int64_t)DAWN_ERRNO_EBADF;
     }
 
@@ -114,7 +114,10 @@ static int64_t syscall_write(uint64_t descriptor,uint64_t user_buffer,
             if (!vm_copy_from_user(temporary, user_buffer + written, chunk))
                 return written != 0ULL ? (int64_t)written : -(int64_t)DAWN_ERRNO_EFAULT;
             int64_t res = vfs_write(vnode, fd_entry.offset + written, chunk, temporary);
-            if (res <= 0) break;
+            if (res <= 0) {
+                if (written == 0ULL) return -(int64_t)DAWN_ERRNO_EBADF;
+                break;
+            }
             written += (uint64_t)res;
             if ((size_t)res < chunk) break;
         }
@@ -156,7 +159,7 @@ static int64_t syscall_read(uint64_t descriptor,uint64_t user_buffer,
     } else {
         if (!process_fd_get(active_pid,(int)descriptor,&fd_entry))
             return -(int64_t)DAWN_ERRNO_EBADF;
-        if ((fd_entry.flags&DAWN_O_RDONLY)==0U && (fd_entry.flags&DAWN_O_RDWR)==0U)
+        if ((fd_entry.flags & DAWN_O_RDONLY) == 0U)
             return -(int64_t)DAWN_ERRNO_EBADF;
     }
 
@@ -257,9 +260,13 @@ static int64_t syscall_open(uint64_t user_path, uint64_t flags, uint64_t mode) {
     }
 
     uint32_t fd_flags = 0;
-    if ((flags & 0x03) == 0) fd_flags = DAWN_O_RDONLY;
-    else if ((flags & 0x03) == 1) fd_flags = DAWN_O_WRONLY;
-    else fd_flags = DAWN_O_RDWR;
+    if ((flags & DAWN_O_RDWR) == DAWN_O_RDWR) {
+        fd_flags = DAWN_O_RDWR;
+    } else if ((flags & DAWN_O_WRONLY) != 0U) {
+        fd_flags = DAWN_O_WRONLY;
+    } else {
+        fd_flags = DAWN_O_RDONLY;
+    }
 
     int new_fd = -1;
     if (!process_fd_allocate(active_pid, DAWN_FD_TYPE_VFS, fd_flags, node, &new_fd)) {
