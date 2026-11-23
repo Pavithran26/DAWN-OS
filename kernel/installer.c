@@ -324,9 +324,18 @@ bool installer_self_test(void) {
     struct install_status *st = installer_get_status();
     if (!st->failed || st->current_stage != INSTALL_STAGE_FAILED) return false;
 
-    /* Valid disk test using RAM disk (disk ID 0) */
-    cfg.target_disk_id = 0;
-    cfg.esp_size_bytes = 512 * 1024;    /* 512 KiB within RAM disk */
+    /* Valid disk test: select first disk with sufficient capacity (>= 1.5 MiB) */
+    size_t disk_count = storage_get_disk_count();
+    uint32_t target_disk = 0;
+    for (size_t d = 0; d < disk_count; d++) {
+        const struct storage_disk_desc *dinfo = storage_get_disk_info(d);
+        if (dinfo != NULL && dinfo->capacity_bytes >= 1572864ULL) {
+            target_disk = (uint32_t)d;
+            break;
+        }
+    }
+    cfg.target_disk_id = target_disk;
+    cfg.esp_size_bytes = 512 * 1024;    /* 512 KiB */
     cfg.system_size_bytes = 1024 * 1024; /* 1 MiB */
     cfg.data_size_bytes = 0;
 

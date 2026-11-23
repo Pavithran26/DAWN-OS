@@ -91,9 +91,9 @@ bool storage_manager_initialize(void) {
 
     block_dev_initialize();
     pci_initialize();
-    virtio_blk_initialize();
     ahci_initialize();
     nvme_initialize();
+    virtio_blk_initialize();
     partition_initialize();
 
     for (size_t i = 0; i < STORAGE_MAX_DISKS; i++) {
