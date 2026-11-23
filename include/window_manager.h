@@ -47,6 +47,8 @@ struct window {
     int32_t drag_dx;
     int32_t drag_dy;
     bool resizing;
+    int32_t resize_dx;
+    int32_t resize_dy;
     uint32_t *client_buffer;
     uint32_t client_pitch;
     void (*on_click)(int32_t local_x, int32_t local_y);

@@ -332,9 +332,12 @@ size_t wm_get_window_count(void) {
 }
 
 void wm_handle_mouse(const struct mouse_event *mevt) {
-    if (mevt == NULL || z_count == 0) return;
-
     static bool prev_left_button = false;
+    if (mevt == NULL || z_count == 0) {
+        prev_left_button = false;
+        return;
+    }
+
     bool is_press_edge = mevt->left_button && !prev_left_button;
     prev_left_button = mevt->left_button;
 
@@ -350,8 +353,8 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
         }
         if (top != NULL && top->resizing) {
             wm_mark_window_damaged(top);
-            int32_t new_w = mevt->x - top->x;
-            int32_t new_h = mevt->y - top->y;
+            int32_t new_w = (mevt->x + top->resize_dx) - top->x;
+            int32_t new_h = (mevt->y + top->resize_dy) - top->y;
             top->width = (new_w >= (int32_t)top->min_width) ? (uint32_t)new_w : top->min_width;
             top->height = (new_h >= (int32_t)top->min_height) ? (uint32_t)new_h : top->min_height;
             wm_mark_window_damaged(top);
@@ -381,6 +384,8 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
                     mevt->y >= (int32_t)(win->y + (int32_t)win->height - 16) &&
                     mevt->y <= (int32_t)(win->y + (int32_t)win->height)) {
                     win->resizing = true;
+                    win->resize_dx = (win->x + (int32_t)win->width) - mevt->x;
+                    win->resize_dy = (win->y + (int32_t)win->height) - mevt->y;
                     return;
                 }
 
