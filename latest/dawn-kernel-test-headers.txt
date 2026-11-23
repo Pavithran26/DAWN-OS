@@ -10,7 +10,7 @@ ELF Header:
   Version:                           0x1
   Entry point address:               0xffffffff80001000
   Start of program headers:          64 (bytes into file)
-  Start of section headers:          323680 (bytes into file)
+  Start of section headers:          324280 (bytes into file)
   Flags:                             0x0
   Size of this header:               64 (bytes)
   Size of program headers:           56 (bytes)
@@ -25,9 +25,9 @@ Program Headers:
   LOAD           0x0000000000001000 0xffffffff80000000 0xffffffff80000000
                  0x00000000000001b8 0x00000000000001b8  RW     0x1000
   LOAD           0x0000000000002000 0xffffffff80001000 0xffffffff80001000
-                 0x0000000000036019 0x0000000000036019  R E    0x1000
+                 0x00000000000369f9 0x00000000000369f9  R E    0x1000
   LOAD           0x0000000000039000 0xffffffff80038000 0xffffffff80038000
-                 0x0000000000009386 0x0000000000009386  R      0x1000
+                 0x0000000000009666 0x0000000000009666  R      0x1000
   LOAD           0x0000000000043000 0xffffffff80042000 0xffffffff80042000
                  0x00000000000000b0 0x0000000001521528  RW     0x1000
 
