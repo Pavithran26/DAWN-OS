@@ -8,11 +8,11 @@ The ISO image is dual-bootable under both **legacy BIOS** (SeaBIOS) and **modern
 
 ## Latest Build Information
 
-- **Source Commit:** [`ac3db5c`](https://github.com/Pavithran26/DAWN-OS/commit/ac3db5c6c62c8793c1eac50d2f0aa9bf3e187949)
-- **Full SHA:** `ac3db5c6c62c8793c1eac50d2f0aa9bf3e187949`
-- **Build Timestamp:** `2026-11-23T11:57:31Z`
+- **Source Commit:** [`94d4b3e`](https://github.com/Pavithran26/DAWN-OS/commit/94d4b3e03341203f8da68400017af5e8903baafd)
+- **Full SHA:** `94d4b3e03341203f8da68400017af5e8903baafd`
+- **Build Timestamp:** `2026-11-23T12:43:37Z`
 - **Compiler:** `gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
-- **CI Workflow Run:** [GitHub Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45169544071)
+- **CI Workflow Run:** [GitHub Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45176616827)
 - **Validation Status:** PASSED (BIOS & UEFI: 0 FAIL, QEMU exit code 33)
 
 ---
