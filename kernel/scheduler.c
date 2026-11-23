@@ -1520,12 +1520,14 @@ bool scheduler_guard_and_state_self_test(void) {
     uint64_t thread_id=0ULL;
     struct kernel_thread *target=NULL;
     struct scheduler_stats stats_after={0};
-    uint64_t fill_ids[KERNEL_THREAD_MAX]={0ULL};
-    size_t filled=0U;
     uint64_t reject_id=0ULL;
+    uint64_t success_id=0ULL;
 
     if (!initialized || scheduler_running || current_thread!=&bootstrap_thread)
         return false;
+
+    /* Ensure a clean, deterministic state with slot 0 available */
+    if (!scheduler_cleanup_all_threads()) return false;
 
     guard_state_worker_ran=0ULL;
     guard_state_worker_saw_running=0ULL;
@@ -1572,19 +1574,7 @@ bool scheduler_guard_and_state_self_test(void) {
         return false;
     }
 
-    /* Fill all other slots with noop threads so candidate allocation must choose target */
-    for (size_t i=0U;i<KERNEL_THREAD_MAX;i++) {
-        if (&thread_pool[i]!=target) {
-            if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&fill_ids[filled])) {
-                target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
-                scheduler_cleanup_all_threads();
-                return false;
-            }
-            filled++;
-        }
-    }
-
-    /* With all other slots filled/READY, trying to create one more must evaluate target */
+    /* Since target is the first available DEAD slot, kernel_thread_create will pick target and reject it */
     if (kernel_thread_create(scheduler_test_noop_worker,NULL,&reject_id)) {
         target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
         scheduler_cleanup_all_threads();
@@ -1593,12 +1583,17 @@ bool scheduler_guard_and_state_self_test(void) {
 
     /* 6. Restore guard byte and verify creation now succeeds on target */
     target->stack[0]=(uint8_t)(target->stack[0]^0xffU);
-    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&reject_id)) {
+    if (!thread_guard_valid(target)) {
         scheduler_cleanup_all_threads();
         return false;
     }
 
-    /* Run all filled threads to completion */
+    if (!kernel_thread_create(scheduler_test_noop_worker,NULL,&success_id)) {
+        scheduler_cleanup_all_threads();
+        return false;
+    }
+
+    /* Run to completion */
     if (!scheduler_run_until_idle()) {
         scheduler_cleanup_all_threads();
         return false;
