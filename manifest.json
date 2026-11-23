@@ -8,30 +8,30 @@
   "target_architecture": "x86_64",
   "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
   "bootloader": "Limine v12.10.0",
-  "source_commit": "98c34aee79a9838c727750e759082a7ccd2c9a42",
-  "source_commit_short": "98c34ae",
-  "build_timestamp_utc": "2026-11-23T11:38:12Z",
+  "source_commit": "ac3db5c6c62c8793c1eac50d2f0aa9bf3e187949",
+  "source_commit_short": "ac3db5c",
+  "build_timestamp_utc": "2026-11-23T11:57:31Z",
   "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45166796341",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45169544071",
   "validation": {
     "status": "PASSED",
     "bios_boot": "PASSED (exit 33, 0 FAIL)",
     "uefi_boot": "PASSED (exit 33, 0 FAIL)",
     "production_bios_boot": "PASSED (desktop loop reached)",
     "production_uefi_boot": "PASSED (desktop loop reached)",
-    "bios_tests_passed_count": 74,
-    "uefi_tests_passed_count": 74
+    "bios_tests_passed_count": 77,
+    "uefi_tests_passed_count": 77
   },
   "artifacts": [
     {
       "filename": "test-summary.json",
-      "size_bytes": 10352,
-      "sha256": "5f75c224e45517a9af0f927eb59e77d7c7ff1f82496dface3cdd7f32670a410b"
+      "size_bytes": 10750,
+      "sha256": "b32170c67e2f395819cb471902daabbd4c3dbb240d3aa8d6f19f7132fb2068fb"
     },
     {
       "filename": "test-report.md",
       "size_bytes": 7237,
-      "sha256": "66e2801373d3903f19ef4e58c5c43e3beb2f1bde5d8a68b2628f405e911cc337"
+      "sha256": "6ba268ca2cb26b116016bdef800894c4499fbad94c117a001c146a892f732895"
     },
     {
       "filename": "test-matrix.txt",
@@ -40,23 +40,23 @@
     },
     {
       "filename": "bios-serial.log",
-      "size_bytes": 8441,
-      "sha256": "e27a87540ad43b81eae4e25f2aa3cb9059fd7d87ef02dc6a5b3bb1fa93ab3bc9"
+      "size_bytes": 8667,
+      "sha256": "85c09670b533c01463da826e20570adcca2a92c7065375dcf608037120446431"
     },
     {
       "filename": "uefi-serial.log",
-      "size_bytes": 8762,
-      "sha256": "1254059af283a74dbad69d59bb53e056a102684213903bbc88d5e2a31d266301"
+      "size_bytes": 8988,
+      "sha256": "414a917fc542a7a82dbfad3ce71cb0c55f6ad55fbe5bc77b708535b43c2654ef"
     },
     {
       "filename": "bios-smoke.log",
       "size_bytes": 3100,
-      "sha256": "a96c68a2c7f0468a47e7fe4b5cd5d08d71a2112e22801530ab9266f689daa71f"
+      "sha256": "bf229ab11c472751525bbad82de0f9121761bcab13343676c1a924c8040fd6f1"
     },
     {
       "filename": "uefi-smoke.log",
       "size_bytes": 3423,
-      "sha256": "72deadb24a73fd6ec8e520271dbdc8ae17a1ff19bdfd35d400b05b3fbb8486a1"
+      "sha256": "5656127a7e2fc2781d57ea7b2c92b72a223a1cee0fddef7e214fbee53e1b9741"
     }
   ]
 }

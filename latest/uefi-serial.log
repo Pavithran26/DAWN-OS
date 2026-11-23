@@ -58,7 +58,7 @@ DAWN-OS: ACPI MADT: PIT IRQ0 override GSI 2
 DAWN-OS: xAPIC and IOAPIC initialized; all IOAPIC routes masked
 DAWN-TEST: PASS: real IOAPIC-routed PIT IRQ delivery
 DAWN-TEST: PASS: Local APIC one-shot timer interrupt
-DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624977
+DAWN-OS: Local APIC timer calibrated for 100 Hz; initial count 624725
 DAWN-TEST: PASS: Local APIC timer calibration accuracy and repeatability tolerance
 DAWN-TEST: PASS: Local APIC timer calibration
 DAWN-OS: SMP initialized; detected CPU count: 2, online: 2
@@ -92,11 +92,14 @@ DAWN-TEST: PASS: PS/2 keyboard/mouse scancode decoding
 DAWN-TEST: PASS: USB xHCI controller registers and TRB parsing
 DAWN-TEST: PASS: USB HID keyboard/mouse report parsing
 DAWN-TEST: PASS: unified input event queue and dispatch
+DAWN-TEST: PASS: input event queue overflow bounds and keyboard-first delivery
 DAWN-TEST: PASS: real-time clock BCD decoding and formatting
 DAWN-TEST: PASS: graphics primitives, alpha blending and font rendering
 DAWN-TEST: PASS: safe framebuffer metadata validation, clipped blit and damage tracking
 DAWN-TEST: PASS: window manager lifecycle, Z-order and controls
+DAWN-TEST: PASS: window focus cycling, keyboard shortcuts and focus ring
 DAWN-TEST: PASS: desktop taskbar, launcher and composition
+DAWN-TEST: PASS: keyboard-first launcher navigation and event delivery
 DAWN-TEST: PASS: calculator application operations and button layout
 DAWN-TEST: PASS: calendar date calculations and month navigation
 DAWN-TEST: PASS: shell command parser, built-in commands and history
