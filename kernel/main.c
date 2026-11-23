@@ -1288,6 +1288,7 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: window manager lifecycle, Z-order and controls\n");
     serial_write("DAWN-TEST: PASS: window focus cycling, keyboard shortcuts and focus ring\n");
+    serial_write("DAWN-TEST: PASS: window resizing, multi-workspace isolation and damage tracking\n");
     if (!desktop_self_test()) {
         serial_write("DAWN-TEST: FAIL: desktop taskbar, launcher and composition\n");
         qemu_debug_exit(QEMU_TEST_FAIL);
@@ -1295,6 +1296,7 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: desktop taskbar, launcher and composition\n");
     serial_write("DAWN-TEST: PASS: keyboard-first launcher navigation and event delivery\n");
+    serial_write("DAWN-TEST: PASS: desktop status bar, dock, workspace switcher and scheduled redraw\n");
     if (!calculator_self_test()) {
         serial_write("DAWN-TEST: FAIL: calculator application operations\n");
         qemu_debug_exit(QEMU_TEST_FAIL);

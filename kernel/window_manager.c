@@ -5,6 +5,7 @@ static struct window window_pool[WM_MAX_WINDOWS];
 static struct window *z_order[WM_MAX_WINDOWS];
 static size_t z_count = 0;
 static uint32_t next_win_id = 1;
+static uint32_t current_workspace = 0U;
 static bool wm_initialized = false;
 
 static inline void str_copy(char *dest, const char *src, size_t max_len) {
@@ -25,6 +26,62 @@ static inline bool str_equal(const char *s1, const char *s2) {
     return s1[i] == s2[i];
 }
 
+void wm_mark_window_damaged(const struct window *win) {
+    if (win == NULL) return;
+    int32_t x = win->x;
+    int32_t y = win->y;
+    uint32_t w = win->width + 8U;
+    uint32_t h = win->height + 8U;
+    if (x < 0) {
+        if ((uint32_t)(-x) >= w) return;
+        w -= (uint32_t)(-x);
+        x = 0;
+    }
+    if (y < 0) {
+        if ((uint32_t)(-y) >= h) return;
+        h -= (uint32_t)(-y);
+        y = 0;
+    }
+    gfx_damage_add((uint32_t)x, (uint32_t)y, w, h);
+}
+
+uint32_t wm_get_current_workspace(void) {
+    return current_workspace;
+}
+
+int wm_set_current_workspace(uint32_t ws) {
+    if (ws >= WM_MAX_WORKSPACES) return -1;
+    if (current_workspace != ws) {
+        current_workspace = ws;
+        /* Defocus active window if it does not belong to the new workspace */
+        struct window *top = wm_get_top_window();
+        if (top != NULL && top->workspace != ws && !(top->flags & WM_FLAG_ALL_WORKSPACES)) {
+            top->focused = false;
+            /* Focus top window on the new workspace */
+            for (size_t i = z_count; i > 0; i--) {
+                struct window *candidate = z_order[i - 1];
+                if (candidate->active && candidate->visible && !candidate->minimized &&
+                    (candidate->workspace == ws || (candidate->flags & WM_FLAG_ALL_WORKSPACES))) {
+                    wm_focus_window(candidate->id);
+                    break;
+                }
+            }
+        }
+        gfx_damage_add_fullscreen();
+    }
+    return 0;
+}
+
+int wm_move_window_to_workspace(uint32_t id, uint32_t ws) {
+    if (ws >= WM_MAX_WORKSPACES) return -1;
+    struct window *win = wm_get_window_by_id(id);
+    if (win == NULL) return -1;
+    wm_mark_window_damaged(win);
+    win->workspace = ws;
+    gfx_damage_add_fullscreen();
+    return 0;
+}
+
 bool wm_initialize(void) {
     if (wm_initialized) return true;
     for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
@@ -33,6 +90,7 @@ bool wm_initialize(void) {
     }
     z_count = 0;
     next_win_id = 1;
+    current_workspace = 0U;
     wm_initialized = true;
     return true;
 }
@@ -53,14 +111,18 @@ struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_
             win->height = (h >= 60) ? h : 60;
             win->min_width = 100;
             win->min_height = 60;
-            win->flags = flags | WM_FLAG_TITLEBAR | WM_FLAG_MOVABLE;
+            win->flags = flags | WM_FLAG_TITLEBAR | WM_FLAG_MOVABLE | WM_FLAG_RESIZABLE;
+            win->workspace = current_workspace;
             win->visible = true;
             win->active = true;
+            win->resizing = false;
             win->on_click = NULL;
             win->on_close = NULL;
+            win->on_key = NULL;
 
             z_order[z_count++] = win;
             wm_focus_window(win->id);
+            wm_mark_window_damaged(win);
             return win;
         }
     }
@@ -70,6 +132,7 @@ struct window *wm_create_window(const char *title, int32_t x, int32_t y, uint32_
 int wm_destroy_window(uint32_t id) {
     for (size_t i = 0; i < WM_MAX_WINDOWS; i++) {
         if (window_pool[i].active && window_pool[i].id == id) {
+            wm_mark_window_damaged(&window_pool[i]);
             if (window_pool[i].on_close != NULL) {
                 window_pool[i].on_close(&window_pool[i]);
             }
@@ -92,7 +155,11 @@ int wm_destroy_window(uint32_t id) {
             }
 
             if (z_count > 0) {
-                wm_focus_window(z_order[z_count - 1]->id);
+                /* Find top active window on current workspace to focus */
+                struct window *top = wm_get_top_window();
+                if (top != NULL) {
+                    wm_focus_window(top->id);
+                }
             }
             return 0;
         }
@@ -125,41 +192,57 @@ int wm_focus_window(uint32_t id) {
     if (target->minimized) {
         target->minimized = false;
     }
+    wm_mark_window_damaged(target);
     return 0;
 }
 
 int wm_cycle_focus(bool forward) {
-    if (z_count <= 1U) return 0;
+    struct window *ws_windows[WM_MAX_WINDOWS];
+    size_t count = 0;
+    for (size_t i = 0; i < z_count; i++) {
+        struct window *w = z_order[i];
+        if (w != NULL && w->visible && !w->minimized &&
+            (w->workspace == current_workspace || (w->flags & WM_FLAG_ALL_WORKSPACES))) {
+            ws_windows[count++] = w;
+        }
+    }
+    if (count <= 1U) return 0;
     if (forward) {
-        return wm_focus_window(z_order[z_count - 2U]->id);
+        return wm_focus_window(ws_windows[count - 2U]->id);
     } else {
-        return wm_focus_window(z_order[0]->id);
+        return wm_focus_window(ws_windows[0]->id);
     }
 }
 
 int wm_move_window(uint32_t id, int32_t x, int32_t y) {
     struct window *win = wm_get_window_by_id(id);
     if (win == NULL) return -1;
+    wm_mark_window_damaged(win);
     win->x = x;
     win->y = y;
+    wm_mark_window_damaged(win);
     return 0;
 }
 
 int wm_resize_window(uint32_t id, uint32_t w, uint32_t h) {
     struct window *win = wm_get_window_by_id(id);
     if (win == NULL) return -1;
+    wm_mark_window_damaged(win);
     win->width = (w >= win->min_width) ? w : win->min_width;
     win->height = (h >= win->min_height) ? h : win->min_height;
+    wm_mark_window_damaged(win);
     return 0;
 }
 
 int wm_minimize_window(uint32_t id) {
     struct window *win = wm_get_window_by_id(id);
     if (win == NULL) return -1;
+    wm_mark_window_damaged(win);
     win->minimized = !win->minimized;
     if (!win->minimized) {
         wm_focus_window(id);
     }
+    wm_mark_window_damaged(win);
     return 0;
 }
 
@@ -167,6 +250,7 @@ int wm_maximize_window(uint32_t id) {
     struct window *win = wm_get_window_by_id(id);
     if (win == NULL) return -1;
 
+    wm_mark_window_damaged(win);
     if (!win->maximized) {
         win->saved_x = win->x;
         win->saved_y = win->y;
@@ -178,9 +262,10 @@ int wm_maximize_window(uint32_t id) {
         uint32_t sh = (fb && fb->height > 0) ? fb->height : 768U;
 
         win->x = 0;
-        win->y = 0;
+        win->y = (int32_t)WM_TOP_BAR_HEIGHT;
         win->width = sw;
-        win->height = (sh > 48U) ? (sh - 48U) : sh; /* Save taskbar height */
+        uint32_t chrome_bars = WM_TOP_BAR_HEIGHT + 48U;
+        win->height = (sh > chrome_bars) ? (sh - chrome_bars) : sh;
         win->maximized = true;
     } else {
         win->x = win->saved_x;
@@ -189,6 +274,7 @@ int wm_maximize_window(uint32_t id) {
         win->height = win->saved_height;
         win->maximized = false;
     }
+    wm_mark_window_damaged(win);
     return 0;
 }
 
@@ -212,8 +298,14 @@ struct window *wm_find_window_by_title(const char *title) {
 }
 
 struct window *wm_get_top_window(void) {
-    if (z_count == 0) return NULL;
-    return z_order[z_count - 1];
+    for (size_t i = z_count; i > 0; i--) {
+        struct window *win = z_order[i - 1];
+        if (win != NULL && win->visible && !win->minimized &&
+            (win->workspace == current_workspace || (win->flags & WM_FLAG_ALL_WORKSPACES))) {
+            return win;
+        }
+    }
+    return NULL;
 }
 
 struct window *wm_get_window_at_z(size_t index) {
@@ -224,7 +316,8 @@ struct window *wm_get_window_at_z(size_t index) {
 struct window *wm_find_window_at(int32_t x, int32_t y) {
     for (size_t i = z_count; i > 0; i--) {
         struct window *win = z_order[i - 1];
-        if (win != NULL && win->visible && !win->minimized) {
+        if (win != NULL && win->visible && !win->minimized &&
+            (win->workspace == current_workspace || (win->flags & WM_FLAG_ALL_WORKSPACES))) {
             if (x >= win->x && x < win->x + (int32_t)win->width &&
                 y >= win->y && y < win->y + (int32_t)win->height) {
                 return win;
@@ -246,11 +339,22 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
     prev_left_button = mevt->left_button;
 
     if (mevt->left_button) {
-        /* Check if dragging already */
+        /* Check if dragging or resizing already */
         struct window *top = wm_get_top_window();
         if (top != NULL && top->dragging) {
+            wm_mark_window_damaged(top);
             top->x = mevt->x - top->drag_dx;
             top->y = mevt->y - top->drag_dy;
+            wm_mark_window_damaged(top);
+            return;
+        }
+        if (top != NULL && top->resizing) {
+            wm_mark_window_damaged(top);
+            int32_t new_w = mevt->x - top->x;
+            int32_t new_h = mevt->y - top->y;
+            top->width = (new_w >= (int32_t)top->min_width) ? (uint32_t)new_w : top->min_width;
+            top->height = (new_h >= (int32_t)top->min_height) ? (uint32_t)new_h : top->min_height;
+            wm_mark_window_damaged(top);
             return;
         }
 
@@ -259,15 +363,26 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
             return;
         }
 
-        /* Hit test from top to bottom */
+        /* Hit test from top to bottom on current workspace */
         for (size_t i = z_count; i > 0; i--) {
             struct window *win = z_order[i - 1];
             if (!win->visible || win->minimized) continue;
+            if (win->workspace != current_workspace && !(win->flags & WM_FLAG_ALL_WORKSPACES)) continue;
 
             if (mevt->x >= win->x && (uint32_t)mevt->x < (uint32_t)(win->x + (int32_t)win->width) &&
                 mevt->y >= win->y && (uint32_t)mevt->y < (uint32_t)(win->y + (int32_t)win->height)) {
 
                 wm_focus_window(win->id);
+
+                /* Check bottom-right resize grip */
+                if ((win->flags & WM_FLAG_RESIZABLE) && !win->maximized &&
+                    mevt->x >= (int32_t)(win->x + (int32_t)win->width - 16) &&
+                    mevt->x <= (int32_t)(win->x + (int32_t)win->width) &&
+                    mevt->y >= (int32_t)(win->y + (int32_t)win->height - 16) &&
+                    mevt->y <= (int32_t)(win->y + (int32_t)win->height)) {
+                    win->resizing = true;
+                    return;
+                }
 
                 /* Titlebar check */
                 if (mevt->y < win->y + (int32_t)WM_TITLEBAR_HEIGHT) {
@@ -287,10 +402,12 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
                         wm_minimize_window(win->id);
                         return;
                     }
-                    /* Start dragging */
-                    win->dragging = true;
-                    win->drag_dx = mevt->x - win->x;
-                    win->drag_dy = mevt->y - win->y;
+                    /* Start dragging if movable */
+                    if (win->flags & WM_FLAG_MOVABLE) {
+                        win->dragging = true;
+                        win->drag_dx = mevt->x - win->x;
+                        win->drag_dy = mevt->y - win->y;
+                    }
                 } else {
                     /* Client area click dispatch */
                     int32_t cx = mevt->x - (win->x + (int32_t)WM_BORDER_WIDTH);
@@ -306,6 +423,7 @@ void wm_handle_mouse(const struct mouse_event *mevt) {
         /* Button released */
         for (size_t i = 0; i < z_count; i++) {
             z_order[i]->dragging = false;
+            z_order[i]->resizing = false;
         }
     }
 }
@@ -343,10 +461,11 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
     /* Render desktop background gradient (Emerald Forest to Deep Night) */
     gfx_draw_gradient_v(surf, 0, 0, surf->width, surf->height, GFX_COLOR_EMERALD_BASE, GFX_COLOR_EMERALD_DEEP);
 
-    /* Render windows from back to front */
+    /* Render windows from back to front on current workspace */
     for (size_t z = 0; z < z_count; z++) {
         struct window *win = z_order[z];
         if (!win->visible || win->minimized) continue;
+        if (win->workspace != current_workspace && !(win->flags & WM_FLAG_ALL_WORKSPACES)) continue;
 
         /* Ambient drop shadow */
         gfx_draw_rect_filled(surf, (uint32_t)(win->x + 4), (uint32_t)(win->y + 4), win->width, win->height, 0x50000000U);
@@ -370,13 +489,15 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
                         win->focused ? GFX_COLOR_TEXT_PRIMARY : GFX_COLOR_TEXT_SECONDARY);
 
         /* Window Controls (Ruby, Amber, Emerald pills) */
-        uint32_t btn_y = (uint32_t)(win->y + 8);
-        /* Close Button */
-        gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 22), btn_y, 12, 12, GFX_COLOR_BTN_CLOSE);
-        /* Maximize Button */
-        gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 42), btn_y, 12, 12, GFX_COLOR_BTN_MAXIMIZE);
-        /* Minimize Button */
-        gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 62), btn_y, 12, 12, GFX_COLOR_BTN_MINIMIZE);
+        if (!(win->flags & WM_FLAG_NO_CONTROLS)) {
+            uint32_t btn_y = (uint32_t)(win->y + 8);
+            /* Close Button */
+            gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 22), btn_y, 12, 12, GFX_COLOR_BTN_CLOSE);
+            /* Maximize Button */
+            gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 42), btn_y, 12, 12, GFX_COLOR_BTN_MAXIMIZE);
+            /* Minimize Button */
+            gfx_draw_rect_filled(surf, (uint32_t)(win->x + (int32_t)win->width - 62), btn_y, 12, 12, GFX_COLOR_BTN_MINIMIZE);
+        }
 
         /* Client Area */
         uint32_t cx = (uint32_t)(win->x + (int32_t)WM_BORDER_WIDTH);
@@ -399,6 +520,16 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
             }
         } else {
             gfx_draw_rect_filled(surf, cx, cy, cw, ch, GFX_COLOR_EMERALD_SURFACE);
+        }
+
+        /* Draw Resize Grip on bottom-right corner if resizable and not maximized */
+        if ((win->flags & WM_FLAG_RESIZABLE) && !win->maximized) {
+            uint32_t rx = (uint32_t)(win->x + (int32_t)win->width - 12);
+            uint32_t ry = (uint32_t)(win->y + (int32_t)win->height - 12);
+            uint32_t grip_col = win->focused ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_TEXT_MUTED;
+            gfx_draw_line(surf, (int32_t)rx + 8, (int32_t)ry + 10, (int32_t)rx + 10, (int32_t)ry + 8, grip_col);
+            gfx_draw_line(surf, (int32_t)rx + 4, (int32_t)ry + 10, (int32_t)rx + 10, (int32_t)ry + 4, grip_col);
+            gfx_draw_line(surf, (int32_t)rx,     (int32_t)ry + 10, (int32_t)rx + 10, (int32_t)ry,     grip_col);
         }
     }
 
@@ -443,9 +574,17 @@ bool wm_self_test(void) {
     if (wm_move_window(w1->id, 75, 80) != 0) return false;
     if (w1->x != 75 || w1->y != 80) return false;
 
-    /* Maximize window */
+    /* Resize window */
+    if (wm_resize_window(w1->id, 450, 320) != 0) return false;
+    if (w1->width != 450 || w1->height != 320) return false;
+    /* Clamp resize to minimum */
+    if (wm_resize_window(w1->id, 50, 40) != 0) return false;
+    if (w1->width != w1->min_width || w1->height != w1->min_height) return false;
+    if (wm_resize_window(w1->id, 400, 300) != 0) return false;
+
+    /* Maximize window (bounded by top status bar and bottom taskbar) */
     if (wm_maximize_window(w1->id) != 0) return false;
-    if (!w1->maximized || w1->x != 0 || w1->y != 0) return false;
+    if (!w1->maximized || w1->x != 0 || w1->y != (int32_t)WM_TOP_BAR_HEIGHT) return false;
     /* Unmaximize */
     if (wm_maximize_window(w1->id) != 0) return false;
     if (w1->maximized || w1->x != 75 || w1->y != 80) return false;
@@ -457,6 +596,54 @@ bool wm_self_test(void) {
     /* Un-minimize w1 by focusing it */
     if (wm_focus_window(w1->id) != 0) return false;
     if (w1->minimized) return false;
+
+    /* Workspace isolation and switching test */
+    if (wm_get_current_workspace() != 0U) return false;
+    if (wm_set_current_workspace(1U) != 0) return false;
+    if (wm_get_current_workspace() != 1U) return false;
+
+    /* Windows w1 and w2 are on workspace 0; on workspace 1 they must not be top or found */
+    if (wm_get_top_window() != NULL) return false;
+    if (wm_find_window_at(w1->x, w1->y) != NULL) return false;
+
+    /* Create window on workspace 1 */
+    struct window *w3 = wm_create_window("WS1-App", 120, 120, 300, 200, WM_FLAG_NONE);
+    if (w3 == NULL) return false;
+    if (w3->workspace != 1U) return false;
+    if (wm_get_top_window() != w3) return false;
+    if (wm_find_window_at(125, 125) != w3) return false;
+
+    /* Move w1 to workspace 1 */
+    if (wm_move_window_to_workspace(w1->id, 1U) != 0) return false;
+    if (w1->workspace != 1U) return false;
+    if (wm_find_window_at(w1->x, w1->y) != w1) return false;
+
+    /* Move w1 back to workspace 0 */
+    if (wm_move_window_to_workspace(w1->id, 0U) != 0) return false;
+    /* Destroy w3 */
+    if (wm_destroy_window(w3->id) != 0) return false;
+
+    /* Switch back to workspace 0 */
+    if (wm_set_current_workspace(0U) != 0) return false;
+    if (wm_get_top_window() != w1) return false;
+
+    /* Mouse bottom-right resize grip interaction test */
+    {
+        int32_t grip_x = w1->x + (int32_t)w1->width - 4;
+        int32_t grip_y = w1->y + (int32_t)w1->height - 4;
+        struct mouse_event me_press = { .x = grip_x, .y = grip_y, .left_button = true, .right_button = false, .middle_button = false, .dx = 0, .dy = 0 };
+        wm_handle_mouse(&me_press);
+        if (!w1->resizing) return false;
+
+        struct mouse_event me_drag = { .x = grip_x + 30, .y = grip_y + 20, .left_button = true, .right_button = false, .middle_button = false, .dx = 30, .dy = 20 };
+        wm_handle_mouse(&me_drag);
+        if (w1->width != 400U + 30U || w1->height != 300U + 20U) return false;
+
+        struct mouse_event me_release = { .x = grip_x + 30, .y = grip_y + 20, .left_button = false, .right_button = false, .middle_button = false, .dx = 0, .dy = 0 };
+        wm_handle_mouse(&me_release);
+        if (w1->resizing) return false;
+        (void)wm_resize_window(w1->id, 400U, 300U);
+    }
 
     /* Focus cycling (Alt+Tab equivalent) */
     /* w1 is top, w2 is background */

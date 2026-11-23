@@ -9,16 +9,20 @@
 #include "input.h"
 
 #define WM_MAX_WINDOWS      16U
+#define WM_MAX_WORKSPACES    4U
+#define WM_TOP_BAR_HEIGHT   28U
 #define WM_TITLEBAR_HEIGHT  28U
-#define WM_BORDER_WIDTH     2U
+#define WM_BORDER_WIDTH      2U
 #define WM_TITLE_MAX_LEN    32U
+#define WM_RESIZE_GRIP_SIZE 12U
 
 /* Window Flags */
-#define WM_FLAG_NONE       0x00U
-#define WM_FLAG_RESIZABLE  0x01U
-#define WM_FLAG_MOVABLE    0x02U
-#define WM_FLAG_TITLEBAR   0x04U
-#define WM_FLAG_NO_CONTROLS 0x08U
+#define WM_FLAG_NONE           0x00U
+#define WM_FLAG_RESIZABLE      0x01U
+#define WM_FLAG_MOVABLE        0x02U
+#define WM_FLAG_TITLEBAR       0x04U
+#define WM_FLAG_NO_CONTROLS    0x08U
+#define WM_FLAG_ALL_WORKSPACES 0x10U
 
 struct window {
     uint32_t id;
@@ -30,6 +34,7 @@ struct window {
     uint32_t min_width;
     uint32_t min_height;
     uint32_t flags;
+    uint32_t workspace;
     bool visible;
     bool focused;
     bool minimized;
@@ -41,6 +46,7 @@ struct window {
     bool dragging;
     int32_t drag_dx;
     int32_t drag_dy;
+    bool resizing;
     uint32_t *client_buffer;
     uint32_t client_pitch;
     void (*on_click)(int32_t local_x, int32_t local_y);
@@ -58,6 +64,12 @@ int wm_move_window(uint32_t id, int32_t x, int32_t y);
 int wm_resize_window(uint32_t id, uint32_t w, uint32_t h);
 int wm_minimize_window(uint32_t id);
 int wm_maximize_window(uint32_t id);
+
+/* Workspace Management */
+uint32_t wm_get_current_workspace(void);
+int wm_set_current_workspace(uint32_t ws);
+int wm_move_window_to_workspace(uint32_t id, uint32_t ws);
+void wm_mark_window_damaged(const struct window *win);
 
 struct window *wm_get_window_by_id(uint32_t id);
 struct window *wm_find_window_by_title(const char *title);

@@ -115,4 +115,4 @@ A successful build or a framebuffer pointer alone is not a graphical-shell pass.
 
 ## Current next step
 
-Phase B, Phase C, and Phase D milestones D0, D1, and D2 are complete and verified across QEMU BIOS and UEFI. Proceed to Milestone D3 (Compositor and window manager: single-process bounded compositor, status bar, dock, damage tracking, and multi-window state management).
+Phase B, Phase C, and Phase D milestones D0, D1, D2, and D3 are complete and verified across QEMU BIOS and UEFI. Proceed to Milestone D4 (Terminal application: userspace application with documented console/input interfaces, built-in commands, and bounded scrollback buffers).

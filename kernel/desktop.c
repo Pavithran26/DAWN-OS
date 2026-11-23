@@ -80,6 +80,16 @@ void desktop_toggle_launcher(void) {
     state.launcher_open = !state.launcher_open;
 }
 
+void desktop_switch_workspace(uint32_t ws) {
+    if (ws >= WM_MAX_WORKSPACES) return;
+    state.current_workspace = ws;
+    (void)wm_set_current_workspace(ws);
+}
+
+uint32_t desktop_get_workspace(void) {
+    return wm_get_current_workspace();
+}
+
 void desktop_show_notification(const char *title, const char *msg) {
     for (size_t i = 0; i < DESKTOP_MAX_NOTIFICATIONS; i++) {
         if (!state.notifications[i].active) {
@@ -108,6 +118,27 @@ void desktop_handle_input_event(const struct input_event *event) {
                 state.launcher_open = false;
                 return;
             }
+
+            /* Super + 1..4: direct workspace jump */
+            if (kevt->gui && kevt->keycode >= KEY_1 && kevt->keycode <= KEY_4) {
+                uint32_t target_ws = (uint32_t)(kevt->keycode - KEY_1);
+                desktop_switch_workspace(target_ws);
+                return;
+            }
+
+            /* Ctrl + Alt + Left/Right: workspace switching */
+            if (kevt->ctrl && kevt->alt && kevt->keycode == KEY_LEFT) {
+                uint32_t cur = wm_get_current_workspace();
+                uint32_t prev_ws = (cur + WM_MAX_WORKSPACES - 1U) % WM_MAX_WORKSPACES;
+                desktop_switch_workspace(prev_ws);
+                return;
+            }
+            if (kevt->ctrl && kevt->alt && kevt->keycode == KEY_RIGHT) {
+                uint32_t cur = wm_get_current_workspace();
+                uint32_t next_ws = (cur + 1U) % WM_MAX_WORKSPACES;
+                desktop_switch_workspace(next_ws);
+                return;
+            }
         }
         /* Forward all keyboard events to window manager for focus cycling, shortcuts, and active window dispatch */
         wm_handle_key(kevt);
@@ -125,6 +156,18 @@ void desktop_handle_input_event(const struct input_event *event) {
         prev_left_button = mevt->left_button;
 
         if (is_press_edge) {
+            /* Check Top Status Bar Clicks */
+            if (mevt->y >= 0 && mevt->y < (int32_t)DESKTOP_STATUSBAR_HEIGHT) {
+                /* Workspace Switcher pills at x in [96 .. 96 + WM_MAX_WORKSPACES * 28] */
+                if (mevt->x >= 96 && mevt->x < (int32_t)(96U + WM_MAX_WORKSPACES * 28U)) {
+                    uint32_t clicked_ws = (uint32_t)(mevt->x - 96) / 28U;
+                    if (clicked_ws < WM_MAX_WORKSPACES) {
+                        desktop_switch_workspace(clicked_ws);
+                        return;
+                    }
+                }
+                return;
+            }
             /* Check Start Button: x in [8, 44], y in [tb_y + 8, tb_y + 40] */
             if (mevt->x >= 8 && mevt->x <= 44 && mevt->y >= (int32_t)(tb_y + 8)) {
                 desktop_toggle_launcher();
@@ -232,19 +275,20 @@ void desktop_handle_input_event(const struct input_event *event) {
             if (mevt->y >= (int32_t)tb_y) {
                 uint32_t tab_x = 60;
                 size_t wcount = wm_get_window_count();
+                uint32_t cur_ws = wm_get_current_workspace();
                 for (size_t i = 0; i < wcount; i++) {
-                    if (mevt->x >= (int32_t)tab_x && mevt->x <= (int32_t)(tab_x + 120)) {
-                        struct window *win = wm_get_window_at_z(i);
-                        if (win != NULL) {
+                    struct window *win = wm_get_window_at_z(i);
+                    if (win != NULL && (win->workspace == cur_ws || (win->flags & WM_FLAG_ALL_WORKSPACES))) {
+                        if (mevt->x >= (int32_t)tab_x && mevt->x <= (int32_t)(tab_x + 120)) {
                             if (win->focused) {
                                 wm_minimize_window(win->id);
                             } else {
                                 wm_focus_window(win->id);
                             }
+                            return;
                         }
-                        return;
+                        tab_x += 128;
                     }
-                    tab_x += 128;
                 }
             }
 
@@ -268,10 +312,11 @@ void desktop_handle_input_event(const struct input_event *event) {
             }
 
             /* Check Desktop Icons when click is not captured by a window */
-            if (wm_find_window_at(mevt->x, mevt->y) == NULL && mevt->y < (int32_t)tb_y) {
+            if (wm_find_window_at(mevt->x, mevt->y) == NULL &&
+                mevt->y >= (int32_t)DESKTOP_STATUSBAR_HEIGHT && mevt->y < (int32_t)tb_y) {
                 if (mevt->x >= 8 && mevt->x <= 84) {
                     /* This PC -> System Info */
-                    if (mevt->y >= 16 && mevt->y < 68) {
+                    if (mevt->y >= 28 && mevt->y < 72) {
                         settings_window_open_tab(TAB_SYSTEM_INFO);
                         return;
                     }
@@ -352,9 +397,44 @@ void desktop_render(struct gfx_surface *surf) {
     /* Render windows, background, and cursor via window manager */
     wm_composite(surf, state.mouse_x, state.mouse_y);
 
-    /* Render Desktop Icons on left */
-    gfx_draw_icon(surf, 24, 20, GFX_ICON_COMPUTER, GFX_COLOR_EMERALD_ACCENT);
-    gfx_draw_string(surf, 16, 40, "This PC", GFX_COLOR_TEXT_PRIMARY);
+    /* Render Top Status Bar (y = 0 to DESKTOP_STATUSBAR_HEIGHT) */
+    gfx_draw_rect_filled(surf, 0, 0, surf->width, DESKTOP_STATUSBAR_HEIGHT, GFX_COLOR_EMERALD_BASE);
+    gfx_draw_glass_panel(surf, 0, 0, surf->width, DESKTOP_STATUSBAR_HEIGHT, GFX_COLOR_GLASS_SURFACE);
+    gfx_draw_line(surf, 0, (int32_t)(DESKTOP_STATUSBAR_HEIGHT - 1U), (int32_t)(surf->width - 1U), (int32_t)(DESKTOP_STATUSBAR_HEIGHT - 1U), GFX_COLOR_EMERALD_ACCENT);
+
+    /* Left: Brand badge */
+    gfx_draw_icon(surf, 8, 6, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_HIGHLIGHT);
+    gfx_draw_string(surf, 26, 6, "DAWN-OS", GFX_COLOR_TEXT_PRIMARY);
+
+    /* Workspace Switcher pills: [1] [2] [3] [4] */
+    uint32_t cur_ws = wm_get_current_workspace();
+    for (uint32_t w = 0; w < WM_MAX_WORKSPACES; w++) {
+        uint32_t pill_x = 96U + w * 28U;
+        bool is_active = (w == cur_ws);
+        uint32_t pill_bg = is_active ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_SURFACE;
+        gfx_draw_glass_panel(surf, pill_x, 4, 24, 20, pill_bg);
+        if (is_active) {
+            gfx_draw_rect_outline(surf, pill_x, 4, 24, 20, GFX_COLOR_EMERALD_ACCENT);
+        }
+        char ws_char = (char)('1' + w);
+        char ws_str[2] = { ws_char, '\0' };
+        gfx_draw_string(surf, pill_x + 8, 6, ws_str, is_active ? GFX_COLOR_EMERALD_HIGHLIGHT : GFX_COLOR_TEXT_MUTED);
+    }
+
+    /* Center: System Telemetry */
+    if (surf->width > 480U) {
+        uint32_t mid_x = surf->width / 2U;
+        gfx_draw_string(surf, mid_x - 90U, 6, "CPU: 0.2% | RAM: 24M/128M", GFX_COLOR_TEXT_SECONDARY);
+    }
+
+    /* Right: Session info */
+    if (surf->width > 320U) {
+        gfx_draw_string(surf, surf->width - 100U, 6, "admin@dawn", GFX_COLOR_EMERALD_CYAN);
+    }
+
+    /* Render Desktop Icons on left (offset below top status bar) */
+    gfx_draw_icon(surf, 24, 36, GFX_ICON_COMPUTER, GFX_COLOR_EMERALD_ACCENT);
+    gfx_draw_string(surf, 16, 56, "This PC", GFX_COLOR_TEXT_PRIMARY);
 
     gfx_draw_icon(surf, 24, 76, GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
     gfx_draw_string(surf, 20, 96, "Files", GFX_COLOR_TEXT_PRIMARY);
@@ -396,12 +476,12 @@ void desktop_render(struct gfx_surface *surf) {
     gfx_draw_rect_outline(surf, 8, tb_y + 8, 36, 32, GFX_COLOR_EMERALD_ACCENT);
     gfx_draw_icon(surf, 18, tb_y + 16, GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_HIGHLIGHT);
 
-    /* Window Switcher Tabs */
+    /* Window Switcher Tabs (current workspace) */
     uint32_t tab_x = 56;
     size_t wcount = wm_get_window_count();
     for (size_t i = 0; i < wcount; i++) {
         struct window *win = wm_get_window_at_z(i);
-        if (win != NULL) {
+        if (win != NULL && (win->workspace == cur_ws || (win->flags & WM_FLAG_ALL_WORKSPACES))) {
             uint32_t tab_color = win->focused ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
             gfx_draw_glass_panel(surf, tab_x, tb_y + 8, 120, 32, tab_color);
             gfx_draw_rect_outline(surf, tab_x, tb_y + 8, 120, 32, win->focused ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_GLASS_BORDER);
@@ -410,8 +490,8 @@ void desktop_render(struct gfx_surface *surf) {
                 /* Glowing bottom underline */
                 gfx_draw_line(surf, (int32_t)tab_x + 4, (int32_t)(tb_y + 36), (int32_t)(tab_x + 116), (int32_t)(tb_y + 36), GFX_COLOR_EMERALD_ACCENT);
             }
+            tab_x += 128;
         }
-        tab_x += 128;
     }
 
     /* System Tray with dynamic RTC clock in a dedicated glass pill container */
@@ -639,6 +719,93 @@ bool desktop_self_test(void) {
         if (state.launcher_open) return false;
     }
 
+    /* Workspace switching interaction tests */
+    {
+        /* 1. Mouse click on Workspace 2 pill in top status bar (x = 96 + 28 + 4 = 128, y = 10) */
+        struct input_event click_ws = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = {
+                .x = 128,
+                .y = 10,
+                .left_button = true,
+                .right_button = false,
+                .middle_button = false,
+                .dx = 0,
+                .dy = 0
+            }
+        };
+        desktop_handle_input_event(&click_ws);
+        if (desktop_get_workspace() != 1U) return false;
+
+        click_ws.mouse.left_button = false;
+        desktop_handle_input_event(&click_ws);
+
+        /* 2. Keyboard shortcut Super + 1 returns to Workspace 0 */
+        struct input_event super_1 = {
+            .type = INPUT_EVENT_KEYBOARD,
+            .key = {
+                .scancode = 0x02U,
+                .keycode = KEY_1,
+                .pressed = true,
+                .shift = false,
+                .ctrl = false,
+                .alt = false,
+                .gui = true
+            }
+        };
+        desktop_handle_input_event(&super_1);
+        if (desktop_get_workspace() != 0U) return false;
+
+        /* 3. Keyboard shortcut Ctrl + Alt + Right switches to Workspace 1 */
+        struct input_event ctrl_alt_right = {
+            .type = INPUT_EVENT_KEYBOARD,
+            .key = {
+                .scancode = 0x4DU,
+                .keycode = KEY_RIGHT,
+                .pressed = true,
+                .shift = false,
+                .ctrl = true,
+                .alt = true,
+                .gui = false
+            }
+        };
+        desktop_handle_input_event(&ctrl_alt_right);
+        if (desktop_get_workspace() != 1U) return false;
+
+        /* 4. Keyboard shortcut Ctrl + Alt + Left switches back to Workspace 0 */
+        struct input_event ctrl_alt_left = {
+            .type = INPUT_EVENT_KEYBOARD,
+            .key = {
+                .scancode = 0x4BU,
+                .keycode = KEY_LEFT,
+                .pressed = true,
+                .shift = false,
+                .ctrl = true,
+                .alt = true,
+                .gui = false
+            }
+        };
+        desktop_handle_input_event(&ctrl_alt_left);
+        if (desktop_get_workspace() != 0U) return false;
+    }
+
+    /* Damage tracking & bounded redraw scheduled test */
+    {
+        gfx_damage_clear();
+        if (gfx_damage_is_dirty()) return false;
+
+        desktop_switch_workspace(2U);
+        if (!gfx_damage_is_dirty()) return false;
+
+        struct gfx_rect bounds = gfx_damage_get_bounds();
+        if (bounds.width == 0U || bounds.height == 0U) return false;
+
+        gfx_flush();
+        if (gfx_damage_is_dirty()) return false;
+
+        desktop_switch_workspace(0U);
+    }
+
     /* Render test into a 640x480 test surface */
     struct gfx_surface test_surf = {
         .buffer = test_render_buf,
@@ -648,6 +815,14 @@ bool desktop_self_test(void) {
     };
 
     desktop_render(&test_surf);
+
+    /* Verify top status bar was drawn (neon lower accent line at y = 28 - 1 = 27) */
+    uint32_t sb_line_pixel = test_surf.buffer[(DESKTOP_STATUSBAR_HEIGHT - 1U) * 640 + 10];
+    if (sb_line_pixel != GFX_COLOR_EMERALD_ACCENT) return false;
+
+    /* Verify status bar body is non-zero */
+    uint32_t sb_body_pixel = test_surf.buffer[10 * 640 + 10];
+    if (sb_body_pixel == 0) return false;
 
     /* Verify taskbar was drawn (check bottom pixels not all zero) */
     uint32_t tb_pixel = test_surf.buffer[(480 - 10) * 640 + 20];

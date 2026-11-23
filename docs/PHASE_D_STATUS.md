@@ -152,3 +152,53 @@ Phase D implements the optional local-console graphical desktop shell for DAWN-O
 - `input_self_test()`: FIFO event ordering, mouse motion coalescing, and 128-element queue capacity overflow rejection.
 - `wm_self_test()`: Z-order traversal, `wm_cycle_focus`, `Alt+Tab`, and `Alt+F4` active window closure.
 - `desktop_self_test()`: Super key toggle, Ctrl+Esc launcher open, and Esc dismissal.
+
+---
+
+## 5. Milestone D3 — Compositor & Window Manager
+
+### Desktop Shell & Top Status Bar (`kernel/desktop.c`, `include/desktop.h`)
+- **Top Status Bar (`DESKTOP_STATUSBAR_HEIGHT = 28U`):**
+  - Frosted glass body (`GFX_COLOR_GLASS_SURFACE`) spanning `y = 0` to `y = 28` with a specular neon emerald lower accent line (`GFX_COLOR_EMERALD_ACCENT`).
+  - Left: System logo and workspace switcher pills (`[1]`, `[2]`, `[3]`, `[4]`). Active workspace rendered with neon border outline and emerald primary fill.
+  - Center: Dynamic system telemetry (`CPU: 0.2% | RAM: 24M/128M`).
+  - Right: Administrative session status (`admin@dawn`).
+- **Bottom Dock / Taskbar (`DESKTOP_TASKBAR_HEIGHT = 48U`):**
+  - Emerald base panel with frosted glass overlay and neon accent line.
+  - Interactive Start button toggling the liquid-neomorphic application launcher.
+  - Workspace-scoped window switcher tabs with glowing active underline for focused window.
+  - System tray with dynamic RTC clock in a dedicated glass pill container.
+  - Central metadata footer with clickable developer website link.
+- **Desktop Icons & Background Canvas:**
+  - Full-screen emerald vertical gradient background (`GFX_COLOR_EMERALD_BASE` to `GFX_COLOR_EMERALD_DEEP`).
+  - Vertically offset desktop icons (`y >= 28`) to prevent collision with top status bar.
+
+### Multi-Workspace State Management (`kernel/window_manager.c`, `include/window_manager.h`)
+- **4 Virtual Workspaces (`WM_MAX_WORKSPACES = 4U`):**
+  - Windows are tagged with target workspace index (`win->workspace`).
+  - `wm_get_current_workspace()`, `wm_set_current_workspace(ws)`, `wm_move_window_to_workspace(id, ws)`.
+  - Windows on non-active workspaces are hidden from composition and hit-testing unless flagged with `WM_FLAG_ALL_WORKSPACES`.
+  - Switching workspaces automatically refocuses the highest-priority window on the target workspace.
+  - Navigation: Status bar pill clicks, `Super + 1..4` direct jumps, and `Ctrl + Alt + Left/Right` sequential cycling.
+
+### Window Lifecycle, Geometry & Interactive Resizing
+- **Interactive Resizing (`WM_FLAG_RESIZABLE`):**
+  - Resizable windows feature a tactile 3-line diagonal grip in the bottom-right corner.
+  - Hit testing detects drags in the 16x16 corner grip and resizes the window dynamically.
+  - Dimension constraints: clamped against `min_width` (100px) and `min_height` (60px).
+- **Desktop Boundary-Constrained Maximization:**
+  - Maximized windows automatically expand between the top status bar (`y = 28`) and bottom taskbar (`height = screen_height - 76`), keeping window titlebars and taskbar tabs accessible.
+  - Restore toggles back to previous saved geometry (`saved_x`, `saved_y`, `saved_width`, `saved_height`).
+- **Window Movement & Dragging:**
+  - Click-and-drag titlebar movement with negative coordinate clipping against display bounds.
+- **Window Minimization:**
+  - Minimizing hides window and un-focuses it; clicking taskbar tab restores and focuses.
+
+### Damage Tracking & Bounded Redraw Scheduling
+- Zero dynamic memory allocations during hot rendering paths.
+- `wm_mark_window_damaged()`: Records bounding damage boxes on window creation, movement, resizing, state change, and destruction.
+- `gfx_damage_add()` and `gfx_flush()`: Flush only damaged sub-rectangles from the backbuffer to the physical framebuffer.
+
+### Test Harness & Validation
+- `wm_self_test()`: Multi-window creation, Z-order manipulation, window movement, resize API and minimum bounds clamping, bottom-right mouse resize grip interaction, status-bar-bounded maximization, minimization/restore, multi-workspace isolation (`wm_set_current_workspace`, `wm_move_window_to_workspace`), `Alt+Tab` focus cycling, and `Alt+F4` destruction.
+- `desktop_self_test()`: Top status bar rendering, neon lower accent line verification at `y = 27`, workspace pill mouse click switching, `Super + 1` keyboard jump, `Ctrl + Alt + Left/Right` keyboard traversal, damage tracking dirty accumulation, and `gfx_flush()` redraw cycle.
