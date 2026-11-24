@@ -1,9 +1,12 @@
 /* SPDX-License-Identifier: Unlicense */
 #include "security.h"
+#include "process.h"
+#include "advanced.h"
 
 static struct user_account user_table[SECURITY_MAX_USERS];
 static struct audit_record audit_log_table[SECURITY_MAX_AUDIT_LOGS];
 static size_t audit_log_count = 0;
+static spinlock_t audit_log_lock;
 static uint32_t active_user_uid = SECURITY_UID_ROOT;
 static bool security_initialized = false;
 static uint64_t entropy_state = 0x853C49E6748FEA9BULL;
@@ -278,65 +281,71 @@ static inline uint8_t cmos_read_byte(uint8_t reg) {
 }
 
 /*
- * Generates a per-user cryptographic salt.
+ * Generates a per-user 128-bit (16-byte) cryptographic salt.
  * Uses CPU hardware RDRAND when present (CPUID.01H:ECX.RDRAND[bit 30]).
  * When RDRAND is not supported, mixes cycle-accurate RDTSC jitter, CMOS RTC
- * registers, and a splitmix64-style PRNG.
- * Limitation note: Fallback entropy quality depends on CPU cycle timing jitter
- * and RTC real-time state; production virtualization hosts should provide RDRAND.
+ * registers, and a splitmix64-style PRNG across each 32-bit chunk.
  */
-uint32_t security_generate_salt(void) {
-    uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
-    cpuid_query(1U, &eax, &ebx, &ecx, &edx);
-    if ((ecx & (1U << 30)) != 0U) {
-        uint32_t rnd = 0;
-        for (int retry = 0; retry < 10; retry++) {
-            if (rdrand_u32(&rnd) && rnd != 0U && rnd != 0xFFFFFFFFU) {
-                return rnd;
+void security_generate_salt(uint8_t salt[SECURITY_SALT_SIZE]) {
+    if (salt == NULL) return;
+
+    for (size_t chunk = 0; chunk < 4U; chunk++) {
+        uint32_t val = 0;
+        uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
+        cpuid_query(1U, &eax, &ebx, &ecx, &edx);
+        bool has_rdrand = (ecx & (1U << 30)) != 0U;
+        bool got_rdrand = false;
+        if (has_rdrand) {
+            for (int retry = 0; retry < 10; retry++) {
+                if (rdrand_u32(&val) && val != 0U && val != 0xFFFFFFFFU) {
+                    got_rdrand = true;
+                    break;
+                }
             }
         }
+
+        uint64_t tsc = read_tsc();
+        uint8_t rtc_sec = cmos_read_byte(0x00U);
+        uint8_t rtc_min = cmos_read_byte(0x02U);
+        uint8_t rtc_hr  = cmos_read_byte(0x04U);
+        uint8_t rtc_day = cmos_read_byte(0x07U);
+
+        uint64_t rtc_val = ((uint64_t)rtc_day << 24) | ((uint64_t)rtc_hr << 16) |
+                           ((uint64_t)rtc_min << 8)  | (uint64_t)rtc_sec;
+
+        entropy_state ^= (tsc + rtc_val + (uint64_t)val + 0x9E3779B97F4A7C15ULL + (uint64_t)chunk);
+        entropy_state = (entropy_state ^ (entropy_state >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        entropy_state = (entropy_state ^ (entropy_state >> 27)) * 0x94D049BB133111EBULL;
+        entropy_state ^= (entropy_state >> 31);
+
+        uint32_t mixed = (uint32_t)(entropy_state ^ (entropy_state >> 32));
+        if (got_rdrand) {
+            mixed ^= val;
+        }
+        if (mixed == 0U) mixed = 0xA5A5A5A5U ^ (uint32_t)(chunk * 0x11111111U);
+
+        salt[chunk * 4U + 0U] = (uint8_t)(mixed >> 24);
+        salt[chunk * 4U + 1U] = (uint8_t)(mixed >> 16);
+        salt[chunk * 4U + 2U] = (uint8_t)(mixed >> 8);
+        salt[chunk * 4U + 3U] = (uint8_t)(mixed);
     }
-
-    uint64_t tsc = read_tsc();
-    uint8_t rtc_sec = cmos_read_byte(0x00U);
-    uint8_t rtc_min = cmos_read_byte(0x02U);
-    uint8_t rtc_hr  = cmos_read_byte(0x04U);
-    uint8_t rtc_day = cmos_read_byte(0x07U);
-
-    uint64_t rtc_val = ((uint64_t)rtc_day << 24) | ((uint64_t)rtc_hr << 16) |
-                       ((uint64_t)rtc_min << 8)  | (uint64_t)rtc_sec;
-
-    entropy_state ^= (tsc + rtc_val + 0x9E3779B97F4A7C15ULL);
-    entropy_state = (entropy_state ^ (entropy_state >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    entropy_state = (entropy_state ^ (entropy_state >> 27)) * 0x94D049BB133111EBULL;
-    entropy_state ^= (entropy_state >> 31);
-
-    uint32_t salt = (uint32_t)(entropy_state ^ (entropy_state >> 32));
-    if (salt == 0U) salt = 0xA5A5A5A5U;
-    return salt;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Password Hashing & Verification (PBKDF2-HMAC-SHA256, 10,000 Iterations)   */
+/* Password Hashing & Verification (PBKDF2-HMAC-SHA256, 128-bit Salt)        */
 /* -------------------------------------------------------------------------- */
 
-void security_hash_password(const char *password, uint32_t salt, uint8_t digest[SECURITY_HASH_SIZE]) {
-    if (password == NULL || digest == NULL) return;
+void security_hash_password(const char *password, const uint8_t salt[SECURITY_SALT_SIZE], uint8_t digest[SECURITY_HASH_SIZE]) {
+    if (password == NULL || salt == NULL || digest == NULL) return;
     size_t pass_len = 0;
     while (password[pass_len] != '\0') pass_len++;
 
-    uint8_t salt_bytes[4];
-    salt_bytes[0] = (uint8_t)(salt >> 24);
-    salt_bytes[1] = (uint8_t)(salt >> 16);
-    salt_bytes[2] = (uint8_t)(salt >> 8);
-    salt_bytes[3] = (uint8_t)(salt);
-
-    pbkdf2_hmac_sha256(password, pass_len, salt_bytes, sizeof(salt_bytes),
+    pbkdf2_hmac_sha256(password, pass_len, salt, SECURITY_SALT_SIZE,
                        SECURITY_PBKDF2_ITERATIONS, digest);
 }
 
-bool security_verify_password(const char *password, uint32_t salt, const uint8_t digest[SECURITY_HASH_SIZE]) {
-    if (password == NULL || digest == NULL) return false;
+bool security_verify_password(const char *password, const uint8_t salt[SECURITY_SALT_SIZE], const uint8_t digest[SECURITY_HASH_SIZE]) {
+    if (password == NULL || salt == NULL || digest == NULL) return false;
 
     uint8_t computed[SECURITY_HASH_SIZE] = {0};
     security_hash_password(password, salt, computed);
@@ -355,16 +364,21 @@ bool security_verify_password(const char *password, uint32_t salt, const uint8_t
 /* -------------------------------------------------------------------------- */
 
 void security_audit_log(enum audit_event_type type, uint32_t uid, uint32_t pid, const char *details) {
+    spinlock_acquire(&audit_log_lock);
     size_t slot = audit_log_count % SECURITY_MAX_AUDIT_LOGS;
     audit_log_table[slot].type = type;
     audit_log_table[slot].uid = uid;
     audit_log_table[slot].pid = pid;
     str_copy(audit_log_table[slot].details, (details != NULL) ? details : "", sizeof(audit_log_table[slot].details));
     audit_log_count++;
+    spinlock_release(&audit_log_lock);
 }
 
 size_t security_get_audit_count(void) {
-    return audit_log_count;
+    spinlock_acquire(&audit_log_lock);
+    size_t count = audit_log_count;
+    spinlock_release(&audit_log_lock);
+    return count;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -378,7 +392,8 @@ bool security_add_user(const char *username, const char *password, uint32_t uid,
         if (!user_table[i].active || user_table[i].uid == uid) {
             user_table[i].uid = uid;
             user_table[i].gid = gid;
-            user_table[i].salt = security_generate_salt();
+            user_table[i].failed_login_attempts = 0U;
+            security_generate_salt(user_table[i].salt);
             str_copy(user_table[i].username, username, sizeof(user_table[i].username));
             security_hash_password(password, user_table[i].salt, user_table[i].password_hash);
             str_copy(user_table[i].home_dir, (home != NULL) ? home : "/home", sizeof(user_table[i].home_dir));
@@ -399,11 +414,19 @@ bool security_authenticate_user(const char *username, const char *password, uint
 
     for (size_t i = 0; i < SECURITY_MAX_USERS; i++) {
         if (user_table[i].active && str_equal(user_table[i].username, username)) {
+            /* Account lockout after excessive failures */
+            if (user_table[i].failed_login_attempts >= SECURITY_MAX_FAILED_ATTEMPTS) {
+                security_audit_log(AUDIT_AUTH_FAILURE, user_table[i].uid, 0, "Account locked: rate limit exceeded");
+                return false;
+            }
+
             if (security_verify_password(password, user_table[i].salt, user_table[i].password_hash)) {
+                user_table[i].failed_login_attempts = 0U;
                 if (out_uid != NULL) *out_uid = user_table[i].uid;
                 security_audit_log(AUDIT_AUTH_SUCCESS, user_table[i].uid, 0, "User logged in");
                 return true;
             } else {
+                user_table[i].failed_login_attempts++;
                 security_audit_log(AUDIT_AUTH_FAILURE, user_table[i].uid, 0, "Invalid credentials");
                 return false;
             }
@@ -415,17 +438,29 @@ bool security_authenticate_user(const char *username, const char *password, uint
 }
 
 bool security_set_current_uid(uint32_t uid) {
-    if (active_user_uid != SECURITY_UID_ROOT && uid != active_user_uid) {
-        security_audit_log(AUDIT_PRIVILEGE_CHANGE, active_user_uid, 0, "Privilege escalation denied");
+    uint32_t current = security_get_current_uid();
+    if (current != SECURITY_UID_ROOT && uid != current) {
+        security_audit_log(AUDIT_PRIVILEGE_CHANGE, current, 0, "Privilege escalation denied");
         return false;
     }
 
     active_user_uid = uid;
-    security_audit_log(AUDIT_PRIVILEGE_CHANGE, uid, 0, "Current UID updated");
+    uint64_t pid = process_active_id();
+    if (pid != 0ULL) {
+        (void)process_set_credentials(pid, uid, uid);
+    }
+    security_audit_log(AUDIT_PRIVILEGE_CHANGE, uid, (uint32_t)pid, "Current UID updated");
     return true;
 }
 
 uint32_t security_get_current_uid(void) {
+    uint64_t pid = process_active_id();
+    if (pid != 0ULL) {
+        uint32_t uid = 0, gid = 0;
+        if (process_get_credentials(pid, &uid, &gid)) {
+            return uid;
+        }
+    }
     return active_user_uid;
 }
 
@@ -455,14 +490,15 @@ bool security_check_file_permission(uint32_t uid, uint32_t gid, uint32_t file_ui
 }
 
 bool security_validate_user_pointer(const void *ptr, size_t len) {
-    if (ptr == NULL) {
-        security_audit_log(AUDIT_SYSCALL_VIOLATION, active_user_uid, 0, "NULL pointer violation");
+    if (ptr == NULL || len == 0) {
+        security_audit_log(AUDIT_SYSCALL_VIOLATION, security_get_current_uid(), 0, "NULL or zero pointer violation");
         return false;
     }
 
-    uint64_t addr = (uint64_t)ptr;
-    if (addr >= 0xFFFF800000000000ULL || (addr + len) < addr || (addr + len) >= 0xFFFF800000000000ULL) {
-        security_audit_log(AUDIT_SYSCALL_VIOLATION, active_user_uid, 0, "Kernel space address intrusion");
+    uint64_t addr = (uint64_t)(uintptr_t)ptr;
+    /* Bounds check: canonical lower-half user address space and integer wrap-around */
+    if (addr >= 0xFFFF800000000000ULL || (addr + len) < addr || (addr + len) > 0x00007FFFFFFFFFFFULL) {
+        security_audit_log(AUDIT_SYSCALL_VIOLATION, security_get_current_uid(), 0, "Kernel space address intrusion");
         return false;
     }
 
@@ -476,6 +512,7 @@ bool security_is_first_boot(void) {
 bool security_initialize(void) {
     if (security_initialized) return true;
 
+    spinlock_init(&audit_log_lock);
     for (size_t i = 0; i < SECURITY_MAX_USERS; i++) user_table[i] = (struct user_account){0};
     for (size_t i = 0; i < SECURITY_MAX_AUDIT_LOGS; i++) audit_log_table[i] = (struct audit_record){0};
     audit_log_count = 0;
@@ -490,7 +527,8 @@ bool security_initialize(void) {
      * Mark root account reserved and inactive, forcing first-boot password setup. */
     user_table[0].uid = SECURITY_UID_ROOT;
     user_table[0].gid = SECURITY_GID_ROOT;
-    user_table[0].salt = security_generate_salt();
+    user_table[0].failed_login_attempts = 0U;
+    security_generate_salt(user_table[0].salt);
     str_copy(user_table[0].username, "root", sizeof(user_table[0].username));
     str_copy(user_table[0].home_dir, "/root", sizeof(user_table[0].home_dir));
     str_copy(user_table[0].shell, "/bin/dsh", sizeof(user_table[0].shell));
@@ -500,10 +538,6 @@ bool security_initialize(void) {
     security_initialized = true;
     return true;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Cryptographic Hardening Self-Tests                                         */
-/* -------------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------- */
 /* Cryptographic Hardening Self-Tests                                         */
@@ -564,12 +598,22 @@ bool security_self_test(void) {
         if (pbkdf2_c2_out[i] != rfc6070_c2_expected[i]) return false;
     }
 
-    /* 5. Per-user dynamic salt generation test: distinct salts */
-    uint32_t salt_a = security_generate_salt();
-    uint32_t salt_b = security_generate_salt();
-    if (salt_a == salt_b) return false;
+    /* 5. Per-user dynamic 128-bit (16-byte) salt generation test: distinct salts */
+    uint8_t salt_a[SECURITY_SALT_SIZE] = {0};
+    uint8_t salt_b[SECURITY_SALT_SIZE] = {0};
+    security_generate_salt(salt_a);
+    security_generate_salt(salt_b);
 
-    /* 6. Password hashing and verification test */
+    bool salts_differ = false;
+    for (size_t i = 0; i < SECURITY_SALT_SIZE; i++) {
+        if (salt_a[i] != salt_b[i]) {
+            salts_differ = true;
+            break;
+        }
+    }
+    if (!salts_differ) return false;
+
+    /* 6. Password hashing and verification test with 128-bit salt */
     uint8_t hash1[SECURITY_HASH_SIZE];
     uint8_t hash2[SECURITY_HASH_SIZE];
     security_hash_password("admin_pass_2026", salt_a, hash1);
@@ -590,17 +634,30 @@ bool security_self_test(void) {
     if (!security_authenticate_user("dawn", "dawn", &auth_uid) || auth_uid != SECURITY_UID_DEFAULT) return false;
     if (security_authenticate_user("dawn", "wrongpass", &auth_uid)) return false;
 
-    /* 9. File permission tests */
+    /* 9. Brute-force rate limiting: 5 failed attempts lock out account */
+    (void)security_add_user("locktest", "pass123", 2000U, 2000U, "/home/locktest", "/bin/dsh");
+    for (uint32_t attempt = 0; attempt < SECURITY_MAX_FAILED_ATTEMPTS; attempt++) {
+        uint32_t dummy_uid = 0;
+        (void)security_authenticate_user("locktest", "bad_pass", &dummy_uid);
+    }
+    /* Even correct password must now be rejected due to account lockout */
+    uint32_t locked_uid = 0;
+    if (security_authenticate_user("locktest", "pass123", &locked_uid)) return false;
+
+    /* 10. File permission tests */
     if (!security_check_file_permission(1000, 1000, 1000, 1000, 0700, SECURITY_ACCESS_READ)) return false;
     if (security_check_file_permission(1001, 1001, 1000, 1000, 0700, SECURITY_ACCESS_READ)) return false;
     if (!security_check_file_permission(SECURITY_UID_ROOT, SECURITY_GID_ROOT, 1000, 1000, 0700, SECURITY_ACCESS_READ)) return false;
 
-    /* 10. Memory boundary validation */
-    const void *valid_user_ptr = (const void *)0x0000000040000000ULL;
+    /* 11. Memory boundary validation */
+    const void *valid_user_ptr = (const void *)(uintptr_t)0x0000000040000000ULL;
     if (!security_validate_user_pointer(valid_user_ptr, 64)) return false;
 
-    const void *invalid_kernel_ptr = (const void *)0xFFFF800000001000ULL;
+    const void *invalid_kernel_ptr = (const void *)(uintptr_t)0xFFFF800000001000ULL;
     if (security_validate_user_pointer(invalid_kernel_ptr, 64)) return false;
+
+    const void *non_canonical_ptr = (const void *)(uintptr_t)0x0000800000000000ULL;
+    if (security_validate_user_pointer(non_canonical_ptr, 64)) return false;
 
     return true;
 }

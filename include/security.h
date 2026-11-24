@@ -14,7 +14,9 @@
 #define SECURITY_MAX_USERS 16U
 #define SECURITY_MAX_AUDIT_LOGS 32U
 #define SECURITY_HASH_SIZE 32U
+#define SECURITY_SALT_SIZE 16U /* 128-bit cryptographic salt */
 #define SECURITY_PBKDF2_ITERATIONS 10000U
+#define SECURITY_MAX_FAILED_ATTEMPTS 5U
 
 /* Access modes (POSIX compatible) */
 #define SECURITY_ACCESS_READ    0x04U
@@ -25,22 +27,23 @@
 void sha256(const void *data, size_t len, uint8_t digest[SECURITY_HASH_SIZE]);
 void hmac_sha256(const void *key, size_t key_len, const void *data, size_t data_len, uint8_t out[SECURITY_HASH_SIZE]);
 void pbkdf2_hmac_sha256(const char *password, size_t pass_len, const uint8_t *salt, size_t salt_len, uint32_t iterations, uint8_t out[SECURITY_HASH_SIZE]);
-uint32_t security_generate_salt(void);
+void security_generate_salt(uint8_t salt[SECURITY_SALT_SIZE]);
 bool security_is_first_boot(void);
 
 /* PBKDF2-HMAC-SHA256 password hashing and authentication */
-void security_hash_password(const char *password, uint32_t salt, uint8_t digest[SECURITY_HASH_SIZE]);
-bool security_verify_password(const char *password, uint32_t salt, const uint8_t digest[SECURITY_HASH_SIZE]);
+void security_hash_password(const char *password, const uint8_t salt[SECURITY_SALT_SIZE], uint8_t digest[SECURITY_HASH_SIZE]);
+bool security_verify_password(const char *password, const uint8_t salt[SECURITY_SALT_SIZE], const uint8_t digest[SECURITY_HASH_SIZE]);
 
 /* User Account Structure */
 struct user_account {
     uint32_t uid;
     uint32_t gid;
-    uint32_t salt;
+    uint8_t  salt[SECURITY_SALT_SIZE];
     char     username[32];
     uint8_t  password_hash[SECURITY_HASH_SIZE];
     char     home_dir[64];
     char     shell[32];
+    uint32_t failed_login_attempts;
     bool     active;
 };
 

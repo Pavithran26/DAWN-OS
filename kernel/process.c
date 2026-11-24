@@ -31,6 +31,8 @@ struct process_record {
     uint64_t parent_id;
     uint64_t kernel_stack_top;
     int64_t exit_status;
+    uint32_t uid;
+    uint32_t gid;
     enum process_state state;
 };
 
@@ -129,10 +131,14 @@ bool process_create(uint64_t *process_id) {
     for (size_t f=0U;f<DAWN_PROCESS_MAX_FDS;f++) slot->fds[f]=(struct dawn_fd_entry){0};
     if (parent!=NULL) {
         for (size_t f=0U;f<DAWN_PROCESS_MAX_FDS;f++) slot->fds[f]=parent->fds[f];
+        slot->uid = parent->uid;
+        slot->gid = parent->gid;
     } else {
         slot->fds[0]=(struct dawn_fd_entry){ .type=DAWN_FD_TYPE_SERIAL, .flags=DAWN_O_RDONLY };
         slot->fds[1]=(struct dawn_fd_entry){ .type=DAWN_FD_TYPE_SERIAL, .flags=DAWN_O_WRONLY };
         slot->fds[2]=(struct dawn_fd_entry){ .type=DAWN_FD_TYPE_SERIAL, .flags=DAWN_O_WRONLY };
+        slot->uid = 0U;
+        slot->gid = 0U;
     }
     *process_id=slot->id;
     restore_interrupt_flag(flags);
@@ -305,6 +311,8 @@ bool process_get_info(uint64_t process_id,struct process_info *info) {
     info->address_space_root=record->address_space.root_physical;
     info->kernel_stack_top=record->kernel_stack_top;
     info->exit_status=record->exit_status;
+    info->uid=record->uid;
+    info->gid=record->gid;
     restore_interrupt_flag(flags);
     return true;
 }
@@ -325,6 +333,38 @@ bool process_get_info_by_index(size_t slot_index, struct process_info *info) {
     info->address_space_root = processes[slot_index].address_space.root_physical;
     info->kernel_stack_top = processes[slot_index].kernel_stack_top;
     info->exit_status = processes[slot_index].exit_status;
+    info->uid = processes[slot_index].uid;
+    info->gid = processes[slot_index].gid;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_get_credentials(uint64_t process_id, uint32_t *out_uid, uint32_t *out_gid) {
+    const uint64_t flags = read_rflags();
+    if (!initialized || (read_cs() & 3U) != 0U) return false;
+    disable_interrupts();
+    struct process_record *record = find_process(process_id);
+    if (record == NULL) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    if (out_uid != NULL) *out_uid = record->uid;
+    if (out_gid != NULL) *out_gid = record->gid;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
+bool process_set_credentials(uint64_t process_id, uint32_t uid, uint32_t gid) {
+    const uint64_t flags = read_rflags();
+    if (!initialized || (read_cs() & 3U) != 0U) return false;
+    disable_interrupts();
+    struct process_record *record = find_process(process_id);
+    if (record == NULL) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    record->uid = uid;
+    record->gid = gid;
     restore_interrupt_flag(flags);
     return true;
 }
@@ -363,6 +403,8 @@ bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
     info->address_space_root=child->address_space.root_physical;
     info->kernel_stack_top=child->kernel_stack_top;
     info->exit_status=child->exit_status;
+    info->uid=child->uid;
+    info->gid=child->gid;
     restore_interrupt_flag(flags);
     return true;
 }
@@ -967,6 +1009,16 @@ static bool process_manager_self_test_locked(void) {
     }
     if (process_get_info_by_index(DAWN_PROCESS_MAX, &slot_info)) {
         process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_get_info_by_index out of bounds allowed\n");
+        return false;
+    }
+    uint32_t cred_uid = 0U, cred_gid = 0U;
+    if (!process_get_credentials(ids[0], &cred_uid, &cred_gid) || cred_uid != 0U || cred_gid != 0U) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: default process credentials invalid\n");
+        return false;
+    }
+    if (!process_set_credentials(ids[0], 1000U, 1000U) ||
+        !process_get_credentials(ids[0], &cred_uid, &cred_gid) || cred_uid != 1000U || cred_gid != 1000U) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process credential update failed\n");
         return false;
     }
     if (!process_mark_ready(ids[0]) || process_mark_ready(ids[0]) || process_reap(ids[0])) {

@@ -41,7 +41,13 @@ struct process_info {
     uint64_t address_space_root;
     uint64_t kernel_stack_top;
     int64_t exit_status;
+    uint32_t uid;
+    uint32_t gid;
 };
+
+/* Process credentials */
+bool process_get_credentials(uint64_t process_id, uint32_t *out_uid, uint32_t *out_gid);
+bool process_set_credentials(uint64_t process_id, uint32_t uid, uint32_t gid);
 
 /* Process metadata, isolated mappings, user-frame ownership, and lifecycle. */
 bool process_manager_initialize(void);

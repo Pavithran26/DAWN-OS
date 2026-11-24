@@ -28,6 +28,7 @@ typedef struct {
 
 typedef struct {
     volatile int32_t reader_count;
+    volatile int32_t writers_waiting;
     volatile bool    write_locked;
     spinlock_t       lock;
 } rwlock_t;
@@ -36,6 +37,8 @@ void spinlock_init(spinlock_t *sl);
 void spinlock_acquire(spinlock_t *sl);
 bool spinlock_try_acquire(spinlock_t *sl);
 void spinlock_release(spinlock_t *sl);
+uint64_t spinlock_irqsave(spinlock_t *sl);
+void spinlock_irqrestore(spinlock_t *sl, uint64_t flags);
 
 void ticketlock_init(ticketlock_t *tl);
 void ticketlock_acquire(ticketlock_t *tl);
@@ -66,6 +69,7 @@ void *shm_map(int shm_id);
 bool shm_close(int shm_id);
 
 /* Memory Mapped Files (mmap) */
+#define MMAP_MAX_BYTES (64U * 1024U) /* 64 KB per mapping */
 #define PROT_READ  0x1
 #define PROT_WRITE 0x2
 #define MAP_SHARED 0x1
