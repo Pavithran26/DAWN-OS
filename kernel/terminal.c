@@ -482,6 +482,7 @@ struct window *terminal_window_open(void) {
 
 bool terminal_initialize(void) {
     if (term_initialized) return true;
+    term_initialized = true;
 
     struct terminal *term = &main_terminal;
     *term = (struct terminal){0};
@@ -503,7 +504,6 @@ bool terminal_initialize(void) {
     (void)terminal_window_open();
 
     term->active = true;
-    term_initialized = true;
     return true;
 }
 
