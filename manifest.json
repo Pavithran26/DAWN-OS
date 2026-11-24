@@ -8,30 +8,30 @@
   "target_architecture": "x86_64",
   "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
   "bootloader": "Limine v12.10.0",
-  "source_commit": "94d4b3e03341203f8da68400017af5e8903baafd",
-  "source_commit_short": "94d4b3e",
-  "build_timestamp_utc": "2026-11-23T12:43:37Z",
+  "source_commit": "1bff56c61f214cc6304fa3619df9a91dc4927f38",
+  "source_commit_short": "1bff56c",
+  "build_timestamp_utc": "2026-11-24T05:39:52Z",
   "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45176616827",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45334064499",
   "validation": {
     "status": "PASSED",
     "bios_boot": "PASSED (exit 33, 0 FAIL)",
     "uefi_boot": "PASSED (exit 33, 0 FAIL)",
     "production_bios_boot": "PASSED (desktop loop reached)",
     "production_uefi_boot": "PASSED (desktop loop reached)",
-    "bios_tests_passed_count": 79,
-    "uefi_tests_passed_count": 79
+    "bios_tests_passed_count": 80,
+    "uefi_tests_passed_count": 80
   },
   "artifacts": [
     {
       "filename": "dawn-os.iso",
-      "size_bytes": 5111808,
-      "sha256": "9fe2679d155451bb25d41aeef15e9549c677d7e23fbe08aea10ca8e833a5dc42"
+      "size_bytes": 5120000,
+      "sha256": "259b2dde4c94780383ee45ab6526008a0609c5c210a27b0c742e74dca520b1c5"
     },
     {
       "filename": "dawn-os-test.iso",
-      "size_bytes": 5173248,
-      "sha256": "06bb30131d78ad3a4d5e6206178935fa09bdc0c841e5ea4a7126d53fcf7f2657"
+      "size_bytes": 5177344,
+      "sha256": "e5abf9e6abc8e9a89fb5ef6e9a8f12eda201e0511299dbb18da920b5394c55a0"
     }
   ]
 }
