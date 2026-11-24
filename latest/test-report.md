@@ -1,8 +1,8 @@
 # DAWN-OS Automated Test Suite Report
 
-- **Source Commit:** `94d4b3e03341203f8da68400017af5e8903baafd`
-- **Timestamp (UTC):** `2026-11-23T12:43:37Z`
-- **CI Run:** [GitHub Actions Run #45176616827](https://github.com/Pavithran26/DAWN-OS/actions/runs/45176616827)
+- **Source Commit:** `1bff56c61f214cc6304fa3619df9a91dc4927f38`
+- **Timestamp (UTC):** `2026-11-24T05:39:52Z`
+- **CI Run:** [GitHub Actions Run #45334064499](https://github.com/Pavithran26/DAWN-OS/actions/runs/45334064499)
 - **Status:** **ALL PASSED**
 
 ---
@@ -25,7 +25,7 @@
 
 ---
 
-## Verified Kernel Subsystems & Tests (79 Total)
+## Verified Kernel Subsystems & Tests (80 Total)
 
 | Subsystem | Verified Test Name | Status |
 |---|---|---|
@@ -88,6 +88,7 @@
 | GUI & Applications | calendar date calculations and month navigation | PASS |
 | GUI & Applications | shell command parser, built-in commands and history | PASS |
 | GUI & Applications | terminal emulator text grid, scrolling and render buffer | PASS |
+| GUI & Applications | terminal scrollback buffer, boundary clipping and window input | PASS |
 | GUI & Applications | task manager process list, performance graphs and controls | PASS |
 | GUI & Applications | settings serialization, defaults, clamping and window navigation | PASS |
 | GUI & Applications | installer disk verification, partition formatting, file copy and rescue shell | PASS |

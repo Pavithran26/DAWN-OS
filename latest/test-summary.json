@@ -1,12 +1,12 @@
 {
-  "source_commit": "94d4b3e03341203f8da68400017af5e8903baafd",
-  "timestamp_utc": "2026-11-23T12:43:37Z",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45176616827",
+  "source_commit": "1bff56c61f214cc6304fa3619df9a91dc4927f38",
+  "timestamp_utc": "2026-11-24T05:39:52Z",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45334064499",
   "bios_self_test": {
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 79,
+    "tests_passed": 80,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -65,6 +65,7 @@
       "calendar date calculations and month navigation",
       "shell command parser, built-in commands and history",
       "terminal emulator text grid, scrolling and render buffer",
+      "terminal scrollback buffer, boundary clipping and window input",
       "task manager process list, performance graphs and controls",
       "network checksum, loopback, UDP packet dispatch and socket lifecycle",
       "virtio-net PCI driver, ARP resolution and ICMP echo ping",
@@ -93,7 +94,7 @@
     "status": "PASS",
     "exit_code": 33,
     "failures": 0,
-    "tests_passed": 79,
+    "tests_passed": 80,
     "test_names": [
       "memory-map validator edge cases",
       "physical page allocator edge cases",
@@ -152,6 +153,7 @@
       "calendar date calculations and month navigation",
       "shell command parser, built-in commands and history",
       "terminal emulator text grid, scrolling and render buffer",
+      "terminal scrollback buffer, boundary clipping and window input",
       "task manager process list, performance graphs and controls",
       "network checksum, loopback, UDP packet dispatch and socket lifecycle",
       "virtio-net PCI driver, ARP resolution and ICMP echo ping",
