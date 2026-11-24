@@ -1,9 +1,9 @@
 DAWN-OS SeaBIOS Boot Execution Summary
-Source Commit: 1bff56c61f214cc6304fa3619df9a91dc4927f38
-Timestamp: 2026-11-24T05:39:52Z
+Source Commit: 0f9a99dce332da547e2cf7926cb29bebdb8b13c2
+Timestamp: 2026-11-24T06:54:12Z
 Status: PASS (QEMU exit code 33)
 
-Executed Tests (80):
+Executed Tests (83):
   - PASS: memory-map validator edge cases
   - PASS: physical page allocator edge cases
   - PASS: virtual-memory map/translate/unmap tests
@@ -42,6 +42,7 @@ Executed Tests (80):
   - PASS: NVMe controller and namespace queues
   - PASS: MBR/GPT partition management and slice translation
   - PASS: storage manager disk inventory and operations
+  - PASS: storage manager read-only inspection, partition tables and safety gates
   - PASS: device manager registry and driver binding
   - PASS: PS/2 keyboard/mouse scancode decoding
   - PASS: USB xHCI controller registers and TRB parsing
@@ -62,6 +63,8 @@ Executed Tests (80):
   - PASS: shell command parser, built-in commands and history
   - PASS: terminal emulator text grid, scrolling and render buffer
   - PASS: terminal scrollback buffer, boundary clipping and window input
+  - PASS: file explorer directory enumeration, navigation and window integration
+  - PASS: disks application window inspection and device selection
   - PASS: task manager process list, performance graphs and controls
   - PASS: network checksum, loopback, UDP packet dispatch and socket lifecycle
   - PASS: virtio-net PCI driver, ARP resolution and ICMP echo ping
