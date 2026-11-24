@@ -1,0 +1,39 @@
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Version:                           0x1
+  Entry point address:               0xffffffff80001000
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          347160 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         4
+  Size of section headers:           64 (bytes)
+  Number of section headers:         9
+  Section header string table index: 8
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  LOAD           0x0000000000001000 0xffffffff80000000 0xffffffff80000000
+                 0x00000000000001b8 0x00000000000001b8  RW     0x1000
+  LOAD           0x0000000000002000 0xffffffff80001000 0xffffffff80001000
+                 0x000000000003b349 0x000000000003b349  R E    0x1000
+  LOAD           0x000000000003e000 0xffffffff8003d000 0xffffffff8003d000
+                 0x0000000000009d86 0x0000000000009d86  R      0x1000
+  LOAD           0x0000000000048000 0xffffffff80047000 0xffffffff80047000
+                 0x00000000000001f0 0x00000000016e9528  RW     0x1000
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     .limine_requests 
+   01     .text 
+   02     .rodata 
+   03     .data .bss 
