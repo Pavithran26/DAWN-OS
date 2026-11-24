@@ -280,7 +280,7 @@ void *mmap_file(struct vfs_node *node, uint64_t offset, size_t length, int prot,
     if (node->size > 0 && offset >= (uint64_t)node->size) return NULL;
     /* Check read-only permission for shared write mappings */
     if ((flags & MAP_SHARED) && (prot & PROT_WRITE)) {
-        if ((node->flags & VFS_FLAG_READONLY) != 0U) return NULL;
+        if (node->ops.write == NULL || (node->permissions & 0222U) == 0U) return NULL;
     }
 
     spinlock_acquire(&mmap_lock);
