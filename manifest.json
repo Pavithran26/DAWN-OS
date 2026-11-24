@@ -8,11 +8,11 @@
   "target_architecture": "x86_64",
   "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
   "bootloader": "Limine v12.10.0",
-  "source_commit": "9d0a4532f258a9e2ee907e54931464f0ca4e991c",
-  "source_commit_short": "9d0a453",
-  "build_timestamp_utc": "2026-11-24T08:52:19Z",
+  "source_commit": "7f2559a67ada2dc7af34c0b4e6c4e2de8568d009",
+  "source_commit_short": "7f2559a",
+  "build_timestamp_utc": "2026-11-24T11:53:40Z",
   "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45359490196",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45388159803",
   "validation": {
     "status": "PASSED",
     "bios_boot": "PASSED (exit 33, 0 FAIL)",
@@ -25,13 +25,13 @@
   "artifacts": [
     {
       "filename": "dawn-os.iso",
-      "size_bytes": 5142528,
-      "sha256": "76a4d2bd14c274f0af792368f11f353b1c9674a4f9c05e190c73692aebf94f3c"
+      "size_bytes": 5146624,
+      "sha256": "530d2eb2d657a66cfb94a377fe9e594238f45bfec1a2c259ac8d0925367c04a1"
     },
     {
       "filename": "dawn-os-test.iso",
       "size_bytes": 5206016,
-      "sha256": "78b71c6d499ddbe796260e41a651220c7d78c9d74d26fb98ed63982737d36b70"
+      "sha256": "893fe06f8a46f442f7437307aad2a4bb311eb8bddfb789af458f46383e1000d6"
     }
   ]
 }
