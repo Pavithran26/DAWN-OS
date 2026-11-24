@@ -10,7 +10,6 @@
 static struct task_manager main_taskmgr = {0};
 static bool taskmgr_initialized = false;
 static int taskmgr_window_id = -1;
-static uint32_t taskmgr_render_buf[TASKMGR_WIDTH * TASKMGR_HEIGHT];
 
 static inline uint64_t read_tsc(void) {
     uint32_t lo = 0U, hi = 0U;
@@ -200,7 +199,7 @@ void task_manager_render(struct task_manager *tm) {
     uint64_t r0 = read_tsc();
 
     struct gfx_surface surf = {
-        .buffer = (tm->render_buffer != NULL) ? tm->render_buffer : taskmgr_render_buf,
+        .buffer = tm->render_buffer,
         .width = TASKMGR_WIDTH,
         .height = TASKMGR_HEIGHT,
         .pitch = TASKMGR_WIDTH * sizeof(uint32_t),
@@ -467,7 +466,7 @@ bool task_manager_window_open(void) {
                                           WM_FLAG_MOVABLE | WM_FLAG_TITLEBAR | WM_FLAG_RESIZABLE);
     if (win == NULL) return false;
 
-    win->client_buffer = taskmgr_render_buf;
+    win->client_buffer = main_taskmgr.render_buffer;
     win->client_pitch = TASKMGR_WIDTH * sizeof(uint32_t);
     win->on_click = task_manager_window_handle_click;
     win->on_close = task_manager_on_close;
