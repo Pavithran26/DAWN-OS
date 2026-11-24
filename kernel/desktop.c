@@ -629,17 +629,32 @@ bool desktop_self_test(void) {
         mouse_release.mouse.y = (int32_t)(tb_y - 90);
         desktop_handle_input_event(&mouse_release);
 
-        /* Click desktop icon "This PC" (x = 30, y = 35) */
+        /* Click desktop icon "This PC" (x = 30, y = 35) -> Disks */
         struct input_event click_thispc = {
             .type = INPUT_EVENT_MOUSE,
             .mouse = { .x = 30, .y = 35, .left_button = true }
         };
         desktop_handle_input_event(&click_thispc);
-        if (settings_window_get_id() < 0) return false;
-        settings_window_close();
+        struct window *dwin = wm_find_window_by_title("Disks");
+        if (dwin == NULL) return false;
+        wm_destroy_window(dwin->id);
 
         mouse_release.mouse.x = 30;
         mouse_release.mouse.y = 35;
+        desktop_handle_input_event(&mouse_release);
+
+        /* Click desktop icon "Files" (x = 30, y = 80) -> Files */
+        struct input_event click_files = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = { .x = 30, .y = 80, .left_button = true }
+        };
+        desktop_handle_input_event(&click_files);
+        struct window *fwin = wm_find_window_by_title("Files");
+        if (fwin == NULL) return false;
+        wm_destroy_window(fwin->id);
+
+        mouse_release.mouse.x = 30;
+        mouse_release.mouse.y = 80;
         desktop_handle_input_event(&mouse_release);
     }
 
