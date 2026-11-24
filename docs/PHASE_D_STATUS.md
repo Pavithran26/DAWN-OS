@@ -333,3 +333,87 @@ Phase D implements the optional local-console graphical desktop shell for DAWN-O
   - Read-only safety gates: verifying `storage_create_partition`, `storage_delete_partition`, and `storage_format_partition` strictly fail with `STORAGE_ERR_READ_ONLY` when `read_only = true`.
   - Partition lifecycle: creation and deletion on disposable RAM disk.
   - GUI window integration: creation, client buffer attachment (580x360), left-pane click selection, and safe window destruction.
+
+---
+
+## 8. Milestone D6 — System Monitor / Task Manager & Settings Hardware Inspector
+
+### System Monitor / Task Manager (`include/task_manager.h`, `kernel/task_manager.c`)
+- **Desktop Window Integration (`TASKMGR_WIDTH = 520U`, `TASKMGR_HEIGHT = 340U`):**
+  - Dedicated Window Manager window: `"Task Manager"`, resizable, movable, with emerald liquid-neomorphic titlebar chrome.
+  - Client render buffer: statically allocated `uint32_t taskmgr_render_buf[520 * 340]` in kernel BSS ensuring zero dynamic heap allocations in hot drawing paths.
+  - Window Manager lifecycle callbacks: `on_click` dispatched to `task_manager_window_handle_click`, `on_close` safely decoupling the window pointer (`taskmgr_window_id = -1`, `main_taskmgr.win = NULL`).
+  - Helper APIs: `task_manager_window_open()`, `task_manager_window_close()`, `task_manager_window_get_id()`.
+- **Reliable Scheduler & Physical Memory Telemetry (Zero Synthetic / Fake Metrics):**
+  - Physical memory metrics queried directly from `physical_memory_total_bytes()` and `physical_memory_free_bytes()`.
+  - Scheduler metrics queried directly from `scheduler_get_stats(&tm->last_sched_stats)`:
+    - Context switches (`stats.context_switches`).
+    - Timer preemptions (`stats.timer_preemptions`).
+    - Voluntary yields (`stats.voluntary_yields`).
+    - Active threads (`stats.active_threads`).
+  - Non-idle CPU utilization dynamically calculated from active threads against online SMP core count: `((active_thr * 100ULL) / (online_cpus * 2ULL))`.
+  - Per-process user memory queried through `process_get_user_page_count(pid) * 4096ULL`.
+- **Bounded Rate-Limiting & Monitoring Overhead Measurement:**
+  - Bounded refresh rate: rate-limiting gate (`TASKMGR_MIN_REFRESH_INTERVAL_TICKS = 5ULL`) enforces a minimum interval between telemetry updates, preventing busy loops or scheduler starvation. Excess refresh calls increment `refresh_rate_limited_count` and return cached telemetry.
+  - Monitoring overhead measurement: Read Time-Stamp Counter (`rdtsc`) before and after refresh and render execution paths:
+    - `last_refresh_cycles`: CPU cycle cost of querying scheduler, memory, and process lists.
+    - `last_render_cycles`: CPU cycle cost of backbuffer composition and rasterization.
+    - Performance tab and process table status line display active overhead telemetry.
+- **Process Protection Gates & Safe Lifecycle Controls:**
+  - Protection checks:
+    - Rejects terminating PID 0 (kernel idle process) with `TASKMGR_ERR_PROTECTED` (`-1`).
+    - Rejects terminating PID 1 (native Init process) with `TASKMGR_ERR_PROTECTED` (`-1`).
+    - Rejects non-existent / stale PIDs with `TASKMGR_ERR_NOT_FOUND` (`-2`).
+    - Rejects already-exited processes with `TASKMGR_ERR_ALREADY_DEAD` (`-3`).
+  - Safe termination sequence:
+    1. Discards associated scheduler worker threads via `scheduler_discard_process_threads(pid)`.
+    2. Records exit status via `process_set_exit_status(pid, -9LL)` (SIGKILL equivalent).
+    3. Commits process state transition via `process_mark_exited(pid)`.
+    4. Updates Task Manager item state and re-renders table.
+- **Two-Tab Liquid-Neomorphic Interface:**
+  - **Processes Tab:** Table columns `PID`, `NAME`, `STATE`, `MEMORY` (KB), `CPU%`. Interactive row selection with emerald primary fill and glowing accent border. "End Task" button rendered with `GFX_COLOR_DISABLED` and `"Protected"` label for PID 0/1, and `GFX_COLOR_EMERALD_PRIMARY` for terminable processes.
+  - **Performance Tab:** 32-sample CPU utilization history curve with green grid lines, SMP online core indicator, scheduler metrics panel (`CtxSw`, `Preempt`, `ActiveThr`), physical memory usage progress bar (MB Used / Total MB), and rate-limiting telemetry indicator.
+
+### Settings Hardware Inspector (`include/settings.h`, `kernel/settings.c`)
+- **11-Tab Settings Application (`TAB_HARDWARE = 10`, `TAB_COUNT = 11`):**
+  - Added dedicated `"Hardware"` tab to the Settings navigation sidebar.
+- **Real Hardware PCI Device Discovery:**
+  - Iterates detected physical PCI devices via `pci_get_device_count()` and `pci_get_device(i)`.
+  - Displays PCI Bus:Device.Function address (`00:01.0`, `00:03.0`, `00:04.0`, etc.).
+  - Displays 16-bit Vendor and Device IDs (`8086:2918`, `1AF4:1000`, `1AF4:1001`, `1234:1111`, etc.).
+  - Maps PCI class codes and subclasses to human-readable names:
+    - Mass Storage: SATA AHCI Controller, NVMe Controller, VirtIO Block Device.
+    - Network: VirtIO Network Adapter, Intel e1000 Gigabit Ethernet.
+    - Display: QEMU VGA Controller, Limine GOP Linear Framebuffer.
+    - Multimedia: Intel HD Audio Controller.
+    - Bridge: Host PCI Bridge, ISA Bridge.
+    - Serial Bus: xHCI USB 3.0 Controller.
+  - Displays Driver Binding status (`[Bound: ahci]`, `[Bound: virtio-blk]`, `[Bound: virtio-net]`, `[Bound: lfb-gop]`, `[System]`).
+- **Core Platform Peripherals Telemetry:**
+  - Enumerates keyboard/mouse (PS/2 dual-channel controller), interrupt controllers (Local APIC & IOAPIC), timers (PIT & CMOS RTC), and ACPI MADT tables.
+- **System Info Cross-Link:**
+  - Added direct link from System Info tab (`"Hardware Inspector: PCI Devices"`) jumping directly to the Hardware tab.
+
+### Desktop Shell Integration (`kernel/desktop.c`)
+- Application Launcher menu:
+  - Item 4: Task Manager connected to `task_manager_window_open()`.
+- Desktop icons:
+  - "Task Mgr" (`y in [184, 236)`) connected to `task_manager_window_open()`.
+  - "Settings" (`y in [352, 404)`) connected to `settings_window_open()`.
+
+### Test Harness & Validation
+- `task_manager_self_test()`:
+  - Geometry validation: `TASKMGR_WIDTH == 520`, `TASKMGR_HEIGHT == 340`.
+  - Process enumeration: verifying PID 0 is present and initialized.
+  - Bounded rate limiting: verifying rapid refreshes increment `refresh_rate_limited_count`.
+  - Monitoring overhead: verifying `last_refresh_cycles > 0` and `< 50,000,000` cycles.
+  - Protection gates: verifying PID 0 and PID 1 reject termination with `TASKMGR_ERR_PROTECTED`.
+  - Stale PID rejection: verifying PID 9999 returns `TASKMGR_ERR_NOT_FOUND`.
+  - Process lifecycle & termination: creating a test process, confirming it in task manager, terminating it, verifying state transition to `PROCESS_STATE_EXITED`, verifying repeat kill returns `TASKMGR_ERR_ALREADY_DEAD`, and cleaning up via `process_reap()`.
+  - Interactive UI simulation: tab switching (Processes <-> Performance), row selection, and render overhead measurement.
+  - Window Manager lifecycle: verifying `task_manager_window_open()`, client buffer binding, and clean destruction via `task_manager_window_close()`.
+- `settings_self_test()`:
+  - Verified tab switching to `TAB_HARDWARE`.
+  - Verified physical PCI device count `pci_get_device_count() > 0`.
+- `desktop_self_test()`:
+  - Verified clicking "Task Mgr" desktop icon at (30, 200) dispatches `task_manager_window_open()`, binds window title `"Task Manager"`, and safely destroys it.

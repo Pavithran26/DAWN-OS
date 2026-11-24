@@ -66,6 +66,7 @@ bool process_switch_to(uint64_t process_id);
 bool process_deactivate(void);
 uint64_t process_active_id(void);
 bool process_get_info(uint64_t process_id, struct process_info *info);
+size_t process_get_user_page_count(uint64_t process_id);
 /* ELF image builder APIs: only CREATED processes may acquire additional user pages. */
 bool process_user_page_checkpoint(uint64_t process_id,size_t *checkpoint);
 bool process_allocate_user_page(uint64_t process_id,uint64_t virtual_address,uint32_t flags);

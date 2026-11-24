@@ -309,6 +309,20 @@ bool process_get_info(uint64_t process_id,struct process_info *info) {
     return true;
 }
 
+size_t process_get_user_page_count(uint64_t process_id) {
+    const uint64_t flags=read_rflags();
+    struct process_record *record=NULL;
+    size_t count=0U;
+    if (!initialized || (read_cs()&3U)!=0U) return 0U;
+    disable_interrupts();
+    record=find_process(process_id);
+    if (record!=NULL) {
+        count=record->user_page_count;
+    }
+    restore_interrupt_flag(flags);
+    return count;
+}
+
 bool process_get_child_info(uint64_t parent_id,uint64_t child_id,
                             struct process_info *info) {
     const uint64_t flags=read_rflags();

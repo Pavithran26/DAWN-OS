@@ -153,7 +153,7 @@ build/gfx.o: kernel/gfx.c include/gfx.h include/limine_requests.h | build
 build/window_manager.o: kernel/window_manager.c include/window_manager.h include/gfx.h include/input.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/desktop.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h include/settings.h include/power.h include/rtc.h include/calculator.h include/calendar.h | build
+build/desktop.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h include/settings.h include/power.h include/rtc.h include/calculator.h include/calendar.h include/terminal.h include/file_explorer.h include/storage_manager.h include/task_manager.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/calculator.o: kernel/calculator.c include/calculator.h include/gfx.h include/window_manager.h | build
@@ -168,7 +168,7 @@ build/shell.o: kernel/shell.c include/shell.h include/vfs.h include/process.h in
 build/terminal.o: kernel/terminal.c include/terminal.h include/shell.h include/gfx.h include/window_manager.h include/input.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/task_manager.o: kernel/task_manager.c include/task_manager.h include/gfx.h include/window_manager.h include/process.h include/physical_memory.h | build
+build/task_manager.o: kernel/task_manager.c include/task_manager.h include/gfx.h include/window_manager.h include/process.h include/physical_memory.h include/scheduler.h include/apic.h include/smp.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/net.o: kernel/net.c include/net.h include/device.h | build
@@ -186,7 +186,7 @@ build/userspace_test.o: kernel/userspace_test.c include/userspace_test.h include
 build/audio.o: kernel/audio.c include/audio.h include/device.h include/pci.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/settings.o: kernel/settings.c include/settings.h include/vfs.h include/audio.h include/net.h include/window_manager.h include/gfx.h include/desktop.h include/os_metadata.h include/system_info.h include/rtc.h | build
+build/settings.o: kernel/settings.c include/settings.h include/vfs.h include/audio.h include/net.h include/window_manager.h include/gfx.h include/desktop.h include/os_metadata.h include/system_info.h include/rtc.h include/pci.h include/device.h | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/installer.o: kernel/installer.c include/installer.h include/storage_manager.h include/partition.h include/fat32.h include/vfs.h | build
@@ -326,7 +326,7 @@ build/gfx-test.o: kernel/gfx.c include/gfx.h include/limine_requests.h | build
 build/window-manager-test.o: kernel/window_manager.c include/window_manager.h include/gfx.h include/input.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/desktop-test.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h include/settings.h include/power.h include/rtc.h include/calculator.h include/calendar.h | build
+build/desktop-test.o: kernel/desktop.c include/desktop.h include/window_manager.h include/gfx.h include/input.h include/os_metadata.h include/settings.h include/power.h include/rtc.h include/calculator.h include/calendar.h include/terminal.h include/file_explorer.h include/storage_manager.h include/task_manager.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/calculator-test.o: kernel/calculator.c include/calculator.h include/gfx.h include/window_manager.h | build
@@ -341,7 +341,7 @@ build/shell-test.o: kernel/shell.c include/shell.h include/vfs.h include/process
 build/terminal-test.o: kernel/terminal.c include/terminal.h include/shell.h include/gfx.h include/window_manager.h include/input.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/task-manager-test.o: kernel/task_manager.c include/task_manager.h include/gfx.h include/window_manager.h include/process.h include/physical_memory.h | build
+build/task-manager-test.o: kernel/task_manager.c include/task_manager.h include/gfx.h include/window_manager.h include/process.h include/physical_memory.h include/scheduler.h include/apic.h include/smp.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/net-test.o: kernel/net.c include/net.h include/device.h | build
@@ -359,7 +359,7 @@ build/userspace_test-test.o: kernel/userspace_test.c include/userspace_test.h in
 build/audio-test.o: kernel/audio.c include/audio.h include/device.h include/pci.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
-build/settings-test.o: kernel/settings.c include/settings.h include/vfs.h include/audio.h include/net.h include/window_manager.h include/gfx.h include/desktop.h include/os_metadata.h include/system_info.h include/rtc.h | build
+build/settings-test.o: kernel/settings.c include/settings.h include/vfs.h include/audio.h include/net.h include/window_manager.h include/gfx.h include/desktop.h include/os_metadata.h include/system_info.h include/rtc.h include/pci.h include/device.h | build
 	$(CC) $(CFLAGS) -DDAWN_KERNEL_TEST=1 -c $< -o $@
 
 build/installer-test.o: kernel/installer.c include/installer.h include/storage_manager.h include/partition.h include/fat32.h include/vfs.h | build

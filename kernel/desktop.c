@@ -9,6 +9,7 @@
 #include "terminal.h"
 #include "file_explorer.h"
 #include "storage_manager.h"
+#include "task_manager.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -202,13 +203,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                     }
                     /* Item 4: Task Manager (ly + 122 to ly + 148) */
                     if (mevt->y >= ly + 122 && mevt->y < ly + 148) {
-                        struct window *existing = wm_find_window_by_title("Task Manager");
-                        if (existing != NULL) {
-                            if (existing->minimized) wm_minimize_window(existing->id);
-                            wm_focus_window(existing->id);
-                        } else {
-                            wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
-                        }
+                        (void)task_manager_window_open();
                         state.launcher_open = false;
                         return;
                     }
@@ -323,13 +318,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                     }
                     /* Task Mgr */
                     if (mevt->y >= 184 && mevt->y < 236) {
-                        struct window *existing = wm_find_window_by_title("Task Manager");
-                        if (existing != NULL) {
-                            if (existing->minimized) wm_minimize_window(existing->id);
-                            wm_focus_window(existing->id);
-                        } else {
-                            wm_create_window("Task Manager", 200, 140, 520, 360, WM_FLAG_NONE);
-                        }
+                        (void)task_manager_window_open();
                         return;
                     }
                     /* Settings */
@@ -655,6 +644,20 @@ bool desktop_self_test(void) {
 
         mouse_release.mouse.x = 30;
         mouse_release.mouse.y = 80;
+        desktop_handle_input_event(&mouse_release);
+
+        /* Click desktop icon "Task Mgr" (x = 30, y = 200) -> Task Manager */
+        struct input_event click_taskmgr = {
+            .type = INPUT_EVENT_MOUSE,
+            .mouse = { .x = 30, .y = 200, .left_button = true }
+        };
+        desktop_handle_input_event(&click_taskmgr);
+        struct window *twin = wm_find_window_by_title("Task Manager");
+        if (twin == NULL) return false;
+        wm_destroy_window(twin->id);
+
+        mouse_release.mouse.x = 30;
+        mouse_release.mouse.y = 200;
         desktop_handle_input_event(&mouse_release);
     }
 

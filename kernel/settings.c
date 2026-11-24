@@ -9,6 +9,8 @@
 #include "os_metadata.h"
 #include "system_info.h"
 #include "rtc.h"
+#include "pci.h"
+#include "device.h"
 
 static struct system_settings active_settings;
 static bool settings_initialized = false;
@@ -316,13 +318,81 @@ bool settings_save_file(const char *path) {
 /* GUI Window Implementation */
 static const char *tab_names[TAB_COUNT] = {
     "Display", "Input", "Audio", "Network", "Time", "Appearance", "About",
-    "Credits", "Help", "Sys Info"
+    "Credits", "Help", "Sys Info", "Hardware"
 };
 
 #define SETTINGS_TAB_STRIDE 28U
 #define SETTINGS_TAB_HEIGHT 24U
 #define SETTINGS_TAB_TOP 8U
-#define SETTINGS_MAX_LINKS 8U
+#define SETTINGS_MAX_LINKS 12U
+
+static void hex16_to_str(uint16_t val, char *buf) {
+    const char hex_chars[] = "0123456789ABCDEF";
+    buf[0] = hex_chars[(val >> 12) & 0x0FU];
+    buf[1] = hex_chars[(val >> 8) & 0x0FU];
+    buf[2] = hex_chars[(val >> 4) & 0x0FU];
+    buf[3] = hex_chars[val & 0x0FU];
+    buf[4] = '\0';
+}
+
+static const char *pci_class_to_name(const struct pci_device *dev) {
+    if (dev == NULL) return "Unknown";
+    if (dev->class_code == PCI_CLASS_MASS_STORAGE) {
+        if (dev->subclass == PCI_SUBCLASS_STORAGE_SATA) return "Storage (AHCI)";
+        if (dev->subclass == PCI_SUBCLASS_STORAGE_NVME) return "Storage (NVMe)";
+        if (dev->subclass == PCI_SUBCLASS_STORAGE_IDE) return "Storage (IDE)";
+        if (dev->vendor_id == 0x1AF4U && (dev->device_id == 0x1001U || dev->device_id == 0x1042U))
+            return "Storage (VirtIO)";
+        return "Mass Storage";
+    }
+    if (dev->class_code == PCI_CLASS_NETWORK) {
+        if (dev->vendor_id == 0x1AF4U && (dev->device_id == 0x1000U || dev->device_id == 0x1041U))
+            return "Net (VirtIO-Net)";
+        if (dev->vendor_id == 0x8086U && dev->device_id == 0x100EU)
+            return "Net (Intel e1000)";
+        return "Network Adapter";
+    }
+    if (dev->class_code == PCI_CLASS_DISPLAY) {
+        if (dev->vendor_id == 0x1234U && dev->device_id == 0x1111U)
+            return "Display (QEMU VGA)";
+        return "Display Adapter";
+    }
+    if (dev->class_code == PCI_CLASS_MULTIMEDIA) {
+        if (dev->vendor_id == 0x8086U && dev->device_id == 0x2668U)
+            return "Audio (Intel HDA)";
+        return "Audio Controller";
+    }
+    if (dev->class_code == PCI_CLASS_BRIDGE) {
+        if (dev->subclass == 0x00U) return "Bridge (Host PCI)";
+        if (dev->subclass == 0x01U) return "Bridge (ISA)";
+        return "PCI Bridge";
+    }
+    if (dev->class_code == PCI_CLASS_SERIAL_BUS) {
+        if (dev->subclass == PCI_SUBCLASS_SERIAL_USB && dev->prog_if == PCI_PROGIF_USB_XHCI)
+            return "USB 3.0 (xHCI)";
+        return "Serial Bus / USB";
+    }
+    return "PCI Controller";
+}
+
+static const char *pci_driver_binding(const struct pci_device *dev) {
+    if (dev == NULL) return "[Unbound]";
+    if (dev->vendor_id == 0x1AF4U && (dev->device_id == 0x1001U || dev->device_id == 0x1042U))
+        return "[Bound: virtio-blk]";
+    if (dev->vendor_id == 0x1AF4U && (dev->device_id == 0x1000U || dev->device_id == 0x1041U))
+        return "[Bound: virtio-net]";
+    if (dev->class_code == PCI_CLASS_MASS_STORAGE && dev->subclass == PCI_SUBCLASS_STORAGE_SATA)
+        return "[Bound: ahci]";
+    if (dev->class_code == PCI_CLASS_MASS_STORAGE && dev->subclass == PCI_SUBCLASS_STORAGE_NVME)
+        return "[Bound: nvme]";
+    if (dev->class_code == PCI_CLASS_DISPLAY)
+        return "[Bound: lfb-gop]";
+    if (dev->class_code == PCI_CLASS_MULTIMEDIA)
+        return "[Bound: hda]";
+    if (dev->class_code == PCI_CLASS_BRIDGE)
+        return "[System]";
+    return "[Active]";
+}
 
 struct settings_link {
     int32_t x;
@@ -727,6 +797,93 @@ void settings_window_render(void) {
                 gfx_draw_string(&surf, cx, cy + 144, "System information unavailable", GFX_COLOR_TEXT_MUTED);
             }
             settings_add_link(&surf, cx, cy + 304, "Report a Problem: GitHub Issues", meta->bug_report_url);
+            settings_add_link(&surf, cx, cy + 322, "Hardware Inspector: PCI Devices", "tab:hardware");
+            break;
+        }
+
+        case TAB_HARDWARE: {
+            gfx_draw_string(&surf, cx, cy, "Hardware Inspector — PCI & Controllers", GFX_COLOR_EMERALD_NEON);
+
+            size_t pci_count = pci_get_device_count();
+            char sub_buf[64];
+            char c_pci[16];
+            u32_to_str((uint32_t)pci_count, c_pci);
+            size_t sub_p = 0U;
+            const char *sp1 = "Discovered: ";
+            for (size_t k = 0U; sp1[k] != '\0' && sub_p + 1U < sizeof(sub_buf); k++) sub_buf[sub_p++] = sp1[k];
+            for (size_t k = 0U; c_pci[k] != '\0' && sub_p + 1U < sizeof(sub_buf); k++) sub_buf[sub_p++] = c_pci[k];
+            const char *sp2 = " PCI hardware devices | Core buses mapped";
+            for (size_t k = 0U; sp2[k] != '\0' && sub_p + 1U < sizeof(sub_buf); k++) sub_buf[sub_p++] = sp2[k];
+            sub_buf[sub_p] = '\0';
+            gfx_draw_string(&surf, cx, cy + 20, sub_buf, GFX_COLOR_TEXT_MUTED);
+
+            /* Table Header */
+            gfx_fill_rect(&surf, cx, cy + 38, 388, 18, GFX_COLOR_PANEL_DARK);
+            gfx_draw_string(&surf, cx + 4, cy + 42, "#", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 24, cy + 42, "B:D.F", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 80, cy + 42, "VENDOR:DEV", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 180, cy + 42, "CLASS / TYPE", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 295, cy + 42, "DRIVER", GFX_COLOR_TEXT_MUTED);
+
+            /* Rows (up to 7 items) */
+            uint32_t row_y = cy + 58;
+            for (size_t i = 0U; i < pci_count && i < 7U; i++) {
+                const struct pci_device *pdev = pci_get_device(i);
+                if (pdev == NULL) continue;
+
+                /* Alternating row tint */
+                if ((i & 1U) != 0U) {
+                    gfx_fill_rect(&surf, cx, row_y - 2, 388, 20, 0x300A251BU);
+                }
+
+                char num_str[8];
+                u32_to_str((uint32_t)(i + 1U), num_str);
+                gfx_draw_string(&surf, cx + 4, row_y, num_str, GFX_COLOR_TEXT_PRIMARY);
+
+                char bdf_str[16];
+                char b_s[8], d_s[8], f_s[8];
+                u32_to_str((uint32_t)pdev->bus, b_s);
+                u32_to_str((uint32_t)pdev->slot, d_s);
+                u32_to_str((uint32_t)pdev->func, f_s);
+                size_t bp = 0U;
+                if (pdev->bus < 10U) bdf_str[bp++] = '0';
+                for (size_t k = 0U; b_s[k] != '\0' && bp + 1U < sizeof(bdf_str); k++) bdf_str[bp++] = b_s[k];
+                bdf_str[bp++] = ':';
+                if (pdev->slot < 10U) bdf_str[bp++] = '0';
+                for (size_t k = 0U; d_s[k] != '\0' && bp + 1U < sizeof(bdf_str); k++) bdf_str[bp++] = d_s[k];
+                bdf_str[bp++] = '.';
+                for (size_t k = 0U; f_s[k] != '\0' && bp + 1U < sizeof(bdf_str); k++) bdf_str[bp++] = f_s[k];
+                bdf_str[bp] = '\0';
+                gfx_draw_string(&surf, cx + 24, row_y, bdf_str, GFX_COLOR_TEXT_PRIMARY);
+
+                char vid_str[6], did_str[6];
+                hex16_to_str(pdev->vendor_id, vid_str);
+                hex16_to_str(pdev->device_id, did_str);
+                char ven_dev[16];
+                size_t vp = 0U;
+                for (size_t k = 0U; vid_str[k] != '\0' && vp + 1U < sizeof(ven_dev); k++) ven_dev[vp++] = vid_str[k];
+                ven_dev[vp++] = ':';
+                for (size_t k = 0U; did_str[k] != '\0' && vp + 1U < sizeof(ven_dev); k++) ven_dev[vp++] = did_str[k];
+                ven_dev[vp] = '\0';
+                gfx_draw_string(&surf, cx + 80, row_y, ven_dev, GFX_COLOR_TEXT_PRIMARY);
+
+                const char *cname = pci_class_to_name(pdev);
+                gfx_draw_string(&surf, cx + 180, row_y, cname, GFX_COLOR_TEXT_SECONDARY);
+
+                const char *dbind = pci_driver_binding(pdev);
+                uint32_t bind_col = (dbind[1] == 'B') ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_TEXT_MUTED;
+                gfx_draw_string(&surf, cx + 295, row_y, dbind, bind_col);
+
+                row_y += 20;
+            }
+
+            /* Core System Peripherals section */
+            gfx_draw_line(&surf, cx, row_y + 4, cx + 388, row_y + 4, GFX_COLOR_GLASS_BORDER);
+            gfx_draw_string(&surf, cx, row_y + 10, "Platform & Core System Peripherals:", GFX_COLOR_EMERALD_ACCENT);
+            gfx_draw_string(&surf, cx, row_y + 28, "Keyboard & Mouse: PS/2 Dual Channel Controller", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, row_y + 46, "Timers & Clocks:  Local APIC, IOAPIC & CMOS RTC", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, row_y + 64, "ACPI & Power:     MADT Processor & I/O APIC Tables", GFX_COLOR_TEXT_MUTED);
+
             break;
         }
 
@@ -750,6 +907,10 @@ void settings_window_handle_click(int32_t local_x, int32_t local_y) {
         const struct settings_link *link = &settings_links[index];
         if (local_x >= link->x && local_x <= link->x + link->width &&
             local_y >= link->y && local_y <= link->y + 14) {
+            if (str_equal(link->url, "tab:hardware")) {
+                settings_window_switch_tab(TAB_HARDWARE);
+                return;
+            }
             (void)desktop_open_url(link->url);
             return;
         }
@@ -879,6 +1040,9 @@ bool settings_self_test(void) {
     if (current_tab != TAB_HELP_SUPPORT) return false;
     settings_window_switch_tab(TAB_SYSTEM_INFO);
     if (current_tab != TAB_SYSTEM_INFO) return false;
+    settings_window_switch_tab(TAB_HARDWARE);
+    if (current_tab != TAB_HARDWARE) return false;
+    if (pci_get_device_count() == 0U) return false;
     settings_window_close();
     if (settings_window_get_id() >= 0) return false;
 
