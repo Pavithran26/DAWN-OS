@@ -7,6 +7,8 @@
 #include "calculator.h"
 #include "calendar.h"
 #include "terminal.h"
+#include "file_explorer.h"
+#include "storage_manager.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -188,18 +190,18 @@ void desktop_handle_input_event(const struct input_event *event) {
                     }
                     /* Item 2: File Explorer (ly + 66 to ly + 92) */
                     if (mevt->y >= ly + 66 && mevt->y < ly + 92) {
-                        struct window *existing = wm_find_window_by_title("File Explorer");
-                        if (existing != NULL) {
-                            if (existing->minimized) wm_minimize_window(existing->id);
-                            wm_focus_window(existing->id);
-                        } else {
-                            wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
-                        }
+                        (void)file_explorer_window_open();
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 3: Task Manager (ly + 94 to ly + 120) */
+                    /* Item 3: Disks (ly + 94 to ly + 120) */
                     if (mevt->y >= ly + 94 && mevt->y < ly + 120) {
+                        (void)disks_window_open();
+                        state.launcher_open = false;
+                        return;
+                    }
+                    /* Item 4: Task Manager (ly + 122 to ly + 148) */
+                    if (mevt->y >= ly + 122 && mevt->y < ly + 148) {
                         struct window *existing = wm_find_window_by_title("Task Manager");
                         if (existing != NULL) {
                             if (existing->minimized) wm_minimize_window(existing->id);
@@ -210,27 +212,21 @@ void desktop_handle_input_event(const struct input_event *event) {
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 4: Calculator (ly + 122 to ly + 148) */
-                    if (mevt->y >= ly + 122 && mevt->y < ly + 148) {
+                    /* Item 5: Calculator (ly + 150 to ly + 176) */
+                    if (mevt->y >= ly + 150 && mevt->y < ly + 176) {
                         calculator_window_open();
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 5: Calendar (ly + 150 to ly + 176) */
-                    if (mevt->y >= ly + 150 && mevt->y < ly + 176) {
+                    /* Item 6: Calendar (ly + 178 to ly + 204) */
+                    if (mevt->y >= ly + 178 && mevt->y < ly + 204) {
                         calendar_window_open();
                         state.launcher_open = false;
                         return;
                     }
-                    /* Item 6: Settings (ly + 178 to ly + 204) */
-                    if (mevt->y >= ly + 178 && mevt->y < ly + 204) {
-                        settings_window_open();
-                        state.launcher_open = false;
-                        return;
-                    }
-                    /* Item 7: Help & Support (ly + 206 to ly + 232) */
+                    /* Item 7: Settings (ly + 206 to ly + 232) */
                     if (mevt->y >= ly + 206 && mevt->y < ly + 232) {
-                        settings_window_open_tab(TAB_HELP_SUPPORT);
+                        settings_window_open();
                         state.launcher_open = false;
                         return;
                     }
@@ -310,20 +306,14 @@ void desktop_handle_input_event(const struct input_event *event) {
             if (wm_find_window_at(mevt->x, mevt->y) == NULL &&
                 mevt->y >= (int32_t)DESKTOP_STATUSBAR_HEIGHT && mevt->y < (int32_t)tb_y) {
                 if (mevt->x >= 8 && mevt->x <= 84) {
-                    /* This PC -> System Info */
+                    /* This PC -> Disks Application */
                     if (mevt->y >= 28 && mevt->y < 72) {
-                        settings_window_open_tab(TAB_SYSTEM_INFO);
+                        (void)disks_window_open();
                         return;
                     }
                     /* Files -> File Explorer */
                     if (mevt->y >= 72 && mevt->y < 124) {
-                        struct window *existing = wm_find_window_by_title("File Explorer");
-                        if (existing != NULL) {
-                            if (existing->minimized) wm_minimize_window(existing->id);
-                            wm_focus_window(existing->id);
-                        } else {
-                            wm_create_window("File Explorer", 150, 120, 600, 420, WM_FLAG_NONE);
-                        }
+                        (void)file_explorer_window_open();
                         return;
                     }
                     /* Terminal */
@@ -541,22 +531,22 @@ void desktop_render(struct gfx_surface *surf) {
         gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 42), "Terminal", GFX_COLOR_TEXT_PRIMARY);
 
         gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 70), GFX_ICON_FILE_EXPLORER, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 70), "File Explorer", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 70), "Files", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 98), GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 98), "Task Manager", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 98), GFX_ICON_COMPUTER, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 98), "Disks", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 126), GFX_ICON_CALCULATOR, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 126), "Calculator", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 126), GFX_ICON_TASK_MANAGER, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 126), "Task Manager", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 154), GFX_ICON_CALENDAR, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 154), "Calendar", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 154), GFX_ICON_CALCULATOR, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 154), "Calculator", GFX_COLOR_TEXT_PRIMARY);
 
-        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 182), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 182), "Settings", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 182), GFX_ICON_CALENDAR, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 182), "Calendar", GFX_COLOR_TEXT_PRIMARY);
 
         gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 210), GFX_ICON_SETTINGS, GFX_COLOR_EMERALD_ACCENT);
-        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 210), "Help & Support", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 210), "Settings", GFX_COLOR_TEXT_PRIMARY);
 
         gfx_draw_icon(surf, (uint32_t)(lx + 16), (uint32_t)(ly + 238), GFX_ICON_DAWN_LOGO, GFX_COLOR_EMERALD_ACCENT);
         gfx_draw_string(surf, (uint32_t)(lx + 40), (uint32_t)(ly + 238), "About DAWN-OS", GFX_COLOR_TEXT_PRIMARY);

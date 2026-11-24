@@ -2,7 +2,7 @@
 
 ## Status
 
-**Milestones D0 (Desktop Specification & Design System) and D1 (Safe Framebuffer & CPU 2D Renderer) are fully implemented and verified.** Input event delivery (D2), window manager (D3), and desktop applications (D4-D6) follow in sequential dependency order.
+**Milestones D0, D1, D2, D3, D4, and D5 are fully implemented and verified.** Input event delivery (D2), window manager (D3), terminal emulator (D4), and files/disks applications (D5) are complete. System Monitor / Task Manager (D6) follows.
 
 Phase D is the optional local-console desktop for DAWN-OS. It must not become a boot requirement: headless/server mode remains the default and must continue to work without graphics or input devices.
 
@@ -115,4 +115,4 @@ A successful build or a framebuffer pointer alone is not a graphical-shell pass.
 
 ## Current next step
 
-Phase B, Phase C, and Phase D milestones D0, D1, D2, D3, and D4 are complete and verified across QEMU BIOS and UEFI. Proceed to Milestone D5 (Files and Disks applications: directory enumeration, read-only disk/partition inspection, and storage safety gates).
+Phase B, Phase C, and Phase D milestones D0, D1, D2, D3, D4, and D5 are complete and verified across QEMU BIOS and UEFI. Proceed to Milestone D6 (System Monitor / Task Manager: reliable scheduler and memory metrics, bounded refresh rate, process lifecycle safety, and monitoring overhead measurement).

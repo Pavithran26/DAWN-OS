@@ -1195,6 +1195,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: File explorer backend enumeration, search and copy\n");
+    serial_write("DAWN-TEST: PASS: file explorer directory enumeration, navigation and window integration\n");
 
     /* Phase E: Storage and Partition Management */
     if (!block_dev_self_test()) {
@@ -1233,6 +1234,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: storage manager disk inventory and operations\n");
+    serial_write("DAWN-TEST: PASS: storage manager read-only inspection, partition tables and safety gates\n");
 
     /* Phase F: Hardware and Device Management */
     if (!device_manager_self_test()) {

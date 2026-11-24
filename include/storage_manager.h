@@ -11,6 +11,17 @@
 #define STORAGE_MAX_DISKS 8U
 #define STORAGE_MAX_PARTITIONS_PER_DISK 8U
 
+#define STORAGE_OK               0
+#define STORAGE_ERR_INVALID     (-1)
+#define STORAGE_ERR_READ_ONLY   (-2)
+#define STORAGE_ERR_BOUNDS      (-3)
+#define STORAGE_ERR_TABLE_FULL  (-4)
+
+#define DISKS_WIDTH  580U
+#define DISKS_HEIGHT 360U
+
+struct window;
+
 struct storage_partition_desc {
     char slice_name[BLOCK_DEV_NAME_MAX];
     uint32_t index;
@@ -44,6 +55,12 @@ int storage_create_partition(const char *disk_name, uint64_t size_blocks, uint8_
 int storage_delete_partition(const char *disk_name, uint32_t partition_index);
 int storage_format_partition(const char *slice_name, const char *fs_type, const char *label);
 int storage_automount_filesystems(void);
+
+/* Disks GUI Application (Milestone D5) */
+struct window *disks_window_open(void);
+void disks_window_render(void);
+void disks_handle_click(int32_t local_x, int32_t local_y);
+void disks_select_disk(size_t index);
 
 bool storage_manager_self_test(void);
 

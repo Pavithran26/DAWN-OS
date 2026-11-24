@@ -207,6 +207,12 @@ int partition_scan_disk(struct block_device *disk, struct disk_partition_table *
     uint32_t pcount = 0;
     for (uint32_t i = 0; i < MBR_PARTITION_COUNT; i++) {
         if (mbr->entries[i].type != MBR_TYPE_EMPTY && mbr->entries[i].sector_count > 0) {
+            /* Reject out-of-bounds malformed partition entries */
+            if (disk->total_blocks > 0 &&
+                (mbr->entries[i].start_lba >= disk->total_blocks ||
+                 (uint64_t)mbr->entries[i].start_lba + mbr->entries[i].sector_count > disk->total_blocks)) {
+                continue;
+            }
             struct partition_info *pi = &out_table->partitions[pcount];
             pi->index = i + 1;
             pi->start_lba = mbr->entries[i].start_lba;
@@ -234,6 +240,7 @@ int partition_scan_disk(struct block_device *disk, struct disk_partition_table *
 
 bool partition_validate_safe_operation(struct block_device *disk, uint64_t start_lba, uint64_t count) {
     if (disk == NULL || count == 0) return false;
+    if (disk->read_only) return false;
     /* Reserve first 2048 sectors (1MB) for partition table and boot code */
     if (start_lba < 2048U) return false;
     if (start_lba >= disk->total_blocks || count > disk->total_blocks - start_lba) return false;
@@ -254,7 +261,7 @@ bool partition_validate_safe_operation(struct block_device *disk, uint64_t start
 }
 
 int partition_create_mbr(struct block_device *disk, uint32_t index, uint64_t start_lba, uint64_t count, uint8_t type, bool bootable) {
-    if (disk == NULL || index == 0 || index > MBR_PARTITION_COUNT) return -1;
+    if (disk == NULL || disk->read_only || index == 0 || index > MBR_PARTITION_COUNT) return -1;
     if (!partition_validate_safe_operation(disk, start_lba, count)) return -1;
 
     uint8_t sector_buf[512] = {0};
@@ -282,7 +289,7 @@ int partition_create_mbr(struct block_device *disk, uint32_t index, uint64_t sta
 }
 
 int partition_delete(struct block_device *disk, uint32_t index) {
-    if (disk == NULL || index == 0 || index > MBR_PARTITION_COUNT) return -1;
+    if (disk == NULL || disk->read_only || index == 0 || index > MBR_PARTITION_COUNT) return -1;
 
     uint8_t sector_buf[512] = {0};
     if (block_dev_read(disk, 0, 1, sector_buf) != 0) return -1;
@@ -304,7 +311,7 @@ int partition_delete(struct block_device *disk, uint32_t index) {
 }
 
 int partition_format_fat32(struct block_device *part_dev, const char *volume_label) {
-    if (part_dev == NULL || part_dev->total_blocks < 65536U) return -1; /* Min FAT32 size */
+    if (part_dev == NULL || part_dev->read_only || part_dev->total_blocks < 65536U) return -1; /* Min FAT32 size */
 
     uint8_t bpb_sector[512] = {0};
     /* Jump boot code */
@@ -439,6 +446,13 @@ bool partition_self_test(void) {
     const char *test_str = "123456789";
     uint32_t c = crc32(test_str, 9);
     if (c != 0xCBF43926U) return false;
+
+    /* Safety Gates: Read-only protection test */
+    disk->read_only = true;
+    if (partition_validate_safe_operation(disk, 2048, 2048)) return false;
+    if (partition_create_mbr(disk, 1, 2048, 2048, MBR_TYPE_FAT32_LBA, false) != -1) return false;
+    if (partition_delete(disk, 1) != -1) return false;
+    disk->read_only = false;
 
     /* Cleanup */
     block_dev_unregister(disk->id);

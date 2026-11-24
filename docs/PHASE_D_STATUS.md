@@ -262,3 +262,74 @@ Phase D implements the optional local-console graphical desktop shell for DAWN-O
 ### Test Harness & Validation
 - `shell_self_test()`: Echo, clear screen escape, whoami, history accumulation, process list (`ps`), working directory (`pwd`), uname, environment variables, missing argument rejections (`cat`, `cp`, `mv`), 220-char long-line execution, and unknown command code 127.
 - `terminal_self_test()`: Monospace grid geometry (80x25), 640x400 buffer, transparent background verification, 40-line scrollback push accumulation, viewport scrolling, `Shift+Up`/`Shift+Down` key navigation, ANSI clear screen sequence, interactive command execution (`echo test_d4`), `KEY_UP` history recall, `KEY_DOWN` history dismissal, 300-character input bounds clamping at `SHELL_CMD_MAX - 1`, and Window Manager window binding with key event dispatch.
+
+---
+
+## 7. Milestone D5 — Files and Disks Applications
+
+### Files Application GUI (`kernel/file_explorer.c`, `include/file_explorer.h`)
+- **Desktop Window Integration (`EXPLORER_WIDTH = 560U`, `EXPLORER_HEIGHT = 360U`):**
+  - Window title `"Files"`, resizable, movable, with emerald liquid-neomorphic titlebar chrome.
+  - Client render buffer: statically allocated `uint32_t explorer_render_buf[560 * 360]` ensuring zero dynamic heap allocations in hot drawing paths.
+  - Window manager client dimension constraints: `client_width = 560`, `client_height = 360`.
+  - Window lifecycle callbacks: `on_click` dispatched to `file_explorer_handle_click`, `on_close` safely decoupling the window reference.
+- **Header Toolbar & Path Breadcrumb Navigation:**
+  - `[..]` Parent directory button: ascends directory tree; automatically disabled/dimmed when at root `/`.
+  - `[R]` Refresh button: reloads active directory listing from VFS.
+  - Frosted glass path breadcrumb box: displays crisp active directory path (`Path: /`, `Path: /tmp`, etc.).
+- **VFS Directory Enumeration & Interactive Selection:**
+  - Table column header row: `TYPE`, `NAME`, `SIZE`, `STATUS`.
+  - Directory items rendered with neon emerald `[DIR]` badge, file items with crisp off-white `[FILE]` badge.
+  - Human-readable file size formatting (`B`, `KB`, `MB`).
+  - Interactive selection: mouse click highlights item with emerald primary fill and glowing accent border.
+  - Interactive directory entry: clicking already-selected `[DIR]` navigates directly into the child subdirectory.
+  - Footer status bar: displays total item count, cumulative size, and currently selected item name.
+- **Robust Path Validation & Safety Gates:**
+  - `validate_explorer_path()`: strictly rejects NULL, empty string, paths not starting with `/`, paths exceeding `VFS_MAX_PATH`, and non-printable control characters.
+
+### Disks Application GUI & Storage Safety Gates (`kernel/storage_manager.c`, `include/storage_manager.h`, `kernel/partition.c`)
+- **Desktop Window Integration (`DISKS_WIDTH = 580U`, `DISKS_HEIGHT = 360U`):**
+  - Window title `"Disks"`, resizable, movable, with emerald liquid-neomorphic titlebar chrome.
+  - Client render buffer: statically allocated `uint32_t disks_render_buf[580 * 360]` in kernel memory.
+  - Window manager callbacks: `on_click` dispatched to `disks_handle_click`, `on_close` safely resetting pointer.
+- **Physical Device & Partition Inspection:**
+  - Top Storage Safety Banner: amber frosted glass badge displaying `[RO] Storage Safety Gate Active: Host Disks Write-Protected`.
+  - Two-pane layout:
+    - Left pane: Discovered physical block devices (`/dev/vda`, `/dev/sda`, etc.) with model, capacity, and `[RO]` tag. Selected disk rendered with neon accent highlight.
+    - Right pane: In-depth hardware telemetry and partition slices:
+      - Device path, drive model, interface type (SATA/NVMe/VirtIO/Optical), partition scheme (GPT/MBR/RAW), formatted capacity, sector count.
+      - Operational status: `[READ-ONLY PROTECTION ACTIVE]`.
+      - Partition slice table: `SLICE`, `START LBA`, `SECTORS`, `FS` (FAT32, ISO9660, RAW), and mount status (`/mnt/...` vs `[Unmounted]`).
+  - Interactive selection: clicking a drive in the left pane updates detailed inspection telemetry in the right pane.
+- **Multi-Layer Storage Safety Gates:**
+  - Initial Disks GUI contains zero write, format, or repartition controls (strictly read-only inspector).
+  - Storage Manager API gates:
+    - `storage_create_partition()`: strictly rejects operations if `disk->read_only` or `desc->read_only` with `STORAGE_ERR_READ_ONLY` (`-2`); strictly rejects out-of-range sector counts with `STORAGE_ERR_BOUNDS` (`-3`).
+    - `storage_delete_partition()`: strictly rejects operations if `disk->read_only` or `desc->read_only` with `STORAGE_ERR_READ_ONLY` (`-2`).
+    - `storage_format_partition()`: strictly rejects operations if partition device is read-only with `STORAGE_ERR_READ_ONLY` (`-2`).
+  - Partition Driver layer gates:
+    - `partition_validate_safe_operation()`: immediately returns `false` if `disk->read_only` is true.
+    - `partition_create_mbr()` and `partition_delete()`: reject if `disk->read_only`.
+    - `partition_format_fat32()`: rejects if `part_dev->read_only`.
+    - `partition_scan_mbr()`: rejects malformed partition entries with start LBA or ending sectors exceeding `disk->total_blocks`.
+
+### Desktop Shell Integration (`kernel/desktop.c`)
+- Application Launcher menu:
+  - Item 2: Files (`file_explorer_window_open()`).
+  - Item 3: Disks (`disks_window_open()`).
+- Desktop icons:
+  - "This PC" (`y in [28, 72)`) opens Disks application (`disks_window_open()`).
+  - "Files" (`y in [72, 124)`) opens File Explorer application (`file_explorer_window_open()`).
+
+### Test Harness & Validation
+- `explorer_self_test()`:
+  - VFS directory enumeration on root `/`.
+  - Malformed path rejection: NULL path, missing leading slash, empty path, non-printable characters, oversized path.
+  - File operations: creation, search, copy, and deletion.
+  - GUI window integration: creation, client buffer attachment (560x360), root directory path verification, directory navigation into `/tmp`, parent navigation back to `/`, item selection click simulation, toolbar click simulation, and safe window destruction.
+- `storage_manager_self_test()`:
+  - Physical disk discovery and partition query.
+  - Sector bounds safety gate: verifying request with out-of-range sector count returns `STORAGE_ERR_BOUNDS`.
+  - Read-only safety gates: verifying `storage_create_partition`, `storage_delete_partition`, and `storage_format_partition` strictly fail with `STORAGE_ERR_READ_ONLY` when `read_only = true`.
+  - Partition lifecycle: creation and deletion on disposable RAM disk.
+  - GUI window integration: creation, client buffer attachment (580x360), left-pane click selection, and safe window destruction.

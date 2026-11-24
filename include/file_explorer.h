@@ -8,6 +8,10 @@
 #include "vfs.h"
 
 #define EXPLORER_MAX_ITEMS 64U
+#define EXPLORER_WIDTH     560U
+#define EXPLORER_HEIGHT    360U
+
+struct window;
 
 enum explorer_item_type {
     EXPLORER_ITEM_UNKNOWN = 0,
@@ -39,6 +43,15 @@ bool explorer_move_file(const char *src_path, const char *dst_path);
 bool explorer_delete_file(const char *path);
 bool explorer_create_directory(const char *path);
 bool explorer_create_file(const char *path);
+
+/* Files GUI Application (Milestone D5) */
+struct window *file_explorer_window_open(void);
+void file_explorer_render(void);
+void file_explorer_handle_click(int32_t local_x, int32_t local_y);
+bool file_explorer_navigate(const char *path);
+bool file_explorer_navigate_up(void);
+const char *file_explorer_get_current_path(void);
+int32_t file_explorer_get_selected_index(void);
 
 #ifdef DAWN_KERNEL_TEST
 bool explorer_self_test(void);
