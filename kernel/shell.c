@@ -238,9 +238,9 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
     /* Built-in: ps */
     if (str_equal(cmd, "ps")) {
         shell_output_write(ctx, "PID  PARENT  STATE    ROOT_CR3\n");
-        for (uint64_t pid = 1; pid <= DAWN_PROCESS_MAX; pid++) {
+        for (size_t slot = 0U; slot < (size_t)DAWN_PROCESS_MAX; slot++) {
             struct process_info pinfo;
-            if (process_get_info(pid, &pinfo) && pinfo.state != PROCESS_STATE_FREE) {
+            if (process_get_info_by_index(slot, &pinfo) && pinfo.state != PROCESS_STATE_FREE) {
                 char num[24];
                 u64_to_str(pinfo.id, num);
                 shell_output_write(ctx, num);

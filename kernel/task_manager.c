@@ -104,9 +104,10 @@ static void task_manager_refresh_internal(struct task_manager *tm, bool forced) 
     it0->is_user = false;
 
     /* Process entries from process manager */
-    for (uint64_t pid = 1ULL; pid <= (uint64_t)DAWN_PROCESS_MAX; pid++) {
+    for (size_t slot = 0U; slot < (size_t)DAWN_PROCESS_MAX; slot++) {
         struct process_info pinfo = {0};
-        if (process_get_info(pid, &pinfo) && pinfo.state != PROCESS_STATE_FREE) {
+        if (process_get_info_by_index(slot, &pinfo) && pinfo.state != PROCESS_STATE_FREE) {
+            uint64_t pid = pinfo.id;
             if (tm->item_count < TASKMGR_MAX_RECORDS) {
                 struct taskmgr_proc_item *it = &tm->items[tm->item_count++];
                 it->pid = pid;

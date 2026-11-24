@@ -309,6 +309,26 @@ bool process_get_info(uint64_t process_id,struct process_info *info) {
     return true;
 }
 
+bool process_get_info_by_index(size_t slot_index, struct process_info *info) {
+    const uint64_t flags = read_rflags();
+    if (!initialized || slot_index >= DAWN_PROCESS_MAX || info == NULL || (read_cs() & 3U) != 0U) {
+        return false;
+    }
+    disable_interrupts();
+    if (processes[slot_index].state == PROCESS_STATE_FREE) {
+        restore_interrupt_flag(flags);
+        return false;
+    }
+    info->id = processes[slot_index].id;
+    info->parent_id = processes[slot_index].parent_id;
+    info->state = processes[slot_index].state;
+    info->address_space_root = processes[slot_index].address_space.root_physical;
+    info->kernel_stack_top = processes[slot_index].kernel_stack_top;
+    info->exit_status = processes[slot_index].exit_status;
+    restore_interrupt_flag(flags);
+    return true;
+}
+
 size_t process_get_user_page_count(uint64_t process_id) {
     const uint64_t flags=read_rflags();
     struct process_record *record=NULL;
@@ -938,6 +958,15 @@ static bool process_manager_self_test_locked(void) {
     }
     if (process_create(&extra) || extra!=0ULL) {
         process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process table overflow allowed\n");
+        return false;
+    }
+    struct process_info slot_info = {0};
+    if (!process_get_info_by_index(0U, &slot_info) || slot_info.id != ids[0]) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_get_info_by_index failed\n");
+        return false;
+    }
+    if (process_get_info_by_index(DAWN_PROCESS_MAX, &slot_info)) {
+        process_test_log("DAWN-TEST: FAIL: process resource lifecycle: process_get_info_by_index out of bounds allowed\n");
         return false;
     }
     if (!process_mark_ready(ids[0]) || process_mark_ready(ids[0]) || process_reap(ids[0])) {
