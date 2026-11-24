@@ -1,8 +1,8 @@
 # DAWN-OS Automated Test Suite Report
 
-- **Source Commit:** `1bff56c61f214cc6304fa3619df9a91dc4927f38`
-- **Timestamp (UTC):** `2026-11-24T05:39:52Z`
-- **CI Run:** [GitHub Actions Run #45334064499](https://github.com/Pavithran26/DAWN-OS/actions/runs/45334064499)
+- **Source Commit:** `0f9a99dce332da547e2cf7926cb29bebdb8b13c2`
+- **Timestamp (UTC):** `2026-11-24T06:54:12Z`
+- **CI Run:** [GitHub Actions Run #45343752146](https://github.com/Pavithran26/DAWN-OS/actions/runs/45343752146)
 - **Status:** **ALL PASSED**
 
 ---
@@ -25,7 +25,7 @@
 
 ---
 
-## Verified Kernel Subsystems & Tests (80 Total)
+## Verified Kernel Subsystems & Tests (83 Total)
 
 | Subsystem | Verified Test Name | Status |
 |---|---|---|
@@ -74,6 +74,7 @@
 | Storage & Filesystem | AHCI SATA controller and port detection | PASS |
 | Storage & Filesystem | NVMe controller and namespace queues | PASS |
 | Storage & Filesystem | MBR/GPT partition management and slice translation | PASS |
+| Storage & Filesystem | storage manager read-only inspection, partition tables and safety gates | PASS |
 | Storage & Filesystem | actual VirtIO device-backed ISO9660 file read | PASS |
 | Storage & Filesystem | installer disk verification, partition formatting, file copy and rescue shell | PASS |
 | Networking & Drivers | PS/2 keyboard/mouse scancode decoding | PASS |
