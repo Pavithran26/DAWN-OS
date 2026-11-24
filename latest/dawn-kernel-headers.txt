@@ -10,7 +10,7 @@ ELF Header:
   Version:                           0x1
   Entry point address:               0xffffffff80001000
   Start of program headers:          64 (bytes into file)
-  Start of section headers:          274464 (bytes into file)
+  Start of section headers:          284208 (bytes into file)
   Flags:                             0x0
   Size of this header:               64 (bytes)
   Size of program headers:           56 (bytes)
@@ -25,11 +25,11 @@ Program Headers:
   LOAD           0x0000000000001000 0xffffffff80000000 0xffffffff80000000
                  0x00000000000001b8 0x00000000000001b8  RW     0x1000
   LOAD           0x0000000000002000 0xffffffff80001000 0xffffffff80001000
-                 0x000000000002f099 0x000000000002f099  R E    0x1000
-  LOAD           0x0000000000032000 0xffffffff80031000 0xffffffff80031000
-                 0x0000000000005d86 0x0000000000005d86  R      0x1000
-  LOAD           0x0000000000038000 0xffffffff80037000 0xffffffff80037000
-                 0x00000000000000b0 0x0000000001507528  RW     0x1000
+                 0x0000000000031a29 0x0000000000031a29  R E    0x1000
+  LOAD           0x0000000000034000 0xffffffff80033000 0xffffffff80033000
+                 0x0000000000005fc6 0x0000000000005fc6  R      0x1000
+  LOAD           0x000000000003a000 0xffffffff80039000 0xffffffff80039000
+                 0x00000000000001f0 0x00000000016a4528  RW     0x1000
 
  Section to Segment mapping:
   Segment Sections...

@@ -10,9 +10,9 @@ This branch (`kernel`) hosts production 64-bit ELF kernel executables (`dawn-ker
 - **Format:** ELF64 executable, statically linked (`-z max-page-size=0x1000`)
 - **Virtual Base Address:** `-2 GiB` top of 64-bit address space (`0xFFFFFFFF80000000`)
 - **Boot Protocol:** Limine Boot Protocol v12
-- **Source Commit:** [`1bff56c`](https://github.com/Pavithran26/DAWN-OS/commit/1bff56c61f214cc6304fa3619df9a91dc4927f38)
+- **Source Commit:** [`0f9a99d`](https://github.com/Pavithran26/DAWN-OS/commit/0f9a99dce332da547e2cf7926cb29bebdb8b13c2)
 - **Compiler:** `gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
-- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45334064499)
+- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45343752146)
 
 ---
 
