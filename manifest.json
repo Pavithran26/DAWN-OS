@@ -8,11 +8,11 @@
   "target_architecture": "x86_64",
   "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
   "bootloader": "Limine v12.10.0",
-  "source_commit": "0f9a99dce332da547e2cf7926cb29bebdb8b13c2",
-  "source_commit_short": "0f9a99d",
-  "build_timestamp_utc": "2026-11-24T06:54:12Z",
+  "source_commit": "683af96ae1a50f9bbfc07daeaff46a6a479fa0eb",
+  "source_commit_short": "683af96",
+  "build_timestamp_utc": "2026-11-24T07:19:51Z",
   "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45343752146",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45346269674",
   "validation": {
     "status": "PASSED",
     "bios_boot": "PASSED (exit 33, 0 FAIL)",
@@ -26,7 +26,7 @@
     {
       "filename": "dawn-kernel.elf",
       "size_bytes": 284784,
-      "sha256": "c2427fc554bd0dd134f42d33dd23ab591dc115e3e37892a7081fe0fcd7bf89fc"
+      "sha256": "53cc8adf4101e9b8f0a7aa4c273117edd2c0c72828051da6fbf8345db41a455a"
     },
     {
       "filename": "dawn-kernel-headers.txt",
