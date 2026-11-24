@@ -8,11 +8,11 @@
   "target_architecture": "x86_64",
   "boot_mode_compatibility": "BIOS (SeaBIOS) + UEFI (OVMF x86_64)",
   "bootloader": "Limine v12.10.0",
-  "source_commit": "9d0a4532f258a9e2ee907e54931464f0ca4e991c",
-  "source_commit_short": "9d0a453",
-  "build_timestamp_utc": "2026-11-24T08:52:19Z",
+  "source_commit": "7f2559a67ada2dc7af34c0b4e6c4e2de8568d009",
+  "source_commit_short": "7f2559a",
+  "build_timestamp_utc": "2026-11-24T11:53:40Z",
   "compiler_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
-  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45359490196",
+  "ci_workflow_run_url": "https://github.com/Pavithran26/DAWN-OS/actions/runs/45388159803",
   "validation": {
     "status": "PASSED",
     "bios_boot": "PASSED (exit 33, 0 FAIL)",
@@ -26,12 +26,12 @@
     {
       "filename": "test-summary.json",
       "size_bytes": 11642,
-      "sha256": "1d2df6c3f065481de37f8a39f2d0e25f1ba2edffff9935c04ca52206fff35814"
+      "sha256": "42807759c4ca89285fed4d39b99a2d6924583eb3eb3a544a1ea9d4120b49b584"
     },
     {
       "filename": "test-report.md",
       "size_bytes": 7536,
-      "sha256": "884c01c6f0995416689d1a74cba6588bf2ee68e431be281d6cf1ba24911c4ed2"
+      "sha256": "0dced6395d7d8bb5ad87f0036e02b45cf315364ed74eaa67c13551a7954f7576"
     },
     {
       "filename": "test-matrix.txt",
@@ -41,22 +41,22 @@
     {
       "filename": "bios-serial.log",
       "size_bytes": 9167,
-      "sha256": "a83da59d58091ae12d65de07ed38ed2b5082f875f3ef225b7ad7977a3fb04a62"
+      "sha256": "dcf66433ed2f46d964cae5e30b15a2d9e642073f51a6d16f38c6ab4bba4bcaa8"
     },
     {
       "filename": "uefi-serial.log",
       "size_bytes": 9490,
-      "sha256": "e5743600f41aad160008ac0caf6c3687455472eecbbf8890c03eccf4474fd553"
+      "sha256": "400db4ffff45cbde6cb7c1dc80db5b98d0169ff04af916401407fbe3b34caa01"
     },
     {
       "filename": "bios-smoke.log",
       "size_bytes": 3100,
-      "sha256": "adb6d710c10e716b42c5a14225828b51ed07bad8d73cec9ecdeed801600e8440"
+      "sha256": "f8e42548e5206a420ce842fff6a037c64015e816fcd266d1a30320d9305d35e1"
     },
     {
       "filename": "uefi-smoke.log",
       "size_bytes": 3423,
-      "sha256": "88507eed4e173b6f871801a2887b75333c3b9ce021216bae69a1bf6d0742e973"
+      "sha256": "e12e364b8151396e02ebc245a7899c2139e3d10c073620e7ccc83e61ce8b0665"
     }
   ]
 }
