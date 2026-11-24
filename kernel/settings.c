@@ -818,27 +818,27 @@ void settings_window_render(void) {
             gfx_draw_string(&surf, cx, cy + 20, sub_buf, GFX_COLOR_TEXT_MUTED);
 
             /* Table Header */
-            gfx_fill_rect(&surf, cx, cy + 38, 388, 18, GFX_COLOR_PANEL_DARK);
-            gfx_draw_string(&surf, cx + 4, cy + 42, "#", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx + 24, cy + 42, "B:D.F", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx + 80, cy + 42, "VENDOR:DEV", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx + 180, cy + 42, "CLASS / TYPE", GFX_COLOR_TEXT_MUTED);
-            gfx_draw_string(&surf, cx + 295, cy + 42, "DRIVER", GFX_COLOR_TEXT_MUTED);
+            gfx_fill_rect(&surf, cx, cy + 38U, 388U, 18U, GFX_COLOR_PANEL_DARK);
+            gfx_draw_string(&surf, cx + 4U, cy + 42U, "#", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 24U, cy + 42U, "B:D.F", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 80U, cy + 42U, "VENDOR:DEV", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 180U, cy + 42U, "CLASS / TYPE", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, cx + 295U, cy + 42U, "DRIVER", GFX_COLOR_TEXT_MUTED);
 
             /* Rows (up to 7 items) */
-            uint32_t row_y = cy + 58;
+            uint32_t row_y = cy + 58U;
             for (size_t i = 0U; i < pci_count && i < 7U; i++) {
                 const struct pci_device *pdev = pci_get_device(i);
                 if (pdev == NULL) continue;
 
                 /* Alternating row tint */
                 if ((i & 1U) != 0U) {
-                    gfx_fill_rect(&surf, cx, row_y - 2, 388, 20, 0x300A251BU);
+                    gfx_fill_rect(&surf, cx, row_y - 2U, 388U, 20U, 0x300A251BU);
                 }
 
                 char num_str[8];
                 u32_to_str((uint32_t)(i + 1U), num_str);
-                gfx_draw_string(&surf, cx + 4, row_y, num_str, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx + 4U, row_y, num_str, GFX_COLOR_TEXT_PRIMARY);
 
                 char bdf_str[16];
                 char b_s[8], d_s[8], f_s[8];
@@ -854,7 +854,7 @@ void settings_window_render(void) {
                 bdf_str[bp++] = '.';
                 for (size_t k = 0U; f_s[k] != '\0' && bp + 1U < sizeof(bdf_str); k++) bdf_str[bp++] = f_s[k];
                 bdf_str[bp] = '\0';
-                gfx_draw_string(&surf, cx + 24, row_y, bdf_str, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx + 24U, row_y, bdf_str, GFX_COLOR_TEXT_PRIMARY);
 
                 char vid_str[6], did_str[6];
                 hex16_to_str(pdev->vendor_id, vid_str);
@@ -865,24 +865,24 @@ void settings_window_render(void) {
                 ven_dev[vp++] = ':';
                 for (size_t k = 0U; did_str[k] != '\0' && vp + 1U < sizeof(ven_dev); k++) ven_dev[vp++] = did_str[k];
                 ven_dev[vp] = '\0';
-                gfx_draw_string(&surf, cx + 80, row_y, ven_dev, GFX_COLOR_TEXT_PRIMARY);
+                gfx_draw_string(&surf, cx + 80U, row_y, ven_dev, GFX_COLOR_TEXT_PRIMARY);
 
                 const char *cname = pci_class_to_name(pdev);
-                gfx_draw_string(&surf, cx + 180, row_y, cname, GFX_COLOR_TEXT_SECONDARY);
+                gfx_draw_string(&surf, cx + 180U, row_y, cname, GFX_COLOR_TEXT_SECONDARY);
 
                 const char *dbind = pci_driver_binding(pdev);
                 uint32_t bind_col = (dbind[1] == 'B') ? GFX_COLOR_EMERALD_ACCENT : GFX_COLOR_TEXT_MUTED;
-                gfx_draw_string(&surf, cx + 295, row_y, dbind, bind_col);
+                gfx_draw_string(&surf, cx + 295U, row_y, dbind, bind_col);
 
-                row_y += 20;
+                row_y += 20U;
             }
 
             /* Core System Peripherals section */
-            gfx_draw_line(&surf, cx, row_y + 4, cx + 388, row_y + 4, GFX_COLOR_GLASS_BORDER);
-            gfx_draw_string(&surf, cx, row_y + 10, "Platform & Core System Peripherals:", GFX_COLOR_EMERALD_ACCENT);
-            gfx_draw_string(&surf, cx, row_y + 28, "Keyboard & Mouse: PS/2 Dual Channel Controller", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, row_y + 46, "Timers & Clocks:  Local APIC, IOAPIC & CMOS RTC", GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, cx, row_y + 64, "ACPI & Power:     MADT Processor & I/O APIC Tables", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_line(&surf, (int32_t)cx, (int32_t)(row_y + 4U), (int32_t)(cx + 388U), (int32_t)(row_y + 4U), GFX_COLOR_GLASS_BORDER);
+            gfx_draw_string(&surf, cx, row_y + 10U, "Platform & Core System Peripherals:", GFX_COLOR_EMERALD_ACCENT);
+            gfx_draw_string(&surf, cx, row_y + 28U, "Keyboard & Mouse: PS/2 Dual Channel Controller", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, row_y + 46U, "Timers & Clocks:  Local APIC, IOAPIC & CMOS RTC", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, cx, row_y + 64U, "ACPI & Power:     MADT Processor & I/O APIC Tables", GFX_COLOR_TEXT_MUTED);
 
             break;
         }

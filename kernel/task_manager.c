@@ -210,28 +210,28 @@ void task_manager_render(struct task_manager *tm) {
     };
 
     /* Background */
-    gfx_draw_rect_filled(&surf, 0, 0, TASKMGR_WIDTH, TASKMGR_HEIGHT, GFX_COLOR_EMERALD_DEEP);
+    gfx_draw_rect_filled(&surf, 0U, 0U, TASKMGR_WIDTH, TASKMGR_HEIGHT, GFX_COLOR_EMERALD_DEEP);
 
     /* Tab Bar */
     uint32_t proc_tab_col = (tm->current_tab == TASKMGR_TAB_PROCESSES) ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
     uint32_t perf_tab_col = (tm->current_tab == TASKMGR_TAB_PERFORMANCE) ? GFX_COLOR_EMERALD_PRIMARY : GFX_COLOR_EMERALD_BASE;
 
-    gfx_draw_glass_panel(&surf, 10, 8, 110, 26, proc_tab_col);
-    gfx_draw_string(&surf, 26, 13, "Processes", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_glass_panel(&surf, 10U, 8U, 110U, 26U, proc_tab_col);
+    gfx_draw_string(&surf, 26U, 13U, "Processes", GFX_COLOR_TEXT_PRIMARY);
 
-    gfx_draw_glass_panel(&surf, 125, 8, 110, 26, perf_tab_col);
-    gfx_draw_string(&surf, 137, 13, "Performance", GFX_COLOR_TEXT_PRIMARY);
+    gfx_draw_glass_panel(&surf, 125U, 8U, 110U, 26U, perf_tab_col);
+    gfx_draw_string(&surf, 137U, 13U, "Performance", GFX_COLOR_TEXT_PRIMARY);
 
     gfx_draw_line(&surf, 8, 38, (int32_t)(TASKMGR_WIDTH - 8U), 38, GFX_COLOR_GLASS_BORDER);
 
     if (tm->current_tab == TASKMGR_TAB_PROCESSES) {
         /* Table Header */
-        gfx_draw_rect_filled(&surf, 8, 42, TASKMGR_WIDTH - 16U, 20U, GFX_COLOR_EMERALD_BASE);
-        gfx_draw_string(&surf, 14, 44, "PID", GFX_COLOR_TEXT_MUTED);
-        gfx_draw_string(&surf, 70, 44, "NAME", GFX_COLOR_TEXT_MUTED);
-        gfx_draw_string(&surf, 200, 44, "STATE", GFX_COLOR_TEXT_MUTED);
-        gfx_draw_string(&surf, 310, 44, "MEMORY", GFX_COLOR_TEXT_MUTED);
-        gfx_draw_string(&surf, 410, 44, "CPU%", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_rect_filled(&surf, 8U, 42U, TASKMGR_WIDTH - 16U, 20U, GFX_COLOR_EMERALD_BASE);
+        gfx_draw_string(&surf, 14U, 44U, "PID", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 70U, 44U, "NAME", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 200U, 44U, "STATE", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 310U, 44U, "MEMORY", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 410U, 44U, "CPU%", GFX_COLOR_TEXT_MUTED);
 
         /* Table Rows */
         uint32_t row_y = 66U;
@@ -240,29 +240,29 @@ void task_manager_render(struct task_manager *tm) {
             bool sel = (it->pid == tm->selected_pid);
 
             if (sel) {
-                gfx_draw_rect_filled(&surf, 8, (int32_t)(row_y - 2U), TASKMGR_WIDTH - 16U, 22U, GFX_COLOR_EMERALD_PRIMARY);
-                gfx_draw_rect_outline(&surf, 8, (int32_t)(row_y - 2U), TASKMGR_WIDTH - 16U, 22U, GFX_COLOR_EMERALD_ACCENT);
+                gfx_draw_rect_filled(&surf, 8U, row_y - 2U, TASKMGR_WIDTH - 16U, 22U, GFX_COLOR_EMERALD_PRIMARY);
+                gfx_draw_rect_outline(&surf, 8U, row_y - 2U, TASKMGR_WIDTH - 16U, 22U, GFX_COLOR_EMERALD_ACCENT);
             }
 
             char num_buf[24];
             u64_to_str(it->pid, num_buf);
-            gfx_draw_string(&surf, 14, (int32_t)row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, 70, (int32_t)row_y, it->name, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, 14U, row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, 70U, row_y, it->name, GFX_COLOR_TEXT_PRIMARY);
 
             const char *st_str = (it->state == PROCESS_STATE_READY)   ? "READY" :
                                  (it->state == PROCESS_STATE_CREATED) ? "CREATED" :
                                  (it->state == PROCESS_STATE_EXITED)  ? "EXITED" : "FREE";
             uint32_t st_color = (it->state == PROCESS_STATE_READY) ? GFX_COLOR_EMERALD_ACCENT :
                                 (it->state == PROCESS_STATE_EXITED) ? GFX_COLOR_ERROR : GFX_COLOR_TEXT_SECONDARY;
-            gfx_draw_string(&surf, 200, (int32_t)row_y, st_str, st_color);
+            gfx_draw_string(&surf, 200U, row_y, st_str, st_color);
 
             u64_to_str(it->mem_bytes / 1024ULL, num_buf);
-            gfx_draw_string(&surf, 310, (int32_t)row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, 360, (int32_t)row_y, "KB", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, 310U, row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, 360U, row_y, "KB", GFX_COLOR_TEXT_MUTED);
 
             u64_to_str((uint64_t)it->cpu_percent, num_buf);
-            gfx_draw_string(&surf, 410, (int32_t)row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
-            gfx_draw_string(&surf, 440, (int32_t)row_y, "%", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, 410U, row_y, num_buf, GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, 440U, row_y, "%", GFX_COLOR_TEXT_MUTED);
 
             row_y += 24U;
         }
@@ -276,21 +276,21 @@ void task_manager_render(struct task_manager *tm) {
         while (overhead_buf[ob_len] != '\0' && ob_len + 5U < sizeof(overhead_buf)) ob_len++;
         overhead_buf[ob_len++] = ' '; overhead_buf[ob_len++] = 'c'; overhead_buf[ob_len++] = 'y'; overhead_buf[ob_len++] = 'c';
         overhead_buf[ob_len] = '\0';
-        gfx_draw_string(&surf, 14, 308, overhead_buf, GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 14U, 308U, overhead_buf, GFX_COLOR_TEXT_MUTED);
 
         /* End Task Button */
         bool is_protected = (tm->selected_pid <= 1ULL);
         uint32_t btn_col = is_protected ? GFX_COLOR_DISABLED : GFX_COLOR_EMERALD_PRIMARY;
-        gfx_draw_glass_panel(&surf, 400, 304, 110, 26, btn_col);
+        gfx_draw_glass_panel(&surf, 400U, 304U, 110U, 26U, btn_col);
         if (is_protected) {
-            gfx_draw_string(&surf, 418, 309, "Protected", GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, 418U, 309U, "Protected", GFX_COLOR_TEXT_MUTED);
         } else {
-            gfx_draw_string(&surf, 424, 309, "End Task", GFX_COLOR_TEXT_PRIMARY);
+            gfx_draw_string(&surf, 424U, 309U, "End Task", GFX_COLOR_TEXT_PRIMARY);
         }
 
     } else {
         /* Performance Tab */
-        gfx_draw_string(&surf, 14, 46, "CPU & Scheduler Telemetry", GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(&surf, 14U, 46U, "CPU & Scheduler Telemetry", GFX_COLOR_EMERALD_ACCENT);
 
         char smp_label[48];
         uint32_t online_cpus = smp_online_cpu_count();
@@ -299,13 +299,13 @@ void task_manager_render(struct task_manager *tm) {
         } else {
             str_copy(smp_label, "Single Core", sizeof(smp_label));
         }
-        gfx_draw_string(&surf, 320, 46, smp_label, GFX_COLOR_EMERALD_ACCENT);
+        gfx_draw_string(&surf, 320U, 46U, smp_label, GFX_COLOR_EMERALD_ACCENT);
 
         /* Graph Box */
-        gfx_draw_glass_panel(&surf, 14, 68, 490, 130, GFX_COLOR_EMERALD_BASE);
+        gfx_draw_glass_panel(&surf, 14U, 68U, 490U, 130U, GFX_COLOR_EMERALD_BASE);
         /* Graph grid lines */
         for (int y = 0; y < 4; y++) {
-            gfx_draw_line(&surf, 16, (int32_t)(68 + y * 32), 502, (int32_t)(68 + y * 32), 0x3034D399U);
+            gfx_draw_line(&surf, 16, 68 + y * 32, 502, 68 + y * 32, 0x3034D399U);
         }
         /* Draw activity curve */
         for (uint32_t p = 0U; p + 1U < TASKMGR_HISTORY_LEN; p++) {
@@ -319,7 +319,7 @@ void task_manager_render(struct task_manager *tm) {
         }
 
         /* Scheduler metrics strip */
-        gfx_draw_glass_panel(&surf, 14, 204, 490, 42, GFX_COLOR_EMERALD_BASE);
+        gfx_draw_glass_panel(&surf, 14U, 204U, 490U, 42U, GFX_COLOR_EMERALD_BASE);
         char sched_buf[64];
         char c_sw[16], c_pm[16], c_th[16];
         u64_to_str(tm->last_sched_stats.context_switches, c_sw);
@@ -337,7 +337,7 @@ void task_manager_render(struct task_manager *tm) {
         for (size_t k = 0U; p3[k] != '\0' && sp + 1U < sizeof(sched_buf); k++) sched_buf[sp++] = p3[k];
         for (size_t k = 0U; c_th[k] != '\0' && sp + 1U < sizeof(sched_buf); k++) sched_buf[sp++] = c_th[k];
         sched_buf[sp] = '\0';
-        gfx_draw_string(&surf, 20, 210, sched_buf, GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_string(&surf, 20U, 210U, sched_buf, GFX_COLOR_TEXT_PRIMARY);
 
         char perf_ovhd[64];
         char c_rf[16], c_rn[16];
@@ -353,24 +353,24 @@ void task_manager_render(struct task_manager *tm) {
         const char *op3 = " cyc";
         for (size_t k = 0U; op3[k] != '\0' && op + 1U < sizeof(perf_ovhd); k++) perf_ovhd[op++] = op3[k];
         perf_ovhd[op] = '\0';
-        gfx_draw_string(&surf, 20, 226, perf_ovhd, GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 20U, 226U, perf_ovhd, GFX_COLOR_TEXT_MUTED);
 
         /* Memory Section */
-        gfx_draw_string(&surf, 14, 252, "Physical Memory Usage", GFX_COLOR_TEXT_PRIMARY);
-        gfx_draw_glass_panel(&surf, 14, 272, 490, 30, GFX_COLOR_EMERALD_BASE);
+        gfx_draw_string(&surf, 14U, 252U, "Physical Memory Usage", GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_glass_panel(&surf, 14U, 272U, 490U, 30U, GFX_COLOR_EMERALD_BASE);
 
         uint64_t used_ram = (tm->total_ram_bytes > tm->free_ram_bytes) ? (tm->total_ram_bytes - tm->free_ram_bytes) : 0ULL;
         uint32_t bar_w = (tm->total_ram_bytes > 0ULL) ? (uint32_t)((used_ram * 486ULL) / tm->total_ram_bytes) : 0U;
         if (bar_w > 486U) bar_w = 486U;
-        gfx_draw_rect_filled(&surf, 16, 274, bar_w, 26U, GFX_COLOR_EMERALD_PRIMARY);
+        gfx_draw_rect_filled(&surf, 16U, 274U, bar_w, 26U, GFX_COLOR_EMERALD_PRIMARY);
 
         char num1[24], num2[24];
         u64_to_str(used_ram / (1024ULL * 1024ULL), num1);
         u64_to_str(tm->total_ram_bytes / (1024ULL * 1024ULL), num2);
-        gfx_draw_string(&surf, 24, 280, num1, GFX_COLOR_TEXT_PRIMARY);
-        gfx_draw_string(&surf, 60, 280, "MB /", GFX_COLOR_TEXT_MUTED);
-        gfx_draw_string(&surf, 95, 280, num2, GFX_COLOR_TEXT_PRIMARY);
-        gfx_draw_string(&surf, 135, 280, "MB Used", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 24U, 280U, num1, GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_string(&surf, 60U, 280U, "MB /", GFX_COLOR_TEXT_MUTED);
+        gfx_draw_string(&surf, 95U, 280U, num2, GFX_COLOR_TEXT_PRIMARY);
+        gfx_draw_string(&surf, 135U, 280U, "MB Used", GFX_COLOR_TEXT_MUTED);
 
         /* Rate limit count */
         if (tm->refresh_rate_limited_count > 0ULL) {
@@ -382,7 +382,7 @@ void task_manager_render(struct task_manager *tm) {
             for (size_t k = 0U; rlp[k] != '\0' && rp + 1U < sizeof(rlim); k++) rlim[rp++] = rlp[k];
             for (size_t k = 0U; rcnt[k] != '\0' && rp + 1U < sizeof(rlim); k++) rlim[rp++] = rcnt[k];
             rlim[rp] = '\0';
-            gfx_draw_string(&surf, 320, 280, rlim, GFX_COLOR_TEXT_MUTED);
+            gfx_draw_string(&surf, 320U, 280U, rlim, GFX_COLOR_TEXT_MUTED);
         }
     }
 
