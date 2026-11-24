@@ -232,6 +232,13 @@ int storage_format_partition(const char *slice_name, const char *fs_type, const 
     if (part == NULL) return STORAGE_ERR_INVALID;
     if (part->read_only) return STORAGE_ERR_READ_ONLY;
 
+    if (part->driver_data != NULL) {
+        const struct partition_info *pi = (const struct partition_info *)part->driver_data;
+        if (pi->parent_disk != NULL && pi->parent_disk->read_only) {
+            return STORAGE_ERR_READ_ONLY;
+        }
+    }
+
     if (str_equal(fs_type, "fat32") || str_equal(fs_type, "FAT32")) {
         return partition_format_fat32(part, label);
     }
@@ -614,6 +621,8 @@ bool storage_manager_self_test(void) {
         /* Storage Safety Gate: Read-only protection enforcement */
         disk->read_only = true;
         desc->read_only = true;
+        struct block_device *part_dev = block_dev_lookup("test_sdisk1");
+        if (part_dev != NULL) part_dev->read_only = true;
         if (storage_create_partition("test_sdisk", 1024, MBR_TYPE_FAT32_LBA, dummy_slice) != STORAGE_ERR_READ_ONLY) {
             return false;
         }
@@ -625,6 +634,7 @@ bool storage_manager_self_test(void) {
         }
         disk->read_only = false;
         desc->read_only = false;
+        if (part_dev != NULL) part_dev->read_only = false;
 
         /* Delete partition */
         if (storage_delete_partition("test_sdisk", 1) != STORAGE_OK) return false;

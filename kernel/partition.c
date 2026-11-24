@@ -65,8 +65,9 @@ static int slice_read_blocks(struct block_device *dev, uint64_t lba, uint32_t co
 }
 
 static int slice_write_blocks(struct block_device *dev, uint64_t lba, uint32_t count, const void *buffer) {
-    if (dev == NULL || dev->driver_data == NULL) return -1;
+    if (dev == NULL || dev->driver_data == NULL || dev->read_only) return -1;
     struct partition_info *part = (struct partition_info *)dev->driver_data;
+    if (part->parent_disk == NULL || part->parent_disk->read_only) return -1;
     if (lba >= part->sector_count || (uint64_t)count > part->sector_count - lba) return -1;
     return block_dev_write(part->parent_disk, part->start_lba + lba, count, buffer);
 }
@@ -311,7 +312,12 @@ int partition_delete(struct block_device *disk, uint32_t index) {
 }
 
 int partition_format_fat32(struct block_device *part_dev, const char *volume_label) {
-    if (part_dev == NULL || part_dev->read_only || part_dev->total_blocks < 65536U) return -1; /* Min FAT32 size */
+    if (part_dev == NULL || part_dev->read_only) return -1;
+    if (part_dev->driver_data != NULL) {
+        const struct partition_info *pi = (const struct partition_info *)part_dev->driver_data;
+        if (pi->parent_disk != NULL && pi->parent_disk->read_only) return -1;
+    }
+    if (part_dev->total_blocks < 65536U) return -1; /* Min FAT32 size */
 
     uint8_t bpb_sector[512] = {0};
     /* Jump boot code */
