@@ -8,9 +8,9 @@ Each binary is a freestanding 64-bit ELF program targeting DAWN Syscall ABI v1.
 
 ## Build Metadata
 
-- **Source Commit:** [`0f9a99d`](https://github.com/Pavithran26/DAWN-OS/commit/0f9a99dce332da547e2cf7926cb29bebdb8b13c2)
+- **Source Commit:** [`683af96`](https://github.com/Pavithran26/DAWN-OS/commit/683af96ae1a50f9bbfc07daeaff46a6a479fa0eb)
 - **Compiler:** `gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0`
-- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45343752146)
+- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45346269674)
 
 ---
 
