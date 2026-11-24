@@ -1195,7 +1195,6 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: File explorer backend enumeration, search and copy\n");
-    serial_write("DAWN-TEST: PASS: file explorer directory enumeration, navigation and window integration\n");
 
     /* Phase E: Storage and Partition Management */
     if (!block_dev_self_test()) {
@@ -1326,6 +1325,18 @@ void kernel_main(void) {
     }
     serial_write("DAWN-TEST: PASS: terminal emulator text grid, scrolling and render buffer\n");
     serial_write("DAWN-TEST: PASS: terminal scrollback buffer, boundary clipping and window input\n");
+    if (!file_explorer_gui_self_test()) {
+        serial_write("DAWN-TEST: FAIL: file explorer directory enumeration, navigation and window integration\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: file explorer directory enumeration, navigation and window integration\n");
+    if (!disks_gui_self_test()) {
+        serial_write("DAWN-TEST: FAIL: disks application window inspection and device selection\n");
+        qemu_debug_exit(QEMU_TEST_FAIL);
+        cpu_halt_forever();
+    }
+    serial_write("DAWN-TEST: PASS: disks application window inspection and device selection\n");
 
     /* Phase I: Task Manager */
     if (!task_manager_self_test()) {

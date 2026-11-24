@@ -63,5 +63,6 @@ void disks_handle_click(int32_t local_x, int32_t local_y);
 void disks_select_disk(size_t index);
 
 bool storage_manager_self_test(void);
+bool disks_gui_self_test(void);
 
 #endif /* DAWN_STORAGE_MANAGER_H */

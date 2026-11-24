@@ -257,11 +257,13 @@ int32_t file_explorer_get_selected_index(void) {
     return selected_item_idx;
 }
 
+static struct explorer_listing nav_scratch;
+
 bool file_explorer_navigate(const char *path) {
     if (!validate_explorer_path(path)) return false;
-    struct explorer_listing temp = {0};
-    if (!explorer_list_directory(path, &temp)) return false;
-    current_listing = temp;
+    nav_scratch = (struct explorer_listing){0};
+    if (!explorer_list_directory(path, &nav_scratch)) return false;
+    current_listing = nav_scratch;
     exp_str_copy(current_directory, path, VFS_MAX_PATH);
     selected_item_idx = -1;
     file_explorer_render();
@@ -299,7 +301,10 @@ void file_explorer_render(void) {
         .buffer = explorer_render_buf,
         .width = EXPLORER_WIDTH,
         .height = EXPLORER_HEIGHT,
-        .pitch = EXPLORER_WIDTH * sizeof(uint32_t)
+        .pitch = EXPLORER_WIDTH * sizeof(uint32_t),
+        .buffer_size = sizeof(explorer_render_buf),
+        .is_hardware_fb = false,
+        .format = (uint8_t)GFX_FORMAT_ARGB8888
     };
 
     /* Background: Deep emerald base */
@@ -466,13 +471,16 @@ struct window *file_explorer_window_open(void) {
 }
 
 #ifdef DAWN_KERNEL_TEST
+static struct explorer_listing test_listing;
+static struct explorer_listing test_search_res;
+
 bool explorer_self_test(void) {
-    struct explorer_listing listing = {0};
-    if (!explorer_list_directory("/", &listing)) return false;
-    if (listing.count < 3) return false; /* boot, dev, tmp etc */
+    test_listing = (struct explorer_listing){0};
+    if (!explorer_list_directory("/", &test_listing)) return false;
+    if (test_listing.count < 3) return false; /* boot, dev, tmp etc */
 
     /* Path safety gate verification */
-    if (explorer_list_directory(NULL, &listing)) return false;
+    if (explorer_list_directory(NULL, &test_listing)) return false;
     if (file_explorer_navigate(NULL)) return false;
     if (file_explorer_navigate("relative/path")) return false;
     if (file_explorer_navigate("")) return false;
@@ -486,8 +494,8 @@ bool explorer_self_test(void) {
     vfs_write(created, 0, sizeof(sample_data), sample_data);
 
     /* Search for explorer_test */
-    struct explorer_listing search_res = {0};
-    if (!explorer_search("/", "explorer_test", &search_res) || search_res.count == 0)
+    test_search_res = (struct explorer_listing){0};
+    if (!explorer_search("/", "explorer_test", &test_search_res) || test_search_res.count == 0)
         return false;
 
     /* Copy file */
@@ -508,6 +516,10 @@ bool explorer_self_test(void) {
     explorer_delete_file("/tmp/exp_subdir/test.dat");
     vfs_unlink("/tmp/exp_subdir");
 
+    return true;
+}
+
+bool file_explorer_gui_self_test(void) {
     /* Files GUI window and navigation integration test */
     struct window *ewin = file_explorer_window_open();
     if (ewin == NULL) return false;
@@ -529,7 +541,7 @@ bool explorer_self_test(void) {
     file_explorer_handle_click(20, 16); /* Click [..] */
 
     /* Close Files window */
-    wm_destroy_window(ewin->id);
+    if (wm_destroy_window(ewin->id) != 0) return false;
     if (explorer_win != NULL) return false;
 
     return true;

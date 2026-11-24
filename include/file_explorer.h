@@ -55,6 +55,7 @@ int32_t file_explorer_get_selected_index(void);
 
 #ifdef DAWN_KERNEL_TEST
 bool explorer_self_test(void);
+bool file_explorer_gui_self_test(void);
 #endif
 
 #endif

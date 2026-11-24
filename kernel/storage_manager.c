@@ -376,7 +376,10 @@ void disks_window_render(void) {
         .buffer = disks_render_buf,
         .width = DISKS_WIDTH,
         .height = DISKS_HEIGHT,
-        .pitch = DISKS_WIDTH * sizeof(uint32_t)
+        .pitch = DISKS_WIDTH * sizeof(uint32_t),
+        .buffer_size = sizeof(disks_render_buf),
+        .is_hardware_fb = false,
+        .format = (uint8_t)GFX_FORMAT_ARGB8888
     };
 
     /* Background: Deep emerald base */
@@ -631,6 +634,11 @@ bool storage_manager_self_test(void) {
         discovered_disk_count = prev_count;
     }
 
+    block_dev_unregister(disk->id);
+    return true;
+}
+
+bool disks_gui_self_test(void) {
     /* Disks GUI Window integration test */
     struct window *dwin = disks_window_open();
     if (dwin == NULL) return false;
@@ -641,9 +649,8 @@ bool storage_manager_self_test(void) {
     disks_handle_click(20, 70);
 
     /* Close Disks window */
-    wm_destroy_window(dwin->id);
+    if (wm_destroy_window(dwin->id) != 0) return false;
     if (disks_win != NULL) return false;
 
-    block_dev_unregister(disk->id);
     return true;
 }
