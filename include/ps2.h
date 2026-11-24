@@ -37,10 +37,14 @@
 #define KEY_CAPSLOCK   0x3AU
 #define KEY_F1         0x3BU
 #define KEY_F4         0x3EU
+#define KEY_HOME       0x47U
 #define KEY_UP         0x48U
+#define KEY_PAGE_UP    0x49U
 #define KEY_LEFT       0x4BU
 #define KEY_RIGHT      0x4DU
+#define KEY_END        0x4FU
 #define KEY_DOWN       0x50U
+#define KEY_PAGE_DOWN  0x51U
 #define KEY_DELETE     0x53U
 #define KEY_SUPER      0x5BU
 

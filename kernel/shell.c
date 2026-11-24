@@ -204,6 +204,63 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
         return 0;
     }
 
+    /* Built-in: clear */
+    if (str_equal(cmd, "clear")) {
+        shell_output_write(ctx, "\033[2J\033[H");
+        ctx->last_exit_code = 0;
+        return 0;
+    }
+
+    /* Built-in: whoami */
+    if (str_equal(cmd, "whoami")) {
+        const char *user = shell_get_env(ctx, "USER");
+        shell_output_write(ctx, user ? user : "admin");
+        shell_output_write(ctx, "\n");
+        ctx->last_exit_code = 0;
+        return 0;
+    }
+
+    /* Built-in: history */
+    if (str_equal(cmd, "history")) {
+        for (size_t h = 0; h < ctx->history_count; h++) {
+            char num[16];
+            u64_to_str(h + 1, num);
+            shell_output_write(ctx, " ");
+            shell_output_write(ctx, num);
+            shell_output_write(ctx, "  ");
+            shell_output_write(ctx, ctx->history[h]);
+            shell_output_write(ctx, "\n");
+        }
+        ctx->last_exit_code = 0;
+        return 0;
+    }
+
+    /* Built-in: ps */
+    if (str_equal(cmd, "ps")) {
+        shell_output_write(ctx, "PID  PARENT  STATE    ROOT_CR3\n");
+        for (uint64_t pid = 1; pid <= DAWN_PROCESS_MAX; pid++) {
+            struct process_info pinfo;
+            if (process_get_info(pid, &pinfo) && pinfo.state != PROCESS_STATE_FREE) {
+                char num[24];
+                u64_to_str(pinfo.id, num);
+                shell_output_write(ctx, num);
+                shell_output_write(ctx, "    ");
+                u64_to_str(pinfo.parent_id, num);
+                shell_output_write(ctx, num);
+                shell_output_write(ctx, "       ");
+                if (pinfo.state == PROCESS_STATE_READY) shell_output_write(ctx, "READY   ");
+                else if (pinfo.state == PROCESS_STATE_CREATED) shell_output_write(ctx, "CREATE  ");
+                else if (pinfo.state == PROCESS_STATE_EXITED) shell_output_write(ctx, "EXITED  ");
+                else shell_output_write(ctx, "UNKNOWN ");
+                u64_to_str(pinfo.address_space_root, num);
+                shell_output_write(ctx, num);
+                shell_output_write(ctx, "\n");
+            }
+        }
+        ctx->last_exit_code = 0;
+        return 0;
+    }
+
     /* Built-in: pwd */
     if (str_equal(cmd, "pwd")) {
         shell_output_write(ctx, ctx->cwd);
@@ -321,6 +378,38 @@ int shell_execute(struct shell_context *ctx, const char *cmdline) {
         }
         if (vfs_unlink(args[1]) != 0) {
             shell_output_write(ctx, "rm: failed to unlink\n");
+            return 1;
+        }
+        ctx->last_exit_code = 0;
+        return 0;
+    }
+
+    /* Built-in: cp */
+    if (str_equal(cmd, "cp")) {
+        if (argc < 3) {
+            shell_output_write(ctx, "usage: cp <source> <destination>\n");
+            ctx->last_exit_code = 1;
+            return 1;
+        }
+        if (!explorer_copy_file(args[1], args[2])) {
+            shell_output_write(ctx, "cp: failed to copy file\n");
+            ctx->last_exit_code = 1;
+            return 1;
+        }
+        ctx->last_exit_code = 0;
+        return 0;
+    }
+
+    /* Built-in: mv */
+    if (str_equal(cmd, "mv")) {
+        if (argc < 3) {
+            shell_output_write(ctx, "usage: mv <source> <destination>\n");
+            ctx->last_exit_code = 1;
+            return 1;
+        }
+        if (!explorer_move_file(args[1], args[2])) {
+            shell_output_write(ctx, "mv: failed to move file\n");
+            ctx->last_exit_code = 1;
             return 1;
         }
         ctx->last_exit_code = 0;
@@ -474,6 +563,21 @@ bool shell_self_test(void) {
     if (shell_execute(&test_shell_ctx, "echo Hello DAWN-OS") != 0) return false;
     if (test_shell_ctx.output_len == 0) return false;
 
+    /* Test clear */
+    if (shell_execute(&test_shell_ctx, "clear") != 0) return false;
+    if (!str_equal(test_shell_ctx.output_buf, "\033[2J\033[H")) return false;
+
+    /* Test whoami */
+    if (shell_execute(&test_shell_ctx, "whoami") != 0) return false;
+    if (!str_equal(test_shell_ctx.output_buf, "admin\n")) return false;
+
+    /* Test history */
+    if (shell_execute(&test_shell_ctx, "history") != 0) return false;
+    if (test_shell_ctx.history_count < 4) return false;
+
+    /* Test ps */
+    if (shell_execute(&test_shell_ctx, "ps") != 0) return false;
+
     /* Test pwd */
     if (shell_execute(&test_shell_ctx, "pwd") != 0) return false;
     if (!str_equal(test_shell_ctx.output_buf, "/\n")) return false;
@@ -489,6 +593,21 @@ bool shell_self_test(void) {
     /* Test mkdir and touch */
     (void)shell_execute(&test_shell_ctx, "mkdir /tmp/sh_test");
     (void)shell_execute(&test_shell_ctx, "touch /tmp/sh_test/file.txt");
+
+    /* Test missing argument error handling */
+    if (shell_execute(&test_shell_ctx, "cat") == 0) return false;
+    if (shell_execute(&test_shell_ctx, "cp") == 0) return false;
+    if (shell_execute(&test_shell_ctx, "mv") == 0) return false;
+    if (shell_execute(&test_shell_ctx, "cd /nonexistent_directory_404") == 0) return false;
+
+    /* Test long-line input bounds (220-character echo) */
+    char long_cmd[SHELL_CMD_MAX];
+    str_copy(long_cmd, "echo ", sizeof(long_cmd));
+    for (size_t i = 5; i < 220 && i + 1 < sizeof(long_cmd); i++) {
+        long_cmd[i] = 'A';
+    }
+    long_cmd[220] = '\0';
+    if (shell_execute(&test_shell_ctx, long_cmd) != 0) return false;
 
     /* Test unknown command */
     int ret = shell_execute(&test_shell_ctx, "nonexistent_cmd_123");

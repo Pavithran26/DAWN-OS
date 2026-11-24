@@ -511,9 +511,14 @@ void wm_composite(struct gfx_surface *surf, int32_t cursor_x, int32_t cursor_y) 
         uint32_t ch = win->height - WM_TITLEBAR_HEIGHT - (2 * WM_BORDER_WIDTH);
 
         if (win->client_buffer != NULL) {
-            for (uint32_t r = 0; r < ch; r++) {
+            uint32_t max_buf_w = (win->client_width > 0U) ? win->client_width : (win->client_pitch / 4U);
+            uint32_t max_buf_h = (win->client_height > 0U) ? win->client_height : ch;
+            uint32_t render_w = (cw < max_buf_w) ? cw : max_buf_w;
+            uint32_t render_h = (ch < max_buf_h) ? ch : max_buf_h;
+
+            for (uint32_t r = 0; r < render_h; r++) {
                 uint32_t *src_row = win->client_buffer + (r * (win->client_pitch / 4U));
-                for (uint32_t c = 0; c < cw; c++) {
+                for (uint32_t c = 0; c < render_w; c++) {
                     uint32_t pixel = src_row[c];
                     uint32_t a = (pixel >> 24) & 0xFFU;
                     if (a == 255U) {

@@ -12,6 +12,7 @@
 
 #define TERM_COLS 80U
 #define TERM_ROWS 25U
+#define TERM_SCROLLBACK_ROWS 128U
 #define TERM_PIXEL_WIDTH  (TERM_COLS * 8U)
 #define TERM_PIXEL_HEIGHT (TERM_ROWS * 16U)
 
@@ -23,6 +24,10 @@ struct term_cell {
 
 struct terminal {
     struct term_cell grid[TERM_ROWS][TERM_COLS];
+    struct term_cell scrollback[TERM_SCROLLBACK_ROWS][TERM_COLS];
+    uint32_t scrollback_count;
+    uint32_t scrollback_head;
+    uint32_t scroll_offset;
     uint32_t cursor_col;
     uint32_t cursor_row;
     uint32_t current_fg;
@@ -38,11 +43,18 @@ struct terminal {
 
 bool terminal_initialize(void);
 struct terminal *terminal_get_instance(void);
+struct window *terminal_window_open(void);
 void terminal_write(struct terminal *term, const char *str);
 void terminal_put_char(struct terminal *term, char c);
 void terminal_clear(struct terminal *term);
 void terminal_handle_key(struct terminal *term, const struct key_event *kevt);
 void terminal_render(struct terminal *term);
+
+/* Bounded scrollback operations */
+void terminal_scroll(struct terminal *term, int32_t delta);
+void terminal_scroll_to_bottom(struct terminal *term);
+uint32_t terminal_get_scroll_offset(const struct terminal *term);
+uint32_t terminal_get_scrollback_count(const struct terminal *term);
 
 bool terminal_self_test(void);
 

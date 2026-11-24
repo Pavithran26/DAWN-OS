@@ -51,6 +51,8 @@ struct window {
     int32_t resize_dy;
     uint32_t *client_buffer;
     uint32_t client_pitch;
+    uint32_t client_width;
+    uint32_t client_height;
     void (*on_click)(int32_t local_x, int32_t local_y);
     void (*on_close)(struct window *win);
     void (*on_key)(struct window *win, const struct key_event *kevt);

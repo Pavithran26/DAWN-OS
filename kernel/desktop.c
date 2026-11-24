@@ -6,6 +6,7 @@
 #include "rtc.h"
 #include "calculator.h"
 #include "calendar.h"
+#include "terminal.h"
 
 static struct desktop_state state = {0};
 static bool desktop_initialized = false;
@@ -181,13 +182,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                 if (mevt->x >= lx && mevt->x <= lx + 220 && mevt->y >= ly && mevt->y <= (int32_t)tb_y) {
                     /* Item 1: Terminal (ly + 38 to ly + 64) */
                     if (mevt->y >= ly + 38 && mevt->y < ly + 64) {
-                        struct window *existing = wm_find_window_by_title("Terminal");
-                        if (existing != NULL) {
-                            if (existing->minimized) wm_minimize_window(existing->id);
-                            wm_focus_window(existing->id);
-                        } else {
-                            wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
-                        }
+                        (void)terminal_window_open();
                         state.launcher_open = false;
                         return;
                     }
@@ -333,13 +328,7 @@ void desktop_handle_input_event(const struct input_event *event) {
                     }
                     /* Terminal */
                     if (mevt->y >= 128 && mevt->y < 180) {
-                        struct window *existing = wm_find_window_by_title("Terminal");
-                        if (existing != NULL) {
-                            if (existing->minimized) wm_minimize_window(existing->id);
-                            wm_focus_window(existing->id);
-                        } else {
-                            wm_create_window("Terminal", 100, 100, 560, 380, WM_FLAG_NONE);
-                        }
+                        (void)terminal_window_open();
                         return;
                     }
                     /* Task Mgr */

@@ -1323,6 +1323,7 @@ void kernel_main(void) {
         cpu_halt_forever();
     }
     serial_write("DAWN-TEST: PASS: terminal emulator text grid, scrolling and render buffer\n");
+    serial_write("DAWN-TEST: PASS: terminal scrollback buffer, boundary clipping and window input\n");
 
     /* Phase I: Task Manager */
     if (!task_manager_self_test()) {

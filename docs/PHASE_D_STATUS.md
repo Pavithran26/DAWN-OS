@@ -202,3 +202,63 @@ Phase D implements the optional local-console graphical desktop shell for DAWN-O
 ### Test Harness & Validation
 - `wm_self_test()`: Multi-window creation, Z-order manipulation, window movement, resize API and minimum bounds clamping, bottom-right mouse resize grip interaction, status-bar-bounded maximization, minimization/restore, multi-workspace isolation (`wm_set_current_workspace`, `wm_move_window_to_workspace`), `Alt+Tab` focus cycling, and `Alt+F4` destruction.
 - `desktop_self_test()`: Top status bar rendering, neon lower accent line verification at `y = 27`, workspace pill mouse click switching, `Super + 1` keyboard jump, `Ctrl + Alt + Left/Right` keyboard traversal, damage tracking dirty accumulation, and `gfx_flush()` redraw cycle.
+
+---
+
+## 6. Milestone D4 — Terminal Application
+
+### Architecture & Terminal Emulator (`kernel/terminal.c`, `include/terminal.h`)
+- **Grid & Geometry:**
+  - Standard 80x25 monospace character grid (`TERM_COLS = 80U`, `TERM_ROWS = 25U`).
+  - Total client resolution: 640x400 (`TERM_PIXEL_WIDTH = 640U`, `TERM_PIXEL_HEIGHT = 400U`).
+  - Cell representation (`struct term_cell`): glyph character, foreground ARGB8888 color, background ARGB8888 color.
+- **Bounded Circular Scrollback Ring Buffer (`TERM_SCROLLBACK_ROWS = 128U`):**
+  - Zero dynamic allocations: statically bounded ring buffer in kernel memory.
+  - As lines scroll off row 0, they are pushed into `scrollback[TERM_SCROLLBACK_ROWS][TERM_COLS]`.
+  - `terminal_scroll(term, delta)`: adjust visible viewport offset (`scroll_offset`), clamped between 0 and `scrollback_count`.
+  - `terminal_scroll_to_bottom(term)`: snaps viewport to live input prompt.
+  - Interactive scroll viewport navigation via `Shift + Up/Down`, `Shift + PageUp/PageDown`, and `Shift + Home/End`.
+  - Tactile visual feedback: frosted glass pill badge `[^ +<N>]` rendered in top-right corner when viewing historical scrollback.
+- **ANSI Escape Sequence Parser (CSI):**
+  - Robust parameter scanner recognizing SGR color attributes (`\033[0m`, `\033[1m`, `\033[31m`..`\033[37m`).
+  - Clear screen sequence `\033[2J` invoking `terminal_clear()` and cursor home `\033[H`.
+  - Line erase sequence `\033[K` clearing from cursor to right margin.
+- **Window Manager & Desktop Integration:**
+  - `terminal_window_open()`: creates or focuses the native `"Terminal"` desktop window.
+  - Registers `on_key` callback (`terminal_on_window_key`) to route window keyboard events directly to the terminal emulator.
+  - Registers `on_close` callback (`terminal_on_window_close`) to safely decouple the active window reference while preserving session state, scrollback, and history.
+  - Desktop launcher and desktop icon clicks directly invoke `terminal_window_open()`.
+  - Window manager client buffer safety: `client_width` and `client_height` limits prevent out-of-bounds reads during window resizing.
+
+### Native Shell Built-ins & Error Handling (`kernel/shell.c`, `include/shell.h`)
+- **Documented Built-ins:**
+  - `help`: displays documented built-in commands.
+  - `echo`: arguments printing with spacing and newline.
+  - `clear`: emits ANSI `\033[2J\033[H` to clear terminal screen.
+  - `pwd`: displays current working directory.
+  - `cd`: directory traversal (`/`, `..`, relative, absolute).
+  - `ls`: directory file listing with directory markers and file sizes.
+  - `cat`: reads and displays file content.
+  - `touch`: creates empty file.
+  - `mkdir`: creates directory.
+  - `rm`: deletes file or directory.
+  - `cp`: file copy via file explorer subsystem.
+  - `mv`: file move/rename via file explorer subsystem.
+  - `ps`: lists active processes (PID, parent PID, state, CR3 root).
+  - `disks`: storage disk and partition enumeration.
+  - `uname`: system version, architecture, and design language.
+  - `mem`: total and free RAM statistics.
+  - `env`: active environment variables.
+  - `whoami`: active username (`admin`).
+  - `history`: numbered list of command history.
+- **Bounded Buffers & Safety:**
+  - Command length bounded by `SHELL_CMD_MAX = 256U`.
+  - History ring bounded by `SHELL_HISTORY_MAX = 16U`.
+  - Output buffer bounded by `SHELL_OUT_MAX = 4096U`.
+  - Argument parsing bounded by `SHELL_ARGS_MAX = 16U`.
+  - Unknown commands return exit code 127 and display `dsh: command not found: <cmd>`.
+  - Missing arguments or invalid paths return error exit code 1 with usage instructions.
+
+### Test Harness & Validation
+- `shell_self_test()`: Echo, clear screen escape, whoami, history accumulation, process list (`ps`), working directory (`pwd`), uname, environment variables, missing argument rejections (`cat`, `cp`, `mv`), 220-char long-line execution, and unknown command code 127.
+- `terminal_self_test()`: Monospace grid geometry (80x25), 640x400 buffer, transparent background verification, 40-line scrollback push accumulation, viewport scrolling, `Shift+Up`/`Shift+Down` key navigation, ANSI clear screen sequence, interactive command execution (`echo test_d4`), `KEY_UP` history recall, `KEY_DOWN` history dismissal, 300-character input bounds clamping at `SHELL_CMD_MAX - 1`, and Window Manager window binding with key event dispatch.

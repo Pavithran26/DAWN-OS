@@ -95,10 +95,14 @@ void ps2_handle_keyboard_scancode(uint8_t scancode, struct key_event *out_event)
     if (extended_prefix) {
         extended_prefix = false;
         switch (make_code) {
+            case 0x47U: make_code = KEY_HOME; break;
             case 0x48U: make_code = KEY_UP; break;
-            case 0x50U: make_code = KEY_DOWN; break;
+            case 0x49U: make_code = KEY_PAGE_UP; break;
             case 0x4BU: make_code = KEY_LEFT; break;
             case 0x4DU: make_code = KEY_RIGHT; break;
+            case 0x4FU: make_code = KEY_END; break;
+            case 0x50U: make_code = KEY_DOWN; break;
+            case 0x51U: make_code = KEY_PAGE_DOWN; break;
             case 0x5BU: make_code = KEY_SUPER; break;
             case 0x53U: make_code = KEY_DELETE; break;
             case 0x1DU: ctrl_down = !released; break; /* Right Ctrl */
