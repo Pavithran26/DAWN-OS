@@ -6,10 +6,10 @@ This branch (`kernel-test`) hosts self-test 64-bit ELF kernel executables (`dawn
 
 ## Specifications
 
-- **Source Commit:** [`9d0a453`](https://github.com/Pavithran26/DAWN-OS/commit/9d0a4532f258a9e2ee907e54931464f0ca4e991c)
+- **Source Commit:** [`7f2559a`](https://github.com/Pavithran26/DAWN-OS/commit/7f2559a67ada2dc7af34c0b4e6c4e2de8568d009)
 - **Flags:** `-DDAWN_KERNEL_TEST=1`
 - **Tests Embedded:** All 83 hardware and subsystem unit tests
-- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45359490196)
+- **CI Run:** [Actions Run](https://github.com/Pavithran26/DAWN-OS/actions/runs/45388159803)
 
 ---
 
